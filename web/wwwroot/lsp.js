@@ -19,12 +19,16 @@ const SEVERITY = { 1: 8, 2: 4, 3: 2, 4: 1 };
 // The same four, spelled the way the compile service spells them.
 const LSP_SEVERITY = { 1: 'error', 2: 'warn', 3: 'info', 4: 'hint' };
 
-// LSP CompletionItemKind -> monaco.languages.CompletionItemKind. The two
-// enumerations do not share numbering, so this cannot be a cast.
+// LSP CompletionItemKind -> the name of the monaco.languages.CompletionItemKind
+// member for it. The two enumerations number their members differently, and
+// Monaco's numbering moves between releases, so the value is looked up by name
+// in the Monaco that is loaded.
 const COMPLETION_KIND = {
-    1: 18, 2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 7, 9: 8, 10: 9,
-    11: 12, 12: 13, 13: 15, 14: 17, 15: 28, 16: 19, 17: 20, 18: 21,
-    19: 23, 20: 16, 21: 14, 22: 6, 23: 10, 24: 11, 25: 24
+    1: 'Text', 2: 'Method', 3: 'Function', 4: 'Constructor', 5: 'Field',
+    6: 'Variable', 7: 'Class', 8: 'Interface', 9: 'Module', 10: 'Property',
+    11: 'Unit', 12: 'Value', 13: 'Enum', 14: 'Keyword', 15: 'Snippet',
+    16: 'Color', 17: 'File', 18: 'Reference', 19: 'Folder', 20: 'EnumMember',
+    21: 'Constant', 22: 'Struct', 23: 'Event', 24: 'Operator', 25: 'TypeParameter'
 };
 
 // The token travels as a subprotocol, because a browser cannot set headers on
@@ -463,7 +467,7 @@ export class GhulLanguageClient {
 
         return items.map(item => ({
             label: item.label,
-            kind: COMPLETION_KIND[item.kind] ?? 0,
+            kind: monaco.languages.CompletionItemKind[COMPLETION_KIND[item.kind]] ?? monaco.languages.CompletionItemKind.Text,
             insertText: item.insertText ?? item.label,
             detail: item.detail,
             documentation: typeof item.documentation === 'object'
