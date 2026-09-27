@@ -313,8 +313,24 @@ export async function createPlayground({
     let debounce = null;
     editor.onDidChangeModelContent(() => {
         clearTimeout(debounce);
-        debounce = setTimeout(() => client.changed(editor.getValue()), EDIT_DEBOUNCE_MS);
+        debounce = setTimeout(sendEdit, EDIT_DEBOUNCE_MS);
     });
+
+    function sendEdit() {
+        debounce = null;
+        client.changed(editor.getValue());
+    }
+
+    // A request about the text as it is now has to follow the edit that made
+    // it so. Typing '.' asks for completion at once, well inside the debounce,
+    // and answered against the text before the dot it offers the names in
+    // scope rather than the members.
+    function flushEdit() {
+        if (debounce === null) return;
+
+        clearTimeout(debounce);
+        sendEdit();
+    }
 
     // Both decline when the analyser is not there, so the editor keeps working
     // with nothing but highlighting rather than showing errors.
@@ -357,10 +373,12 @@ export async function createPlayground({
 
     monaco.languages.registerCompletionItemProvider('ghul', {
         triggerCharacters: ['.'],
-        provideCompletionItems: async (_model, position) => {
+        provideCompletionItems: async (_model, position, context) => {
             if (!client.ready) return { suggestions: [] };
 
-            return { suggestions: await client.completion(position) };
+            flushEdit();
+
+            return { suggestions: await client.completion(position, context) };
         }
     });
 

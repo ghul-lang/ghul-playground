@@ -22,9 +22,9 @@ const LSP_SEVERITY = { 1: 'error', 2: 'warn', 3: 'info', 4: 'hint' };
 // LSP CompletionItemKind -> monaco.languages.CompletionItemKind. The two
 // enumerations do not share numbering, so this cannot be a cast.
 const COMPLETION_KIND = {
-    1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9,
-    11: 12, 12: 13, 13: 15, 14: 17, 15: 27, 16: 19, 17: 20, 18: 21,
-    19: 23, 20: 16, 21: 14, 22: 22, 23: 18, 24: 11, 25: 24
+    1: 18, 2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 7, 9: 8, 10: 9,
+    11: 12, 12: 13, 13: 15, 14: 17, 15: 28, 16: 19, 17: 20, 18: 21,
+    19: 23, 20: 16, 21: 14, 22: 6, 23: 10, 24: 11, 25: 24
 };
 
 // The token travels as a subprotocol, because a browser cannot set headers on
@@ -444,13 +444,18 @@ export class GhulLanguageClient {
         return Array.isArray(hints) ? hints : [];
     }
 
-    async completion(position) {
+    // `context` is Monaco's completion context. The server needs to know when
+    // a `.` asked for completion: that is what makes the request a member
+    // completion, and what makes it wait for the analyser to have seen the dot.
+    async completion(position, context) {
         if (this.wake()) return [];
+
+        const triggerCharacter = context?.triggerCharacter;
 
         const result = await this.request('textDocument/completion', {
             textDocument: { uri: DOCUMENT_URI },
             position: { line: position.lineNumber - 1 + this.lineOffset(), character: position.column - 1 },
-            context: { triggerKind: 1 }
+            context: triggerCharacter ? { triggerKind: 2, triggerCharacter } : { triggerKind: 1 }
         });
 
         const raw = result?.result;
