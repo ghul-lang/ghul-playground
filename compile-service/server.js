@@ -23,6 +23,7 @@ const origins = require('../shared/origins');
 const tokens = require('../shared/tokens');
 const { recordOutcome } = require('../shared/outcomes');
 const cells = require('./cells');
+const results = require('./results');
 
 const PORT = Number(process.env.PORT ?? 5090);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -49,6 +50,12 @@ const MAX_CELLS = Number(process.env.MAX_CELLS ?? 50);
 const MAX_CHAIN_BYTES = Number(process.env.MAX_CHAIN_BYTES ?? 256 * 1024);
 const CELL_CACHE_DIR = process.env.CELL_CACHE_DIR ?? path.join(tmpdir(), 'ghul-cells');
 const CELL_CACHE_BYTES = Number(process.env.CELL_CACHE_BYTES ?? 64 * 1024 * 1024);
+
+// The same for one-shot compiles. Sized larger than the cells cache because a
+// result holds the assembly as base64 rather than as bytes, and because the
+// corpus it is mostly answering for is a few hundred programs.
+const RESULT_CACHE_DIR = process.env.RESULT_CACHE_DIR ?? path.join(tmpdir(), 'ghul-results');
+const RESULT_CACHE_BYTES = Number(process.env.RESULT_CACHE_BYTES ?? 128 * 1024 * 1024);
 
 // The request body as JSON can be up to six times its source when every
 // character needs escaping, plus the names and punctuation around each cell.
@@ -185,7 +192,37 @@ async function compileCell(request) {
     }
 }
 
+let resultState = null;
+
+// The result cache and the toolchain identity it is keyed on, made once on the
+// first compile; requests arriving together share the one promise, as the
+// cells cache does.
+function getResultState() {
+    resultState ??= (async () => {
+        const { compiler, references } = await getToolchain();
+
+        return {
+            cache: await new results.ResultCache(RESULT_CACHE_DIR, RESULT_CACHE_BYTES).init(),
+            toolchainId: await cells.toolchainIdentity({
+                compiler, references, flags: [],
+                salt: process.env.RESULT_TOOLCHAIN_SALT
+            })
+        };
+    })();
+
+    return resultState;
+}
+
+// What the source compiles to, from the cache where it has been compiled
+// before. A compile is a function of the source and the toolchain, so the
+// answer does not depend on who asked or when.
 async function compile(source) {
+    const { cache, toolchainId } = await getResultState();
+
+    return cache.answer(results.resultKey(toolchainId, source), () => compileUncached(source));
+}
+
+async function compileUncached(source) {
     const { compiler, references } = await getToolchain();
     const directory = await mkdtemp(path.join(tmpdir(), 'ghul-playground-'));
 
@@ -462,6 +499,7 @@ http.createServer((request, response) => {
     console.log(`compile service on http://${HOST}:${PORT}`);
     console.log(`at most ${MAX_CONCURRENT} compile(s) at once, ${MAX_QUEUED} queued, ` +
         `${COMPILE_TIMEOUT_MS} ms each, ${MAX_SOURCE_BYTES} bytes of source`);
+    console.log(`compiled results cached in ${RESULT_CACHE_DIR}, up to ${RESULT_CACHE_BYTES} bytes`);
     console.log(REPL_ENABLED
         ? `session cells ENABLED: at most ${MAX_CELLS} cells, ${MAX_CHAIN_BYTES} bytes of source, ` +
             `a ${CELL_CACHE_BYTES} byte cache in ${CELL_CACHE_DIR}`

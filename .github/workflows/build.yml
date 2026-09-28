@@ -129,6 +129,9 @@ jobs:
       - name: Check that an outcome line carries nothing a reader sent
         run: node test/outcomes.js
 
+      - name: Check what a compiled result is keyed on and when it is kept
+        run: node test/result-cache.mjs
+
       - name: Check which analyser events a session's changes produce
         run: node test/analyser-outcomes.mjs
 
