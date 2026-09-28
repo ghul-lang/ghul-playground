@@ -530,6 +530,31 @@ re-checking with
 `curl -s -o /dev/null -w '%{http_code}' https://ghul.dev/.env` after
 any change to the nginx roots.
 
+## logs, and how long they are kept
+
+- **compile and analyse** log to the host journal (the `journald` driver in
+  `compose.yaml`), so what they said survives the container recreation every
+  deploy does. Read them with
+  `journalctl CONTAINER_TAG=ghul-playground-compile` (or `-analyse`), and add
+  `--grep '^outcome '` for the one-line-per-request outcome records, which carry
+  no source text and no client address. How long they last is the journal's
+  own size and age limit on this host.
+- **nginx** writes each access log twice: once with whole client addresses,
+  kept 14 days by the distribution's logrotate rule, and once under
+  `/var/log/nginx/kept/` with the address cut to its network (an IPv4 /24, an
+  IPv6 /48), kept 180 days by `deploy/logrotate/ghul-playground-kept`. The
+  first is for finding one client; the second is for trends.
+
+On a host set up before the kept logs existed, install their directory and
+rotation rule **before** applying the nginx configuration that writes them.
+nginx refuses to reload when an `access_log` directory is missing:
+
+```sh
+sudo install -d -o root -g adm -m 755 /var/log/nginx/kept
+sudo install -m 644 deploy/logrotate/ghul-playground-kept /etc/logrotate.d/ghul-playground-kept
+sudo deploy/apply-nginx.sh
+```
+
 ## who does the deploying
 
 A dedicated `deploy` account, not the interactive one. The services run in

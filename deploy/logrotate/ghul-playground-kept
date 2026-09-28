@@ -1,0 +1,19 @@
+# The access logs nginx keeps with the client address cut to its network,
+# written beside the ordinary ones. Held for 180 days, where the ordinary logs
+# with whole addresses keep the distribution's 14.
+#
+# In their own directory because the distribution's rule matches
+# /var/log/nginx/*.log, and logrotate refuses a file two rules both name.
+/var/log/nginx/kept/*.log {
+    daily
+    rotate 180
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        invoke-rc.d nginx rotate >/dev/null 2>&1
+    endscript
+}
