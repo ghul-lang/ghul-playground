@@ -8,7 +8,7 @@ import { requestedProgram, loadProgram, pathBelowBase } from './collections.js'
 import { parseArguments, renderArguments } from './arguments.js'
 import * as files from './files.js'
 import { countEvent, countPageview, band, countTimeOnPage } from './events.js'
-import { loadIndex, suggestions as suggest, taskFor } from './rosetta-index.js'
+import { isAheadOfWiki, loadIndex, suggestions as suggest, taskFor } from './rosetta-index.js'
 
 // Every event this page sends names what the reader did, never what they wrote.
 const count = (family, detail) => countEvent(detail ? `${family}/${detail}` : family, family);
@@ -705,6 +705,7 @@ function renderIdentity() {
     taskIdentity.append(provenance.page ? link(title, provenance.page) : title);
 
     const { slug, id } = taskAndPart(provenance.name);
+
     const parts = taskFor(taskIndex, slug)?.parts ?? [];
     const at = parts.findIndex(part => part.id === id);
 
@@ -734,6 +735,10 @@ function renderIdentity() {
                 { family: 'rosetta-part', detail: 'next' },
                 { text: ['next', heading(next), ' →'] }));
         }
+    }
+
+    if (isAheadOfWiki(taskIndex, slug)) {
+        taskIdentity.append(muted(' · The solution here is newer than the one on Rosetta Code.'));
     }
 }
 
