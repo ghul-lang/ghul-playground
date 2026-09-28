@@ -80,6 +80,12 @@ services:
       CELL_CACHE_DIR: "/cells"
       CELL_CACHE_BYTES: "67108864"
 
+      # Compiled results, keyed on the source and the toolchain. Sized for the
+      # published corpus many times over, so a reader's one-off edits cannot
+      # evict the programs every visitor asks for.
+      RESULT_CACHE_DIR: "/results"
+      RESULT_CACHE_BYTES: "4294967296"
+
     # Bound to loopback: these sit behind a reverse proxy that terminates TLS,
     # rather than facing the internet themselves.
     ports:
@@ -91,6 +97,7 @@ services:
 
     volumes:
       - cells:/cells
+      - results:/results
 
     # A compile of a single file peaks under 200 MB measured; the cap is here so
     # a runaway allocation fails rather than taking the host down.
@@ -397,6 +404,13 @@ services:
 # deliberately a named volume rather than a bind mount so that a stray
 # `docker compose down -v` is the only way to lose it by accident.
 volumes:
+  # The compile service's cache of compiled results: an ordinary volume on the
+  # host's disk, not a tmpfs, because it is sized for the whole published
+  # corpus many times over and holding that in memory would be absurd. Losing
+  # it costs recompiles and nothing else, so it needs no more durability than
+  # the disk already gives it.
+  results:
+
   # The compile service's cache of built session cells: tmpfs, since it is a
   # cache and a restart losing it costs a recompile, and a volume rather than
   # a per-container tmpfs so that the analyse service can read it. Room for

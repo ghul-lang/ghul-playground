@@ -51,9 +51,11 @@ const MAX_CHAIN_BYTES = Number(process.env.MAX_CHAIN_BYTES ?? 256 * 1024);
 const CELL_CACHE_DIR = process.env.CELL_CACHE_DIR ?? path.join(tmpdir(), 'ghul-cells');
 const CELL_CACHE_BYTES = Number(process.env.CELL_CACHE_BYTES ?? 64 * 1024 * 1024);
 
-// The same for one-shot compiles. Sized larger than the cells cache because a
-// result holds the assembly as base64 rather than as bytes, and because the
-// corpus it is mostly answering for is a few hundred programs.
+// The same for one-shot compiles, on the host's disk rather than in the
+// container's tmpfs: this one is sized for the whole published corpus many
+// times over, and compose points it at a volume. The fallback here is only
+// for a service run outside compose, where it is a cache of whatever that
+// run compiles.
 const RESULT_CACHE_DIR = process.env.RESULT_CACHE_DIR ?? path.join(tmpdir(), 'ghul-results');
 const RESULT_CACHE_BYTES = Number(process.env.RESULT_CACHE_BYTES ?? 128 * 1024 * 1024);
 
