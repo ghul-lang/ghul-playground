@@ -101,12 +101,47 @@ jobs:
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$HOST" \
             'cd /opt/ghul-playground && docker compose up -d'
 
+      # The runtime is published under fingerprinted names, and a page loads it
+      # only when it first compiles something, by the names of the publish the
+      # page came from. A page open across a deploy would find those files gone,
+      # so --delete leaves _framework alone, and the next step prunes it to the
+      # files of this publish and the one before.
       - name: Deploy the front end
         run: |
-          rsync -az --delete \
+          rsync -az --delete --filter='P _framework/**' \
             -e "ssh -i ~/.ssh/deploy_key" \
             /tmp/playground-publish/wwwroot/ \
             "$DEPLOY_USER@$HOST:/var/www/playground/"
+
+      # The list of the previous publish's runtime files is kept in the deploy
+      # user's home, outside what nginx serves. With no list yet there is
+      # nothing known to be safe to delete, so the first run only records one.
+      - name: Prune runtime files older than the previous publish
+        run: |
+          (cd /tmp/playground-publish/wwwroot/_framework && find . -type f -printf '%P\n' | sort) \
+            > /tmp/framework-current.txt
+
+          scp -i ~/.ssh/deploy_key /tmp/framework-current.txt "$DEPLOY_USER@$HOST:framework-current.txt"
+
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$HOST" bash -s <<'SCRIPT'
+          set -eu
+          current=~/framework-current.txt
+          previous=~/framework-previous.txt
+
+          if [ -f "$previous" ]; then
+            keep=$(mktemp)
+            sort -u "$current" "$previous" > "$keep"
+
+            cd /var/www/playground/_framework
+            find . -type f -printf '%P\n' | sort | comm -23 - "$keep" | while IFS= read -r stale; do
+              rm -f -- "$stale"
+            done
+
+            rm -f "$keep"
+          fi
+
+          mv "$current" "$previous"
+          SCRIPT
 
       # The user agent marks these as the deploy smoke test, so nginx can route
       # them to ci-access.log rather than the main access log.
