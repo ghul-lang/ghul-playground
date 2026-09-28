@@ -8,7 +8,7 @@
 # replaces the container, which is what makes Prometheus read it: nothing
 # watches that file.
 
-ARG PROMETHEUS_VERSION=v3.14.0
+ARG PROMETHEUS_VERSION=v3.15.0
 
 FROM prom/prometheus:${PROMETHEUS_VERSION}
 
