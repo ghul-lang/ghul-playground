@@ -528,6 +528,34 @@ chrome.on('error', e => {
     check('a carriage return overwrites the line', spun.includes('finished') && !spun.includes('working'),
         JSON.stringify(spun));
 
+    // Typing after the full-screen toggle goes to the editor. The button keeps
+    // keyboard focus after a click, so leaving it there sends what the reader
+    // types next to the button: the arrows and Backspace appear to do nothing,
+    // and Space or Enter is a second click on it, which leaves full screen
+    // again. Focus is what is checked rather than the exit, because a
+    // synthesised key never produces the trusted activation that a real Space
+    // on a focused button does, so the exit itself cannot be driven here.
+    await ev(`document.getElementById('fullscreen').click(); true`);
+    await sleep(300);
+
+    check('the full-screen toggle does not keep the keys',
+        await ev(`document.activeElement?.id !== 'fullscreen'`),
+        await ev(`document.activeElement?.id ?? '(none)'`));
+
+    // Out again, so what follows is not run in full screen.
+    await ev(`if (document.fullscreenElement) document.exitFullscreen(); true`);
+    await sleep(300);
+
+    await ev(`document.getElementById('help-toggle').click(); true`);
+    await sleep(300);
+
+    check('the help toggle does not keep the keys',
+        await ev(`document.activeElement?.id !== 'help-toggle'`),
+        await ev(`document.activeElement?.id ?? '(none)'`));
+
+    await ev(`document.getElementById('help-close').click(); true`);
+    await sleep(300);
+
     // The file menu, as far as a headless browser can be taken: the pickers
     // themselves are native dialogs with nothing to drive them, so what is
     // checked is that the menu opens, says what Save would do, and closes.
