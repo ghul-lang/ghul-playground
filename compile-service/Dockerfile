@@ -47,7 +47,7 @@ ENV GHUL_COMPILER_DLL=/home/playground/tools/.store/ghul.compiler/${GHUL_COMPILE
     GHUL_RASTER_DLL=/home/playground/.nuget/packages/ghul.raster/${GHUL_RASTER_VERSION}/lib/net10.0/ghul-raster.dll
 
 COPY --chown=playground:playground shared /home/playground/service/shared
-COPY --chown=playground:playground compile-service/server.js compile-service/cells.js /home/playground/service/compile-service/
+COPY --chown=playground:playground compile-service/server.js compile-service/cells.js compile-service/results.js /home/playground/service/compile-service/
 
 # The compiler writes its output next to the source, so the service needs a
 # writable scratch directory. compose.yaml mounts a tmpfs there, which is why
