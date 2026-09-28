@@ -29,7 +29,7 @@ const task = (slug, tags, { images = [], playground = true, parts } = {}) => ({
 });
 
 (async () => {
-    const { suggestions, isVisual, isRunnable, loadIndex, taskFor } = await import(`file://${MODULE}`);
+    const { suggestions, isVisual, isRunnable, isAheadOfWiki, loadIndex, taskFor } = await import(`file://${MODULE}`);
 
     // --- what counts as visual, and as runnable ---------------------------
 
@@ -37,6 +37,15 @@ const task = (slug, tags, { images = [], playground = true, parts } = {}) => ({
     check('a graphics-tagged task is visual', isVisual(task('b', ['graphics'])));
     check('a fractal-tagged task is visual', isVisual(task('c', ['fractal'])));
     check('a plain task is not', !isVisual(task('d', ['puzzles'])));
+
+    // --- whether the wiki shows an older solution -------------------------
+
+    const flagged = { tasks: [{ ...task('e', []), ahead_of_wiki: true }, task('f', [])] };
+
+    check('a task the index marks is ahead of the wiki', isAheadOfWiki(flagged, 'e'));
+    check('a task it does not mark is not', !isAheadOfWiki(flagged, 'f'));
+    check('a task the index does not hold is not', !isAheadOfWiki(flagged, 'g'));
+    check('nothing is, with no index', !isAheadOfWiki(null, 'e'));
 
     check('the first part decides whether a task can run',
         !isRunnable({ slug: 'e', tags: [], parts: [{ playground: false }, { playground: true }] }));

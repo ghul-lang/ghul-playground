@@ -8,6 +8,8 @@
 // prior state. Every reconnect therefore re-initializes and re-opens the
 // document from scratch, which is cheap because there is only ever one file.
 
+import { AnalyserOutcomes } from './analyser-outcomes.js';
+
 // The bridge maps this onto the session's real workspace, so the browser never
 // learns or addresses a server path.
 const ROOT_URI = 'file:///playground';
@@ -19,12 +21,16 @@ const SEVERITY = { 1: 8, 2: 4, 3: 2, 4: 1 };
 // The same four, spelled the way the compile service spells them.
 const LSP_SEVERITY = { 1: 'error', 2: 'warn', 3: 'info', 4: 'hint' };
 
-// LSP CompletionItemKind -> monaco.languages.CompletionItemKind. The two
-// enumerations do not share numbering, so this cannot be a cast.
+// LSP CompletionItemKind -> the name of the monaco.languages.CompletionItemKind
+// member for it. The two enumerations number their members differently, and
+// Monaco's numbering moves between releases, so the value is looked up by name
+// in the Monaco that is loaded.
 const COMPLETION_KIND = {
-    1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9,
-    11: 12, 12: 13, 13: 15, 14: 17, 15: 27, 16: 19, 17: 20, 18: 21,
-    19: 23, 20: 16, 21: 14, 22: 22, 23: 18, 24: 11, 25: 24
+    1: 'Text', 2: 'Method', 3: 'Function', 4: 'Constructor', 5: 'Field',
+    6: 'Variable', 7: 'Class', 8: 'Interface', 9: 'Module', 10: 'Property',
+    11: 'Unit', 12: 'Value', 13: 'Enum', 14: 'Keyword', 15: 'Snippet',
+    16: 'Color', 17: 'File', 18: 'Reference', 19: 'Folder', 20: 'EnumMember',
+    21: 'Constant', 22: 'Struct', 23: 'Event', 24: 'Operator', 25: 'TypeParameter'
 };
 
 // The token travels as a subprotocol, because a browser cannot set headers on
@@ -43,8 +49,9 @@ export class GhulLanguageClient {
     // text to analyse, and how many lines of it come before the editor's first.
     // Diagnostics above the editor are dropped, and positions are moved by the
     // offset each way. `onReady` runs whenever a fresh analyser is ready, which
-    // is after every reconnect.
-    constructor(url, { onStatus, onDiagnostics, getToken, documentText, lineOffset, onReady } = {}) {
+    // is after every reconnect. `onOutcome` is told what happened to the
+    // session, once per episode, for a page that counts it.
+    constructor(url, { onStatus, onDiagnostics, getToken, documentText, lineOffset, onReady, onOutcome } = {}) {
         this.url = url;
         this.onStatus = onStatus ?? (() => { });
         this.onDiagnostics = onDiagnostics ?? (() => { });
@@ -52,6 +59,8 @@ export class GhulLanguageClient {
         this.documentText = documentText ?? (() => this.model?.getValue() ?? '');
         this.lineOffset = lineOffset ?? (() => 0);
         this.onReady = onReady ?? (() => { });
+
+        this.outcomes = new AnalyserOutcomes(onOutcome ?? (() => { }));
 
         this.socket = null;
         this.connected = false;
@@ -191,6 +200,8 @@ export class GhulLanguageClient {
         socket.addEventListener('message', event => this.receive(JSON.parse(event.data)));
 
         socket.addEventListener('close', async event => {
+            const wasReady = this.initialized;
+
             this.connected = false;
             this.initialized = false;
 
@@ -219,6 +230,8 @@ export class GhulLanguageClient {
             this.refused = event.reason === 'address limit' || (!opened && await this.overLimit());
 
             if (this.disposed || this.socket !== socket) return;
+
+            this.outcomes.failed(this.refused ? 'refused' : wasReady ? 'dropped' : 'unavailable');
 
             this.onStatus(this.refused ? 'refused' : 'disconnected');
             this.scheduleReconnect();
@@ -309,6 +322,7 @@ export class GhulLanguageClient {
         }, true);
 
         this.initialized = true;
+        this.outcomes.ready();
         this.onStatus('ready');
         this.onReady();
     }
@@ -444,13 +458,18 @@ export class GhulLanguageClient {
         return Array.isArray(hints) ? hints : [];
     }
 
-    async completion(position) {
+    // `context` is Monaco's completion context. The server needs to know when
+    // a `.` asked for completion: that is what makes the request a member
+    // completion, and what makes it wait for the analyser to have seen the dot.
+    async completion(position, context) {
         if (this.wake()) return [];
+
+        const triggerCharacter = context?.triggerCharacter;
 
         const result = await this.request('textDocument/completion', {
             textDocument: { uri: DOCUMENT_URI },
             position: { line: position.lineNumber - 1 + this.lineOffset(), character: position.column - 1 },
-            context: { triggerKind: 1 }
+            context: triggerCharacter ? { triggerKind: 2, triggerCharacter } : { triggerKind: 1 }
         });
 
         const raw = result?.result;
@@ -458,7 +477,7 @@ export class GhulLanguageClient {
 
         return items.map(item => ({
             label: item.label,
-            kind: COMPLETION_KIND[item.kind] ?? 0,
+            kind: monaco.languages.CompletionItemKind[COMPLETION_KIND[item.kind]] ?? monaco.languages.CompletionItemKind.Text,
             insertText: item.insertText ?? item.label,
             detail: item.detail,
             documentation: typeof item.documentation === 'object'

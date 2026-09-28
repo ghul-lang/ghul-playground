@@ -25,6 +25,21 @@ const { Analyser } = require('./analyser');
 const { MAX_SOURCE_BYTES } = require('../shared/limits');
 const origins = require('../shared/origins');
 const tokens = require('../shared/tokens');
+const { recordOutcome } = require('../shared/outcomes');
+
+// A session's own outcome line. `kind` says which editor it serves.
+const outcome = (repl, fields) => recordOutcome({ service: 'analyse', kind: repl ? 'repl' : 'editor', ...fields });
+
+// Why a session ended, as one of a few fixed words rather than the log line's
+// prose.
+const END_REASONS = {
+    'idle': 'idle',
+    'evicted': 'evicted',
+    'session lifetime exceeded': 'lifetime',
+    'analyser exited': 'analyser-exited',
+    'client disconnected': 'client-disconnected',
+    'socket error': 'socket-error'
+};
 
 const PORT = Number(process.env.PORT ?? 5091);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -436,6 +451,15 @@ class Session {
 
         this.log(`closing: ${reason}${this.cost()}`);
 
+        const endCpu = cpuSeconds(this.analyser.process?.pid);
+
+        outcome(this.repl, {
+            event: 'ended',
+            result: END_REASONS[reason] ?? 'other',
+            seconds: Math.round((Date.now() - this.startedAt) / 1000),
+            cpu: this.startCpu === null || endCpu === null ? undefined : Number((endCpu - this.startCpu).toFixed(1))
+        });
+
         // The analyser is destroyed rather than returned: a process a client
         // has touched is never handed to another one.
         this.analyser.onMessage = null;
@@ -521,6 +545,7 @@ const wss = new WebSocketServer({
         // forge it; anything that can is answered by the session cap instead.
         if (!origins.accepts(info.req.headers.origin)) {
             log(`refusing connection: origin ${info.req.headers.origin} not allowed`);
+            outcome(isRepl(info.req), { event: 'refused', result: 'origin-not-allowed', status: 403 });
             callback(false, 403, 'origin not allowed');
             return;
         }
@@ -536,6 +561,7 @@ const wss = new WebSocketServer({
         }
 
         log('refusing connection: invalid or missing access token');
+        outcome(isRepl(info.req), { event: 'refused', result: 'unauthorized', status: 401 });
         callback(false, 401, 'invalid or missing access token');
     },
 
@@ -555,6 +581,7 @@ wss.on('connection', async (socket, request) => {
             log(`refusing connection: ${mine.length}/${MAX_SESSIONS_PER_ADDRESS} sessions ` +
                 'from one address, none quiet enough to give up');
             socket.close(1013, 'address limit');
+            outcome(isRepl(request), { event: 'refused', result: 'address-limit', status: 1013 });
             return;
         }
 
@@ -566,6 +593,7 @@ wss.on('connection', async (socket, request) => {
     if (sessions.size >= MAX_SESSIONS) {
         log(`refusing connection: ${sessions.size}/${MAX_SESSIONS} sessions in use`);
         socket.close(1013, 'try again later');
+        outcome(isRepl(request), { event: 'refused', result: 'capacity', status: 1013 });
         return;
     }
 
@@ -589,11 +617,14 @@ wss.on('connection', async (socket, request) => {
     if (!analyser || socket.readyState !== socket.OPEN) {
         analyser?.kill();
         try { socket.close(1011, 'no analyser available'); } catch { }
+        outcome(repl, { event: 'refused', result: 'no-analyser', status: 1011 });
         return;
     }
 
     const session = new Session(socket, analyser, address, repl);
     sessions.add(session);
+
+    outcome(repl, { event: 'started', warm: !!analyser.warm });
 
     session.log(`${repl ? 'REPL: ' : ''}took analyser ${analyser.id} (${analyser.warm ? 'warm' : 'cold'}), ` +
         `pool now ${JSON.stringify(poolState())}`);
