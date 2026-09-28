@@ -21,6 +21,7 @@ const { resolveCompiler, resolveReferencePaths } = require('../shared/toolchain'
 const { MAX_SOURCE_BYTES } = require('../shared/limits');
 const origins = require('../shared/origins');
 const tokens = require('../shared/tokens');
+const { recordOutcome } = require('../shared/outcomes');
 const cells = require('./cells');
 
 const PORT = Number(process.env.PORT ?? 5090);
@@ -229,6 +230,12 @@ async function compile(source) {
     }
 }
 
+// How many errors a compile reported: the diagnostics themselves are the
+// reader's program talking, so only their number is recorded.
+function errorCount(diagnostics) {
+    return Array.isArray(diagnostics) ? diagnostics.filter(d => d.severity === 'error').length : undefined;
+}
+
 // A compile of a fixed program, so a broken toolchain shows as unhealthy
 // rather than as failing user requests. Cached, because the container checks
 // every thirty seconds and a compile costs about a CPU-second.
@@ -322,9 +329,17 @@ http.createServer((request, response) => {
 
     const maxBodyBytes = isCell ? MAX_CELL_REQUEST_BYTES : MAX_SOURCE_BYTES;
 
+    const startedAt = Date.now();
+
+    const outcome = (status, result, fields = {}) => recordOutcome({
+        service: 'compile', kind: isCell ? 'cell' : 'program', event: 'request',
+        status, result, ms: Date.now() - startedAt, ...fields
+    });
+
     if (!origins.accepts(request.headers.origin)) {
         response.writeHead(403, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ ok: false, error: 'origin not allowed' }));
+        outcome(403, 'origin-not-allowed');
         return;
     }
 
@@ -333,6 +348,7 @@ http.createServer((request, response) => {
     if (!tokens.accepts(tokens.fromAuthorizationHeader(request.headers.authorization))) {
         response.writeHead(401, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ ok: false, error: 'invalid or missing access token' }));
+        outcome(401, 'unauthorized');
         return;
     }
 
@@ -360,6 +376,7 @@ http.createServer((request, response) => {
                     : `a program here is limited to ${Math.floor(MAX_SOURCE_BYTES / 1024)} KB`
             }));
             request.destroy();
+            outcome(413, 'too-big');
         }
     });
 
@@ -391,18 +408,31 @@ http.createServer((request, response) => {
                 return work();
             });
 
-            if (result === null) return;
+            if (result === null) {
+                outcome(null, 'client-gone');
+                return;
+            }
 
             // A session whose earlier cells no longer compile - the toolchain
             // changed under it - has to be started again.
-            response.writeHead(result.sessionBroken ? 409 : 200, { 'content-type': 'application/json' });
+            const status = result.sessionBroken ? 409 : 200;
+
+            response.writeHead(status, { 'content-type': 'application/json' });
             response.end(JSON.stringify(result));
+
+            outcome(status,
+                result.sessionBroken ? 'session-broken'
+                    : result.ok ? 'ok'
+                        : result.timedOut ? 'timeout'
+                            : 'compile-error',
+                { diagnostics: errorCount(result.diagnostics) });
         } catch (e) {
             if (e instanceof cells.BadRequest) {
                 response.writeHead(e.status, { 'content-type': 'application/json' });
                 response.end(JSON.stringify({
                     ok: false, diagnostics: [], assembly: null, error: e.message
                 }));
+                outcome(e.status, 'bad-request');
                 return;
             }
 
@@ -415,6 +445,7 @@ http.createServer((request, response) => {
                     ok: false, diagnostics: [], assembly: null,
                     error: 'the compile service is busy; try again in a moment'
                 }));
+                outcome(503, 'busy');
                 return;
             }
 
@@ -424,6 +455,7 @@ http.createServer((request, response) => {
             response.end(JSON.stringify({
                 ok: false, diagnostics: [], assembly: null, error: String(e)
             }));
+            outcome(500, 'error');
         }
     });
 }).listen(PORT, HOST, () => {

@@ -126,6 +126,9 @@ jobs:
       - name: Check every page that sends events loads the counter
         run: node test/counted-pages.mjs
 
+      - name: Check that an outcome line carries nothing a reader sent
+        run: node test/outcomes.js
+
       - name: Check how a command line is written and read back
         run: node test/arguments.mjs
 
