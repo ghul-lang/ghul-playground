@@ -10,7 +10,7 @@
 # Both come from Alpine's own packages rather than the official nginx image plus
 # a module, because a module is built against one nginx version and refuses to
 # load into another: taken from the same repository they match by construction.
-FROM alpine:3.21
+FROM alpine:3.24
 
 RUN apk add --no-cache nginx nginx-mod-http-brotli
 
