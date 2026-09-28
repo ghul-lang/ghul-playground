@@ -8,7 +8,6 @@
 // prior state. Every reconnect therefore re-initializes and re-opens the
 // document from scratch, which is cheap because there is only ever one file.
 
-import { countEvent } from './events.js';
 import { AnalyserOutcomes } from './analyser-outcomes.js';
 
 // The bridge maps this onto the session's real workspace, so the browser never
@@ -50,9 +49,9 @@ export class GhulLanguageClient {
     // text to analyse, and how many lines of it come before the editor's first.
     // Diagnostics above the editor are dropped, and positions are moved by the
     // offset each way. `onReady` runs whenever a fresh analyser is ready, which
-    // is after every reconnect. `countFamily`, where given, is the event family
-    // what happens to the session is counted under.
-    constructor(url, { onStatus, onDiagnostics, getToken, documentText, lineOffset, onReady, countFamily } = {}) {
+    // is after every reconnect. `onOutcome` is told what happened to the
+    // session, once per episode, for a page that counts it.
+    constructor(url, { onStatus, onDiagnostics, getToken, documentText, lineOffset, onReady, onOutcome } = {}) {
         this.url = url;
         this.onStatus = onStatus ?? (() => { });
         this.onDiagnostics = onDiagnostics ?? (() => { });
@@ -61,9 +60,7 @@ export class GhulLanguageClient {
         this.lineOffset = lineOffset ?? (() => 0);
         this.onReady = onReady ?? (() => { });
 
-        this.outcomes = new AnalyserOutcomes(outcome => {
-            if (countFamily) countEvent(`${countFamily}/${outcome}`, countFamily);
-        });
+        this.outcomes = new AnalyserOutcomes(onOutcome ?? (() => { }));
 
         this.socket = null;
         this.connected = false;
