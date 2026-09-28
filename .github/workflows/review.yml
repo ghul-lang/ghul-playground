@@ -63,7 +63,7 @@ jobs:
             echo "bump_only=false" >> "$GITHUB_OUTPUT"
         fi
 
-    - uses: actions/create-github-app-token@v2
+    - uses: actions/create-github-app-token@v3
       id: app-token
       with:
         app-id: ${{ vars.GHUL_REVIEWER_APP_ID }}
