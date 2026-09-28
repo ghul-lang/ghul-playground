@@ -17,6 +17,12 @@ const ROSETTA_CODE = `${ROSETTA_CODE_ROOT}tasks`;
 // Where ghul.dev describes a task, alongside the other solutions.
 const ROSETTA_EXPLORER = 'https://ghul.dev/rosetta';
 
+const GHUL_EXAMPLES_ROOT = 'https://raw.githubusercontent.com/ghul-lang/ghul-examples/main/';
+const GHUL_EXAMPLES = `${GHUL_EXAMPLES_ROOT}examples`;
+
+// Where ghul.dev shows the examples, one program to a page.
+const GHUL_EXAMPLES_PAGES = 'https://ghul.dev/examples';
+
 const COLLECTIONS = {
     // A task is tasks/<slug>/<slug>.ghul, or, for a task solved more than one
     // way, tasks/<slug>/<NN-part>/<NN-part>.ghul. A solution the playground
@@ -40,6 +46,33 @@ const COLLECTIONS = {
                 root: ROSETTA_CODE_ROOT,
                 about: `${ROSETTA_CODE}/${slug}/task.json`,
                 page: `${ROSETTA_EXPLORER}/${slug}`
+            };
+        }
+    },
+
+    // An example is examples/<topic>/<topic>.ghul, or, for a topic divided into
+    // several programs, examples/<topic>/<NN-part>/<NN-part>.ghul. On ghul.dev
+    // a topic's first program is on the topic's own page, and each of the
+    // others on a page named for the topic and the part.
+    'ghul-examples': {
+        pattern: /^([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([0-9]{2}(?:-[a-z0-9]+)+))?$/,
+
+        locate: ([topic, part]) => {
+            const directory = part
+                ? `${GHUL_EXAMPLES}/${topic}/${part}`
+                : `${GHUL_EXAMPLES}/${topic}`;
+            const page = part && !part.startsWith('01-') ? `${topic}-${part}` : topic;
+            const words = name => name.replace(/^[0-9]{2}-/, '').replace(/-/g, ' ');
+
+            return {
+                source: `${directory}/${part ?? topic}.ghul`,
+                unsupported: `${directory}/playground-unsupported`,
+                files: `${directory}/playground-files`,
+                arguments: `${directory}/run.args`,
+                root: GHUL_EXAMPLES_ROOT,
+                // no file names an example's title, so it is made from its directory names
+                title: part ? `${words(topic)}: ${words(part)}` : words(topic),
+                page: `${GHUL_EXAMPLES_PAGES}/${page}`
             };
         }
     }
@@ -77,7 +110,11 @@ export function requestedProgram(pathname) {
 export async function loadProgram(request, fetchImpl = fetch) {
     if (request.error) throw new Error(request.error);
 
-    const get = url => fetchImpl(url, { signal: AbortSignal.timeout(10000) });
+    // a collection that has no file of a kind names no location for it, and
+    // reads as that file being absent
+    const get = url => url
+        ? fetchImpl(url, { signal: AbortSignal.timeout(10000) })
+        : Promise.resolve({ ok: false, status: 404 });
 
     let source;
     let unsupported;
@@ -130,7 +167,7 @@ export async function loadProgram(request, fetchImpl = fetch) {
     const title = about.ok ? await about.json().then(a => a.task, () => null) : null;
 
     return {
-        title: typeof title === 'string' ? title : null,
+        title: typeof title === 'string' ? title : request.title ?? null,
         source: await source.text(),
         unsupported: unsupported.ok ? (await unsupported.text()).trim() : null,
         files,
