@@ -9,6 +9,7 @@
 // document from scratch, which is cheap because there is only ever one file.
 
 import { AnalyserOutcomes } from './analyser-outcomes.js';
+import { hasReader, whenReader } from './engagement.js';
 
 // The bridge maps this onto the session's real workspace, so the browser never
 // learns or addresses a server path.
@@ -99,6 +100,9 @@ export class GhulLanguageClient {
         this.retryTimer = null;
         this.hiddenTimer = null;
 
+        // Set while a connect is waiting for the page to have a reader.
+        this.waitingForReader = false;
+
         this.onVisibility = () => {
             clearTimeout(this.hiddenTimer);
 
@@ -159,6 +163,25 @@ export class GhulLanguageClient {
 
     connect() {
         if (this.disposed) return;
+
+        // A page nobody is reading waits too. A session is the expensive
+        // thing a visitor costs, and a renderer that never interacts would
+        // hold one for as long as it stayed on the page.
+        if (!hasReader()) {
+            // Once, however many times a retry or a token entry asks: each
+            // wait would otherwise become its own connect when the reader
+            // arrives.
+            if (!this.waitingForReader) {
+                this.waitingForReader = true;
+
+                whenReader().then(() => {
+                    this.waitingForReader = false;
+                    this.connect();
+                });
+            }
+
+            return;
+        }
 
         // A page out of sight waits to be looked at rather than taking a
         // session: a retry timer or a background tab would otherwise hand
