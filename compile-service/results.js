@@ -34,11 +34,20 @@ function resultKey(toolchainId, source) {
 //
 // A compile that failed is still an answer about the source and is worth
 // keeping: a crawler rendering a page whose program does not compile asks for
-// the same failure every time. A timeout is not - it says the service was
-// busy, not that the source cannot be compiled, so caching one would answer
-// every later request for that program with a failure it invented under load.
+// the same failure every time.
+//
+// A compile that did not finish is not an answer about anything. A timeout
+// says the service was busy, and a compiler that reported nothing did not run,
+// so keeping either would answer every later request for that program with a
+// failure invented under load. Both are flagged where they are produced.
+//
+// The diagnostics are required as well as the flags: a failure with nothing to
+// say is one the compiler did not explain, which is the shape every way of
+// dying takes and no way of rejecting a program does.
 function isCacheable(result) {
-    return !!result && !result.timedOut;
+    if (!result || result.timedOut || result.failed) return false;
+
+    return result.ok || result.diagnostics?.length > 0;
 }
 
 class ResultCache {

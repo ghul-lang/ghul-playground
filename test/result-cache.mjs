@@ -17,6 +17,12 @@ check('a key depends on the source', resultKey('t', 'a') !== resultKey('t', 'b')
 check('a key depends on the toolchain', resultKey('t1', 'a') !== resultKey('t2', 'a'));
 check('a timeout is not cacheable', !isCacheable({ ok: false, timedOut: true }));
 check('a compile failure is cacheable', isCacheable({ ok: false, diagnostics: [{}] }));
+check('a timeout that said something is still not cacheable',
+    !isCacheable({ ok: false, diagnostics: [{}], timedOut: true }));
+check('a compiler that reported nothing is not cacheable',
+    !isCacheable({ ok: false, diagnostics: [], failed: true }));
+check('a failure with nothing to say is not cacheable',
+    !isCacheable({ ok: false, diagnostics: [] }));
 
 let compiles = 0;
 const compile = async () => { compiles++; await new Promise(r => setTimeout(r, 50));

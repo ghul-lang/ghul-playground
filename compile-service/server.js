@@ -241,6 +241,21 @@ async function compileUncached(source) {
         const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
 
         if (error) {
+            // Killed at the timeout, whether or not it had said anything
+            // first. What it managed to report before it died is not the
+            // whole answer about the source, so this is flagged either way
+            // and nothing keeps it.
+            if (error.killed && diagnostics.length) {
+                return { ok: false, diagnostics, assembly: null, timedOut: true };
+            }
+
+            // The compiler reported nothing and did not run to completion: it
+            // failed to start, or was killed by something other than the
+            // timeout. That says nothing about the source either.
+            if (!error.killed && !diagnostics.length) {
+                return { ok: false, diagnostics, assembly: null, failed: true };
+            }
+
             // A timeout kills the compiler without it reporting anything, so
             // say so rather than returning an empty, puzzling failure.
             if (error.killed && !diagnostics.length) {
@@ -288,7 +303,14 @@ async function checkHealth() {
         // Through the gate like any other compile, so the check cannot add load
         // to an already saturated service, and so saturation is reported rather
         // than hidden.
-        const result = await withSlot(() => compile(HEALTH_SOURCE));
+        //
+        // Past the cache, though: the check is asking whether the compiler
+        // still runs, and its source never changes, so a cached answer would
+        // report the first success for as long as the service lived. What
+        // breaks a toolchain without changing a byte of it - a runtime that
+        // will not start, a full disk, a compiler that has begun to hang - is
+        // exactly what this is for.
+        const result = await withSlot(() => compileUncached(HEALTH_SOURCE));
 
         health = { at: Date.now(), ok: result.ok, error: result.ok ? null : 'compile failed' };
     } catch (e) {
