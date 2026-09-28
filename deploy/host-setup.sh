@@ -126,6 +126,12 @@ fi
 # nginx-files.sh lists these same files for check-nginx.sh, which every deploy
 # runs, and apply-nginx.sh, which applies a change; a file added here belongs
 # there too.
+# The long-kept access logs, with addresses cut to their network, and the rule
+# that keeps them. Before the nginx config that writes them is installed, so a
+# reload never finds their directory missing.
+install -d -o root -g adm -m 755 /var/log/nginx/kept
+install -m 644 "$here/logrotate/ghul-playground-kept" /etc/logrotate.d/ghul-playground-kept
+
 install -m 644 "$here/nginx/playground-limits.conf" /etc/nginx/conf.d/playground-limits.conf
 install -m 644 "$here/nginx/reject-unknown-hosts.conf" /etc/nginx/conf.d/reject-unknown-hosts.conf
 install -m 644 "$here/nginx/$DOMAIN.conf" "/etc/nginx/sites-available/$DOMAIN"
