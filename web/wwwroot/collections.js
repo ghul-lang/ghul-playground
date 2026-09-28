@@ -17,6 +17,15 @@ const ROSETTA_CODE = `${ROSETTA_CODE_ROOT}tasks`;
 // Where ghul.dev describes a task, alongside the other solutions.
 const ROSETTA_EXPLORER = 'https://ghul.dev/rosetta';
 
+// The branch the ghul-examples programs are read from: the one where each
+// example is divided into programs of its own, until that division is merged.
+const GHUL_EXAMPLES_REF = 'ghul-coder/split-prototype';
+const GHUL_EXAMPLES_ROOT = `https://raw.githubusercontent.com/ghul-lang/ghul-examples/${GHUL_EXAMPLES_REF}/`;
+const GHUL_EXAMPLES = `${GHUL_EXAMPLES_ROOT}examples`;
+
+// Where ghul.dev shows the examples, one program to a page.
+const GHUL_EXAMPLES_PAGES = 'https://ghul.dev/examples';
+
 const COLLECTIONS = {
     // A task is tasks/<slug>/<slug>.ghul, or, for a task solved more than one
     // way, tasks/<slug>/<NN-part>/<NN-part>.ghul. A solution the playground
@@ -40,6 +49,31 @@ const COLLECTIONS = {
                 root: ROSETTA_CODE_ROOT,
                 about: `${ROSETTA_CODE}/${slug}/task.json`,
                 page: `${ROSETTA_EXPLORER}/${slug}`
+            };
+        }
+    },
+
+    // An example is examples/<topic>/<topic>.ghul, or, for a topic divided into
+    // several programs, examples/<topic>/<NN-part>/<NN-part>.ghul. On ghul.dev
+    // a topic's first program is on the topic's own page, and each of the
+    // others on a page named for the topic and the part.
+    'ghul-examples': {
+        pattern: /^([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([0-9]{2}(?:-[a-z0-9]+)+))?$/,
+
+        locate: ([topic, part]) => {
+            const directory = part
+                ? `${GHUL_EXAMPLES}/${topic}/${part}`
+                : `${GHUL_EXAMPLES}/${topic}`;
+            const page = part && !part.startsWith('01-') ? `${topic}-${part}` : topic;
+
+            return {
+                source: `${directory}/${part ?? topic}.ghul`,
+                unsupported: `${directory}/playground-unsupported`,
+                files: `${directory}/playground-files`,
+                arguments: `${directory}/run.args`,
+                root: GHUL_EXAMPLES_ROOT,
+                about: `${directory}/about.json`,
+                page: `${GHUL_EXAMPLES_PAGES}/${page}`
             };
         }
     }
