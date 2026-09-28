@@ -129,6 +129,9 @@ jobs:
       - name: Check that an outcome line carries nothing a reader sent
         run: node test/outcomes.js
 
+      - name: Check which analyser events a session's changes produce
+        run: node test/analyser-outcomes.mjs
+
       - name: Check how a command line is written and read back
         run: node test/arguments.mjs
 

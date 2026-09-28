@@ -278,6 +278,7 @@ export async function createPlayground({
 
     const client = new GhulLanguageClient(ANALYSE_SERVICE, {
         getToken,
+        countFamily: 'playground-analyser',
 
         onDiagnostics: list => {
             analyseDiagnostics = list;
