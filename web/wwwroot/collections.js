@@ -17,10 +17,7 @@ const ROSETTA_CODE = `${ROSETTA_CODE_ROOT}tasks`;
 // Where ghul.dev describes a task, alongside the other solutions.
 const ROSETTA_EXPLORER = 'https://ghul.dev/rosetta';
 
-// The branch the ghul-examples programs are read from: the one where each
-// example is divided into programs of its own, until that division is merged.
-const GHUL_EXAMPLES_REF = 'ghul-coder/split-prototype';
-const GHUL_EXAMPLES_ROOT = `https://raw.githubusercontent.com/ghul-lang/ghul-examples/${GHUL_EXAMPLES_REF}/`;
+const GHUL_EXAMPLES_ROOT = 'https://raw.githubusercontent.com/ghul-lang/ghul-examples/main/';
 const GHUL_EXAMPLES = `${GHUL_EXAMPLES_ROOT}examples`;
 
 // Where ghul.dev shows the examples, one program to a page.
