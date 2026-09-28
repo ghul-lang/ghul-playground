@@ -633,6 +633,10 @@ if (await playground.tokenRequired() && !playground.hasToken()) {
 // pays for it, and a fetch that fails leaves every use of it showing nothing.
 let taskIndex = null;
 
+// The index describes Rosetta Code tasks, so only a program opened from that
+// collection reads it: another collection's names mean nothing in it.
+const isRosettaTask = () => provenance?.name.startsWith('rosetta-code/') ?? false;
+
 async function withTaskIndex() {
     if (taskIndex) return taskIndex;
 
@@ -707,6 +711,8 @@ function renderIdentity() {
 
     taskIdentity.append(provenance.page ? link(title, provenance.page) : title);
 
+    if (!isRosettaTask()) return;
+
     const { slug, id } = taskAndPart(provenance.name);
 
     const parts = taskFor(taskIndex, slug)?.parts ?? [];
@@ -753,7 +759,7 @@ function renderMoreToRun() {
     suggestions.replaceChildren();
     moreLinks.replaceChildren();
 
-    if (panel || !taskIndex || !provenance) return;
+    if (panel || !taskIndex || !isRosettaTask()) return;
 
     const { slug } = taskAndPart(provenance.name);
     const collection = provenance.name.split('/')[0];
@@ -878,7 +884,7 @@ let firstOutputCounted = false;
 function countFirstOutput() {
     // The first output is also when the suggestions become relevant, so it is
     // where the index is asked for: after a run rather than before one.
-    if (provenance) withTaskIndex();
+    if (isRosettaTask()) withTaskIndex();
 
     if (firstOutputCounted || !inFlight) return;
 
