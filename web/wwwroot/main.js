@@ -9,6 +9,7 @@ import { parseArguments, renderArguments } from './arguments.js'
 import * as files from './files.js'
 import { countEvent, countPageview, band, countTimeOnPage } from './events.js'
 import { isAheadOfWiki, loadIndex, suggestions as suggest, taskFor } from './rosetta-index.js'
+import { whenReader } from './engagement.js'
 
 // Every event this page sends names what the reader did, never what they wrote.
 const count = (family, detail) => countEvent(detail ? `${family}/${detail}` : family, family);
@@ -1019,7 +1020,11 @@ if (stoppedBefore) {
         { className: 'empty', textContent: 'Stopped. Run the program to start it again.' }));
     showTab(outputPane);
 } else if (program?.source && !notice && (playground.hasToken() || !(await playground.tokenRequired()))) {
-    runProgram({ automatic: true });
+    // Waited for rather than started here: the run is what a visitor costs,
+    // and a page rendered by a crawler that never touches it should cost
+    // nothing beyond the page itself. A reader gets it as soon as they do
+    // anything, and shortly after arriving if they do not.
+    whenReader().then(() => runProgram({ automatic: true }));
 }
 
 // --- saving and copying ----------------------------------------------------
