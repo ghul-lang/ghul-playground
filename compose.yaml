@@ -39,6 +39,13 @@ networks:
 services:
   compile:
     <<: *hardening
+    # To the host journal rather than a file inside the container, so what the
+    # service logged - its outcome lines included - survives the recreation
+    # every deploy does. Read with `journalctl CONTAINER_TAG=ghul-playground-compile`.
+    logging:
+      driver: journald
+      options:
+        tag: ghul-playground-compile
     cgroup_parent: playground-compile.slice
     build:
       context: .
@@ -100,6 +107,11 @@ services:
 
   analyse:
     <<: *hardening
+    # To the host journal, as compile's is.
+    logging:
+      driver: journald
+      options:
+        tag: ghul-playground-analyse
     cgroup_parent: playground-analyse.slice
     build:
       context: .

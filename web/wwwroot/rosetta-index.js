@@ -86,6 +86,13 @@ export function taskFor(index, slug) {
     return index?.tasks.find(task => task.slug === slug) ?? null;
 }
 
+// Whether the solution here has changed since its section was last posted to
+// the wiki, which the index works out from the ledger. A task the index does
+// not hold, or an index from before the field existed, says no.
+export function isAheadOfWiki(index, slug) {
+    return taskFor(index, slug)?.ahead_of_wiki === true;
+}
+
 // A stable order for equally-related tasks, so the strip does not reshuffle on
 // every render, with `turn` moving the window along so that a reader who runs
 // several tasks is not offered the same two each time.

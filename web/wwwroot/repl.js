@@ -263,6 +263,7 @@ async function start() {
 
         const client = new GhulLanguageClient(ANALYSE_REPL_SERVICE, {
             getToken,
+            onOutcome: outcome => count('repl-analyser', outcome),
             onStatus: showAnalyser,
             documentText: () => analysis.source,
             lineOffset: () => analysis.offset,
@@ -306,7 +307,10 @@ async function start() {
 
     editor.onDidChangeModelContent(() => {
         clearTimeout(analysisTimer);
-        analysisTimer = setTimeout(refreshAnalysis, 300);
+        analysisTimer = setTimeout(() => {
+            analysisTimer = null;
+            refreshAnalysis();
+        }, 300);
 
         if (!phase) showCompiler();
     });
@@ -319,7 +323,7 @@ async function start() {
 
     monaco.languages.registerCompletionItemProvider('ghul', {
         triggerCharacters: ['.'],
-        provideCompletionItems: async (model, position) => {
+        provideCompletionItems: async (model, position, context) => {
             if (!isInput(model)) return { suggestions: [] };
 
             const word = model.getWordUntilPosition(position);
@@ -328,7 +332,16 @@ async function start() {
                 startColumn: word.startColumn, endColumn: word.endColumn
             };
 
-            const items = await analyser.completion(position);
+            // The input is only analysed after a pause in typing, and typing
+            // '.' asks for completion at once: bring the analysis up to date
+            // first, or the answer is about the text before the dot.
+            if (analysisTimer !== null) {
+                clearTimeout(analysisTimer);
+                analysisTimer = null;
+                await refreshAnalysis();
+            }
+
+            const items = await analyser.completion(position, context);
 
             return { suggestions: items.map(item => ({ ...item, range })) };
         }

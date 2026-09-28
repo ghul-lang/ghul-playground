@@ -24,8 +24,12 @@ function route(url, prefix) {
 
     const path = '/' + url.slice(prefix.length);
 
-    if (path.startsWith('/compile')) return { port: COMPILE, path };
-    if (path.startsWith('/analyse') || path.startsWith('/health')) return { port: ANALYSE, path };
+    // Exact matches, as nginx's `location =` blocks are: a prefix match would
+    // also send a page file such as analyser-outcomes.js to a service.
+    const bare = path.split('?')[0];
+
+    if (bare === '/compile' || bare === '/compile/cell') return { port: COMPILE, path };
+    if (bare === '/analyse' || bare === '/health') return { port: ANALYSE, path };
 
     return { port: WEB, path };
 }
