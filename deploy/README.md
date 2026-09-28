@@ -538,7 +538,12 @@ any change to the nginx roots.
   `journalctl CONTAINER_TAG=ghul-playground-compile` (or `-analyse`), and add
   `--grep '^outcome '` for the one-line-per-request outcome records, which carry
   no source text and no client address. How long they last is the journal's
-  own size and age limit on this host.
+  own limit, and the journal is one store for the whole host: the two services
+  share `SystemMaxUse` in `/etc/systemd/journald.conf` with everything else
+  that logs there, and the oldest entries go first when it fills. A burst from
+  anything on the host shortens how far back their records reach. To keep them
+  longer, raise `SystemMaxUse` (or set `MaxRetentionSec`) and restart
+  `systemd-journald`; `journalctl --disk-usage` shows how much it holds.
 - **nginx** writes each access log twice: once with whole client addresses,
   kept 14 days by the distribution's logrotate rule, and once under
   `/var/log/nginx/kept/` with the address cut to its network (an IPv4 /24, an
@@ -546,8 +551,10 @@ any change to the nginx roots.
   first is for finding one client; the second is for trends.
 
 On a host set up before the kept logs existed, install their directory and
-rotation rule **before** applying the nginx configuration that writes them.
-nginx refuses to reload when an `access_log` directory is missing:
+rotation rule **before** the next `apply-nginx.sh` after this change is
+deployed. The configuration it applies writes to the directory, and nginx
+refuses to reload when an `access_log` directory is missing, so running it
+first fails the reload and leaves the previous configuration in place:
 
 ```sh
 sudo install -d -o root -g adm -m 755 /var/log/nginx/kept
