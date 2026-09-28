@@ -62,6 +62,7 @@ const COLLECTIONS = {
                 ? `${GHUL_EXAMPLES}/${topic}/${part}`
                 : `${GHUL_EXAMPLES}/${topic}`;
             const page = part && !part.startsWith('01-') ? `${topic}-${part}` : topic;
+            const words = name => name.replace(/^[0-9]{2}-/, '').replace(/-/g, ' ');
 
             return {
                 source: `${directory}/${part ?? topic}.ghul`,
@@ -69,7 +70,8 @@ const COLLECTIONS = {
                 files: `${directory}/playground-files`,
                 arguments: `${directory}/run.args`,
                 root: GHUL_EXAMPLES_ROOT,
-                about: `${directory}/about.json`,
+                // no file names an example's title, so it is made from its directory names
+                title: part ? `${words(topic)}: ${words(part)}` : words(topic),
                 page: `${GHUL_EXAMPLES_PAGES}/${page}`
             };
         }
@@ -108,7 +110,11 @@ export function requestedProgram(pathname) {
 export async function loadProgram(request, fetchImpl = fetch) {
     if (request.error) throw new Error(request.error);
 
-    const get = url => fetchImpl(url, { signal: AbortSignal.timeout(10000) });
+    // a collection that has no file of a kind names no location for it, and
+    // reads as that file being absent
+    const get = url => url
+        ? fetchImpl(url, { signal: AbortSignal.timeout(10000) })
+        : Promise.resolve({ ok: false, status: 404 });
 
     let source;
     let unsupported;
@@ -161,7 +167,7 @@ export async function loadProgram(request, fetchImpl = fetch) {
     const title = about.ok ? await about.json().then(a => a.task, () => null) : null;
 
     return {
-        title: typeof title === 'string' ? title : null,
+        title: typeof title === 'string' ? title : request.title ?? null,
         source: await source.text(),
         unsupported: unsupported.ok ? (await unsupported.text()).trim() : null,
         files,

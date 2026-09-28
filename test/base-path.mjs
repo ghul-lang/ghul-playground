@@ -62,6 +62,8 @@ check("a whole example's page", whole.page, 'https://ghul.dev/examples/generics'
 check("a topic's first program is on the topic's page", first.page, 'https://ghul.dev/examples/functional');
 check("a later program's source", later.source.endsWith('/examples/functional/02-map-filter-reduce/02-map-filter-reduce.ghul'), true);
 check("a later program's page", later.page, 'https://ghul.dev/examples/functional-02-map-filter-reduce');
+check("a whole example's title", whole.title, 'generics');
+check("a later program's title", later.title, 'functional: map filter reduce');
 check('a name that is not an example', requestedProgram('/ghul-examples/Not An Example').error, 'ghul-examples/Not An Example is not the name of a program');
 
 console.log(failures ? `${failures} failure(s)` : 'all checks passed');
