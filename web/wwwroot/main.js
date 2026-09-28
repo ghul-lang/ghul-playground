@@ -451,6 +451,8 @@ const playground = await createPlayground({
     ...(initialSource ? { source: initialSource } : {}),
     files: program?.files ?? [],
 
+    onAnalyserOutcome: outcome => count('playground-analyser', outcome),
+
     onOutput: text => {
         if (!text) followingOutput = true;
 

@@ -263,6 +263,7 @@ async function start() {
 
         const client = new GhulLanguageClient(ANALYSE_REPL_SERVICE, {
             getToken,
+            onOutcome: outcome => count('repl-analyser', outcome),
             onStatus: showAnalyser,
             documentText: () => analysis.source,
             lineOffset: () => analysis.offset,

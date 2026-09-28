@@ -172,7 +172,8 @@ export async function createPlayground({
     onImages = () => { },
     onDiagnostics = () => { },
     onStatus = () => { },
-    onAnalyser = () => { }
+    onAnalyser = () => { },
+    onAnalyserOutcome = () => { }
 }) {
     await loadMonaco();
 
@@ -278,6 +279,7 @@ export async function createPlayground({
 
     const client = new GhulLanguageClient(ANALYSE_SERVICE, {
         getToken,
+        onOutcome: onAnalyserOutcome,
 
         onDiagnostics: list => {
             analyseDiagnostics = list;
