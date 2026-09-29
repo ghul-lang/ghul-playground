@@ -644,7 +644,7 @@ async function start() {
 
             // A stop throws this frame away too, and with it the cells
             // already brought back, so those are brought back again.
-            if (session !== generation || answer?.stopped) {
+            if (session !== generation || prepared?.stopped || answer?.stopped) {
                 markNotRun(earlier.slice(index));
                 await replay(earlier.slice(0, index));
                 return;
