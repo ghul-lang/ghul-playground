@@ -39,7 +39,7 @@ USER snapshot
 
 # A copy that is not being written is the failure this service can have, and it
 # is invisible without this: the loop goes on running, the container stays up,
-# and Grafana quietly reads a snapshot that is hours old or absent. Unhealthy
+# and the insights pages quietly read a snapshot that is hours old or absent. Unhealthy
 # after two missed intervals says it in the one place anybody looks.
 HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3   CMD [ -f "${SNAPSHOT_TARGET:-/snapshot/analytics.sqlite3}" ]    && [ -z "$(find "${SNAPSHOT_TARGET:-/snapshot/analytics.sqlite3}"         -mmin +$(( (${SNAPSHOT_INTERVAL:-300} * 2) / 60 + 1 )))" ] || exit 1
 

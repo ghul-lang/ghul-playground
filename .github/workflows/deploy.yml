@@ -96,10 +96,13 @@ jobs:
              && git pull --ff-only \
              && { docker compose build || { echo "build failed; trying once more in a minute"; sleep 60; docker compose build; }; }'
 
+      # --remove-orphans so a service taken out of compose.yaml is stopped and
+      # removed here, rather than left running with nothing managing it. Its
+      # volumes are left alone: removing one is a decision, not a deploy step.
       - name: Swap the services
         run: |
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$HOST" \
-            'cd /opt/ghul-playground && docker compose up -d'
+            'cd /opt/ghul-playground && docker compose up -d --remove-orphans'
 
       # The runtime is published under fingerprinted names, and a page loads it
       # only when it first compiles something, by the names of the publish the

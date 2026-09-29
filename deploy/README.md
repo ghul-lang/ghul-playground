@@ -366,26 +366,36 @@ Deleting by path, from the dashboard, is the only narrower option.
 whose visits are not recorded. The list itself is written by hand on the host
 and is not in this repository.
 
-## dashboards, and what the host is doing
+## insights, and what the host is doing
 
-**Grafana is not published.** It listens on loopback and nothing in nginx
-routes to it; the dashboards are reached by forwarding that port over ssh:
+The pages for reading the numbers: `https://ghul.dev/insights/`, behind a
+password. They cover what visitors looked at and for how long (time in sight),
+how they moved through the site and where they stopped, the funnels through the
+playground, the REPL and the examples in the docs, what went wrong for them,
+the recent visits one by one, and what the host and each container were doing.
+It is a single column that reads on a phone, with a choice of the last day,
+week, month or quarter.
 
-```sh
-ssh -L 3000:127.0.0.1:5093 playground.ghul.dev
-```
+They are the `insights` service in `compose.yaml`: node and a few files in
+`insights/`, with nothing installed from npm. They write nothing anywhere.
 
-and then <http://localhost:3000/>. Open the tunnel as `-L 3000:` rather than on
-some other local port: Grafana builds its own absolute links from its listening
-port, which is 3000 inside the container, so another port gives a dashboard
-whose links do not work.
+They replace a Grafana instance that was kept off the internet and reached only
+over an ssh tunnel, on the grounds that a published route is a login page in
+front of a service that can reconstruct a visitor's session. These pages are a
+much smaller thing to put on the internet: one password compared in constant
+time, no accounts, no sessions, no plugins and no write path, from a service
+that is a few hundred lines of this repository's own code - and a tunnel per
+look proved too high a price for numbers that were hard to read once reached.
+What protects them:
 
-The reason is what these dashboards can show. A published route is a login page
-on the public internet in front of a service that can reconstruct a visitor's
-session, and the alternative costs one ssh command for the one person who reads
-them. The host is already key-only with root login disabled, so this adds
-nothing to what is exposed - there is no route to secure, nothing for a scanner
-to find, and no second credential to keep.
+- `INSIGHTS_PASSWORD`, below, as HTTP basic authentication (any user name).
+  With it unset **every request is refused**, so a host that has not been
+  given one fails closed rather than publishing the visit log.
+- The `insights` limit zone in `nginx/playground-limits.conf`, 30 requests a
+  minute per address, which makes guessing a long random password hopeless.
+- `noindex`, `no-store` and `no-referrer` on every response, a content security
+  policy that allows nothing but inline styles, and no link to the pages from
+  anywhere.
 
 An address allow-list was considered and rejected on evidence rather than
 taste: the same question came up for the analytics exclusion, and over ninety
@@ -394,14 +404,35 @@ sixteen addresses on mobile. A list wide enough to work admits every other
 subscriber on those carriers' pools; one narrow enough to mean anything locks
 the reader out from a phone.
 
-`test/no-route-to-grafana.mjs` fails if a route to it appears in any nginx file,
-because a route could come back by accident and would look exactly like working
-software.
+Over a tunnel works too, and needs the password as well:
 
-Prometheus, node-exporter and cAdvisor answer nobody but Grafana and each other,
-and are not published at all.
+```sh
+ssh -L 5094:127.0.0.1:5094 playground.ghul.dev
+```
 
-Two things it reads, and they are separate on purpose.
+then <http://localhost:5094/>.
+
+To turn it on:
+
+```sh
+# on the host, in /opt/ghul-playground/.env
+INSIGHTS_PASSWORD=<the output of: openssl rand -base64 24>
+
+sudo docker compose up -d insights
+sudo /opt/ghul-playground/deploy/apply-nginx.sh
+```
+
+Until `apply-nginx.sh` has been run, `check-nginx.sh` fails every deploy,
+because the live nginx files differ from the repository's.
+
+`test/insights.mjs` checks what the pages count against a snapshot whose
+numbers are known, and that the service refuses no password, refuses a wrong
+one, and refuses everything when none is set.
+
+Prometheus, node-exporter and cAdvisor answer nobody but the insights service
+and each other, and are not published at all.
+
+The pages read two things, and they are separate on purpose.
 
 **What the host is doing** comes from Prometheus, which scrapes the machine
 (node-exporter) and the containers (cAdvisor) every thirty seconds and keeps
@@ -411,11 +442,11 @@ say how many visits there were at nine o'clock and can never say what one
 visitor did next.
 
 **What visitors did** comes from a copy of GoatCounter's database, taken by the
-`snapshot` service every five minutes and mounted into Grafana read-only.
-Grafana cannot reach the live database at all. The copy exists because the live
-one is in WAL mode: a reader has to be able to create the `-shm` file beside it,
-which a read-only mount refuses, and a read-write mount would put a second
-writer on the only irreplaceable thing on this host.
+`snapshot` service every five minutes and mounted into the insights service
+read-only. The pages cannot reach the live database at all. The copy exists
+because the live one is in WAL mode: a reader has to be able to create the
+`-shm` file beside it, which a read-only mount refuses, and a read-write mount
+would put a second writer on the only irreplaceable thing on this host.
 
 cAdvisor runs **without the Docker socket**. The usual recipe mounts it, which
 is root on this machine for anything that gets into that container.
@@ -442,15 +473,15 @@ and they would otherwise be most of what this job stores.
 Both go in `/opt/ghul-playground/.env` beside the tokens, written by hand, and
 neither is in this repository.
 
-`GRAFANA_ADMIN_PASSWORD` is the dashboard login, asked for at
-<http://localhost:3000/> through the tunnel above. Compose refuses to start
-Grafana without it rather than falling back to a default. The value is on the
-host and nowhere else.
+`INSIGHTS_PASSWORD` is the password for the insights pages, above. Compose
+does not require it: a deploy made before it is set still succeeds, and the
+service refuses every request until it is. The value is on the host and
+nowhere else.
 
 `SNAPSHOT_EXCLUDE` says which recorded visits are the site's own rather than a
 visitor's, and is applied to the **copy**: the live database keeps every row it
 has ever had, and this must never be the thing that clears it. Doing it here
-rather than in the dashboards means no query has to know, and that what is
+rather than in the pages means no query has to know, and that what is
 excluded - which describes whoever runs the site rather than the service - stays
 off a public repository.
 
@@ -468,14 +499,14 @@ copy is five minutes away regardless, so changing the rules needs no more than
 editing `.env` and restarting the one service.
 
 `test/snapshot-rules.sh` checks what each kind of rule removes and that the
-source database is untouched; `test/dashboard-queries.mjs` runs every query the
-dashboards make against GoatCounter's own schema.
+source database is untouched; `test/insights.mjs` reads a snapshot built with
+GoatCounter's own schema.
 
 The snapshot service reports itself unhealthy when the copy is missing or older
 than two intervals, and the deploy asks it and Prometheus what they are actually
 running (`check-running-config.sh`). That is worth knowing because the failure it has is quiet:
 the loop goes on running and the container stays up, so without the health check
-the only sign is a dashboard that is emptier than it should be.
+the only sign is a page that is emptier than it should be.
 
 **If the copies fail** with `unable to open database
 "/snapshot/analytics.sqlite3.new"`, the volume's mount point is owned by root
@@ -491,22 +522,22 @@ have to be removed rather than stopped:
 
 ```sh
 cd /opt/ghul-playground
-sudo docker compose rm -sf snapshot grafana
+sudo docker compose rm -sf snapshot insights
 sudo docker volume rm ghul-playground_goatcounter-snapshot
-sudo docker compose up -d snapshot grafana
+sudo docker compose up -d snapshot insights
 ```
 
 Nothing is lost: the volume holds one copy of the analytics database and the
 next one is along within five minutes.
 
-### what a dashboard can show
+### what the pages can show
 
 Only what GoatCounter already stores. It keeps no address under any setting,
 and the visit identifier it does keep is random and lives for one visit, so the
 visit log shows a sequence of pages within one visit and can never join two.
 Nothing is added to the snapshot that GoatCounter does not already hold, and
 its `users`, `api_tokens` and `store` tables are dropped from the copy - the
-dashboard has no business holding the counter's own password hash.
+pages have no business holding the counter's own password hash.
 
 ## traffic that is not a reader
 
