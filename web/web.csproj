@@ -44,7 +44,7 @@
        targets, and importing those into a C# project makes it try to compile
        this project with the ghūl compiler. -->
   <ItemGroup>
-    <PackageReference Include="ghul.runtime" Version="24.0.1" ExcludeAssets="build;buildTransitive" />
+    <PackageReference Include="ghul.runtime" Version="24.1.0" ExcludeAssets="build;buildTransitive" />
   </ItemGroup>
 
   <!-- Drawing, which the compile service also compiles against. It is here so
