@@ -230,10 +230,10 @@ async function start() {
         const running = phase === 'running';
 
         // With nothing typed there is nothing to run.
-        runButton.disabled = phase ? !running : !editor.getValue().trim();
+        runButton.disabled = phase ? !running : closed || !editor.getValue().trim();
 
         // Nothing to discard before the first cell, except a cell still under way.
-        resetButton.disabled = !phase && number === 1;
+        resetButton.disabled = !phase && number === 1 && !closed;
         runButton.toggleAttribute('data-busy', !!phase && !running);
         runButton.toggleAttribute('data-stop', running);
         runLabel.textContent = running ? 'Stop' : 'Run';
@@ -248,6 +248,12 @@ async function start() {
     };
 
     let number = 1;
+
+    // Set when the session can take no more cells - it is full, or the
+    // compiler has changed under it - so the input stays closed until a new
+    // session is started, since a cell after that could not see the ones
+    // above it.
+    let closed = false;
     let busy = false;
     let runtime = new CellRuntime(document.body, { onState: onRuntimeState });
 
@@ -431,7 +437,7 @@ async function start() {
     const setBusy = (value, text = '') => {
         busy = value;
         phase = value ? text : '';
-        editor.updateOptions({ readOnly: value });
+        editor.updateOptions({ readOnly: value || closed });
         showCompiler();
     };
 
@@ -491,6 +497,8 @@ async function start() {
         runtime.dispose();
         runtime = new CellRuntime(document.body, { onState: onRuntimeState });
         number = 1;
+        closed = false;
+        editor.updateOptions({ readOnly: busy });
         setPrompt();
         startAnalysis();
         showCompiler();
@@ -499,20 +507,27 @@ async function start() {
     async function post(cells) {
         const token = getToken();
 
-        const response = await fetch(CELL_SERVICE, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-                ...(token ? { authorization: `Bearer ${token}` } : {})
-            },
-            body: JSON.stringify({ cells })
-        });
+        let response;
+
+        try {
+            response = await fetch(CELL_SERVICE, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    ...(token ? { authorization: `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ cells })
+            });
+        } catch {
+            failure = 'The last cell did not reach the compile service';
+            return { reply: JSON.stringify({ ok: false, error: "couldn't reach the compile service" }) };
+        }
 
         if (response.status === 409) return { broken: true };
 
         if (response.status === 429 || response.status === 503) {
             failure = 'The compile service was busy for the last cell';
-            return { reply: JSON.stringify({ ok: false, error: 'the compile service is busy; run the cell again in a moment' }) };
+            return { reply: JSON.stringify({ ok: false, error: 'compile service busy' }) };
         }
 
         const text = await response.text();
@@ -529,7 +544,7 @@ async function start() {
     }
 
     async function submit(text) {
-        if (busy || !text.trim()) return;
+        if (busy || closed || !text.trim()) return;
 
         history.push(text);
         historyAt = history.length;
@@ -563,7 +578,7 @@ async function start() {
                 live.feed(chunk);
 
                 if (truncated && !truncatedNote) {
-                    line(result, 'muted', 'more output than can be shown while the cell runs; all of it is shown when it finishes');
+                    line(result, 'muted', '…');
                     truncatedNote = result.lastChild;
                 }
 
@@ -586,8 +601,8 @@ async function start() {
 
                 if (posted.broken) {
                     outcome = 'compile-error';
-                    line(result, 'error', 'an earlier cell no longer compiles here, so the session has been reset; run this cell again');
-                    resetSession();
+                    line(result, 'error', 'compiler updated; start a new session');
+                    closed = true;
                     return;
                 }
 
@@ -628,7 +643,7 @@ async function start() {
 
             if (prepared?.stopped || answer?.stopped) {
                 outcome = 'stopped';
-                line(result, 'muted', 'stopped; the session was reset');
+                line(result, 'muted', 'stopped');
                 number = 1;
                 return;
             }
@@ -658,8 +673,8 @@ async function start() {
             if (Number.isFinite(answer.next)) number = answer.next;
 
             if (answer.accepted && number > limits.maxCells) {
-                line(result, 'muted', `a session here holds ${limits.maxCells} cells; the next one starts a new session`);
-                resetSession();
+                line(result, 'muted', `limit of ${limits.maxCells} cells reached`);
+                closed = true;
             }
         } catch (e) {
             outcome = 'error';
@@ -732,7 +747,7 @@ async function start() {
 
     resetButton.addEventListener('click', () => {
         // Asked only when there is something to lose.
-        if (number > 1 && !confirm('Start a new session? The cells so far, and what they defined, are discarded.')) return;
+        if (number > 1 && !confirm('Discard current cells?')) return;
 
         count('repl-action', 'new-session');
 

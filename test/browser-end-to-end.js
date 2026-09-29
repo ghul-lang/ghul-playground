@@ -1695,6 +1695,51 @@ chrome.on('error', e => {
             check('with types on, a value is shown after its type',
                 typed === 'Pipe[int]: [0, 1, 4, 9, 16]', JSON.stringify(typed));
 
+            // A full session closes the input rather than carrying on into a
+            // session that cannot see the cells above it. The page is told
+            // the limit is two, so reaching it takes two cells.
+            const { identifier: smallLimit } = await cmd('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+                const original = window.fetch;
+                window.fetch = async (url, init) => {
+                    const response = await original(url, init);
+                    if (!String(url).endsWith('compile/cell') || (init?.method ?? 'GET') !== 'GET' || !response.ok) return response;
+                    const limits = await response.json();
+                    return new Response(JSON.stringify({ ...limits, maxCells: 2 }), { headers: { 'content-type': 'application/json' } });
+                };
+            })()` });
+
+            await cmd('Page.navigate', { url: untracked(replUrl) });
+
+            for (let i = 0; i < 60; i++) {
+                if (await ev(`!document.getElementById('input-row').hidden && document.getElementById('prompt').textContent === '[1]'`)) break;
+                await sleep(500);
+            }
+
+            await submit('1');
+            const reached = await submit('2');
+            const closed = JSON.parse(await ev(`(() => {
+                const e = monaco.editor.getEditors()[0];
+                e.setValue('3');
+                return JSON.stringify({ readOnly: e.getOption(monaco.editor.EditorOption.readOnly), run: document.getElementById('run').disabled });
+            })()`));
+
+            check('a full session says so and closes the input',
+                reached.includes('limit of 2 cells reached') && closed.readOnly === true && closed.run === true,
+                JSON.stringify({ reached, closed }));
+
+            await ev(`(() => { window.confirm = () => true; document.getElementById('reset').click(); return true; })()`);
+
+            const reopened = JSON.parse(await ev(`(() => {
+                const e = monaco.editor.getEditors()[0];
+                e.setValue('3');
+                return JSON.stringify({ readOnly: e.getOption(monaco.editor.EditorOption.readOnly), run: document.getElementById('run').disabled, prompt: document.getElementById('prompt').textContent });
+            })()`));
+
+            check('and a new session opens it again',
+                reopened.readOnly === false && reopened.run === false && reopened.prompt === '[1]',
+                JSON.stringify(reopened));
+
+            await cmd('Page.removeScriptToEvaluateOnNewDocument', { identifier: smallLimit });
         }
     }
 
