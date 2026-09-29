@@ -49,7 +49,7 @@
   "panels": [
     {
       "type": "table",
-      "title": "Visits, most recent first",
+      "title": "Visits, most recent first: time in sight where measured, and hits",
       "datasource": {
         "type": "frser-sqlite-datasource",
         "uid": "analytics"
@@ -84,8 +84,8 @@
         {
           "refId": "A",
           "queryType": "table",
-          "rawQueryText": "select\n    substr(lower(hex(h.session)), 1, 8) as visit,\n    min(h.created_at) as started,\n    round((julianday(max(h.created_at)) - julianday(min(h.created_at))) * 86400) as seconds,\n    count(*) as hits,\n    sum(p.event = 0) as pages,\n    max(h.location) as place,\n    case when coalesce(max(h.width), 0) = 0 then 'unknown'\n         when max(h.width) < 600 then 'phone'\n         when max(h.width) < 1100 then 'tablet'\n         else 'desktop' end as screen,\n    group_concat(coalesce(nullif(replace(replace(replace(p.path, 'playground.ghul.dev/run/', 'playground-run/'), '/playground.ghul.dev', '/playground'), '/ghul.dev', ''), ''), '/'), '  ->  ') as went\nfrom hits h join paths p using (path_id)\nwhere h.created_at >= datetime('now', '-' || ${days} || ' days')\ngroup by h.session\norder by started desc\nlimit 200",
-          "queryText": "select\n    substr(lower(hex(h.session)), 1, 8) as visit,\n    min(h.created_at) as started,\n    round((julianday(max(h.created_at)) - julianday(min(h.created_at))) * 86400) as seconds,\n    count(*) as hits,\n    sum(p.event = 0) as pages,\n    max(h.location) as place,\n    case when coalesce(max(h.width), 0) = 0 then 'unknown'\n         when max(h.width) < 600 then 'phone'\n         when max(h.width) < 1100 then 'tablet'\n         else 'desktop' end as screen,\n    group_concat(coalesce(nullif(replace(replace(replace(p.path, 'playground.ghul.dev/run/', 'playground-run/'), '/playground.ghul.dev', '/playground'), '/ghul.dev', ''), ''), '/'), '  ->  ') as went\nfrom hits h join paths p using (path_id)\nwhere h.created_at >= datetime('now', '-' || ${days} || ' days')\ngroup by h.session\norder by started desc\nlimit 200",
+          "rawQueryText": "select\n    substr(lower(hex(h.session)), 1, 8) as visit,\n    min(h.created_at) as started,\n    coalesce(group_concat(case when (p.event = 1 and substr(p.path, 1, instr(p.path, '/') - 1) in ('site-time', 'rosetta-time', 'examples-time', 'playground-time', 'repl-time')) then p.path end, ', '), 'not measured') as in_sight,\n    count(*) as hits,\n    sum(p.event = 0) as pages,\n    max(h.location) as place,\n    case when coalesce(max(h.width), 0) = 0 then 'unknown'\n         when max(h.width) < 600 then 'phone'\n         when max(h.width) < 1100 then 'tablet'\n         else 'desktop' end as screen,\n    group_concat(case when not (p.event = 1 and substr(p.path, 1, instr(p.path, '/') - 1) in ('site-time', 'rosetta-time', 'examples-time', 'playground-time', 'repl-time')) then coalesce(nullif(replace(replace(replace(p.path, 'playground.ghul.dev/run/', 'playground-run/'), '/playground.ghul.dev', '/playground'), '/ghul.dev', ''), ''), '/') end, '  ->  ') as went\nfrom hits h join paths p using (path_id)\nwhere h.created_at >= datetime('now', '-' || ${days} || ' days')\ngroup by h.session\norder by started desc\nlimit 200",
+          "queryText": "select\n    substr(lower(hex(h.session)), 1, 8) as visit,\n    min(h.created_at) as started,\n    coalesce(group_concat(case when (p.event = 1 and substr(p.path, 1, instr(p.path, '/') - 1) in ('site-time', 'rosetta-time', 'examples-time', 'playground-time', 'repl-time')) then p.path end, ', '), 'not measured') as in_sight,\n    count(*) as hits,\n    sum(p.event = 0) as pages,\n    max(h.location) as place,\n    case when coalesce(max(h.width), 0) = 0 then 'unknown'\n         when max(h.width) < 600 then 'phone'\n         when max(h.width) < 1100 then 'tablet'\n         else 'desktop' end as screen,\n    group_concat(case when not (p.event = 1 and substr(p.path, 1, instr(p.path, '/') - 1) in ('site-time', 'rosetta-time', 'examples-time', 'playground-time', 'repl-time')) then coalesce(nullif(replace(replace(replace(p.path, 'playground.ghul.dev/run/', 'playground-run/'), '/playground.ghul.dev', '/playground'), '/ghul.dev', ''), ''), '/') end, '  ->  ') as went\nfrom hits h join paths p using (path_id)\nwhere h.created_at >= datetime('now', '-' || ${days} || ' days')\ngroup by h.session\norder by started desc\nlimit 200",
           "timeColumns": [],
           "datasource": {
             "type": "frser-sqlite-datasource",
@@ -93,7 +93,7 @@
           }
         }
       ],
-      "description": "One row per visit, in the order the visitor went. The visit id is GoatCounter's own: random, and it lives for one visit. No address is stored anywhere, by GoatCounter or by this."
+      "description": "One row per visit, in the order the visitor went. in_sight is the time each page was actually in view, in bands, as the pages report it (site-time, rosetta-time, examples-time, playground-time, repl-time); a visit whose pages sent none says not measured. It is not the time between the first and last hit, which is 0 for a one-hit visit whatever the reader did. The visit id is GoatCounter's own: random, and it lives for one visit. No address is stored anywhere, by GoatCounter or by this."
     },
     {
       "type": "table",
