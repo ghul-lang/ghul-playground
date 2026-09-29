@@ -308,7 +308,7 @@ async function start() {
             // A fresh analyser has none of the cells.
             onReady: () => {
                 added = 0;
-                addCells();
+                cellsAdded = addCells();
                 refreshAnalysis();
             }
         });
@@ -336,7 +336,13 @@ async function start() {
     async function typeOf(tail) {
         const client = analyser;
 
-        if (!client?.ready) return null;
+        // A new session's analyser can still be starting when its first
+        // value arrives.
+        for (let waited = 0; client && !client.ready && waited < 20000; waited += 250) {
+            await new Promise(resolve => setTimeout(resolve, 250));
+        }
+
+        if (!client?.ready || client !== analyser) return null;
 
         await cellsAdded;
 

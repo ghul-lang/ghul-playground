@@ -482,12 +482,22 @@ export class GhulLanguageClient {
 
             await analysed;
 
-            const result = await this.request('textDocument/hover', {
-                textDocument: { uri: DOCUMENT_URI },
-                position: { line, character }
-            });
+            // The diagnostics waited for can be the input's, published just
+            // before the swap, and the service renumbers versions, so there
+            // is nothing to tell them apart by: a hover that comes back
+            // empty is asked again for a little while.
+            let contents = null;
 
-            const contents = result?.result?.contents;
+            for (let attempt = 0; attempt < 12 && !contents; attempt++) {
+                if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 250));
+
+                const result = await this.request('textDocument/hover', {
+                    textDocument: { uri: DOCUMENT_URI },
+                    position: { line, character }
+                });
+
+                contents = result?.result?.contents;
+            }
 
             if (!contents) return null;
 
