@@ -1550,7 +1550,11 @@ chrome.on('error', e => {
             // cell here finishes at once before a moment a few seconds
             // ahead, and spins for ever after it, so its replay has to be
             // stopped: the cell before it comes back, and it and the cell
-            // after it are marked as not run.
+            // after it are marked as not run. A new session first, so the
+            // replay holds only these cells and not the slow ones above.
+            await ev(`(() => { window.confirm = () => true; document.getElementById('reset').click(); return true; })()`);
+            await untilIdle();
+
             await submit('let early = 5');
             const middleEntry = await ev(`document.querySelectorAll('.entry').length`);
             const turn = Date.now() + 6000;
