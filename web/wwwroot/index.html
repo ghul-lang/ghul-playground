@@ -5,12 +5,16 @@
   <title>ghūl playground</title>
   <meta charset="UTF-8">
   <!-- Every relative URL below - Monaco, the import map, main.js, the services
-       - is meant from the directory the playground is served from: `/` on its
-       own host, `/playground/` under ghul.dev. This page is also what a path
-       naming a program serves, such as .../rosetta-code/100-doors, so the base
-       is that path cut at its collection rather than at its last `/`. The
-       collection names are collections.js's, and the two lists have to agree;
+       - is meant from the directory the playground is served from:
+       /playground/ under ghul.dev, or / on a host of its own. The base is
+       written out for ghul.dev, so that the browser's preload scanner, which
+       reads ahead of any script, fetches the files from the right place. The
+       script corrects it anywhere else. This page is also what a path naming a
+       program serves, such as .../rosetta-code/100-doors, so the base is that
+       path cut at its collection rather than at its last `/`. The collection
+       names are collections.js's, and the two lists have to agree;
        test/base-path.mjs checks that they do. -->
+  <base href="/playground/">
   <script>
     (function () {
       var collections = ['rosetta-code', 'ghul-examples'];
@@ -26,9 +30,7 @@
         }
       }
 
-      var element = document.createElement('base');
-      element.href = base;
-      document.head.appendChild(element);
+      document.querySelector('base').setAttribute('href', base);
     })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -560,6 +562,15 @@
        Readers who do not want to be counted can visit /#toggle-goatcounter
        once per browser; the flag is per-origin, and this page shares ghul.dev's
        origin, so setting it there covers this page too. -->
+  <!-- Framed as a panel, the page sits inside one that counts its own view,
+       so the counter leaves the pageview on load to it. The counter also
+       ignores everything from inside a frame unless told otherwise, which would
+       drop the runs and results that only this page can see. -->
+  <script>
+    if (new URLSearchParams(location.search).has('panel')) {
+      window.goatcounter = { allow_frame: true, no_onload: true };
+    }
+  </script>
   <script id="goatcounter" data-goatcounter="/stats/count"
           async src="/stats/count.js"></script>
 </head>

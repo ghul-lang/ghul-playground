@@ -26,14 +26,24 @@ function baseFor(pathname) {
     let base = null;
 
     const document = {
-        createElement: () => ({}),
-        head: { appendChild: element => { base = element.href; } }
+        querySelector: () => ({ setAttribute: (name, value) => { if (name === 'href') base = value; } })
     };
 
     new Function('location', 'document', script)({ pathname }, document);
 
     return base;
 }
+
+// The base written in the page, before any script runs, is ghul.dev's, and it
+// comes ahead of everything that resolves against it: the browser's preload
+// scanner reads ahead of the script and fetches those files from wherever the
+// written base says.
+const head = html.slice(0, html.indexOf('</head>'));
+const written = /<base href="([^"]*)">/.exec(head);
+
+check('the page writes the base ghul.dev serves it from', written?.[1], '/playground/');
+check('ahead of the first file it names',
+    written !== null && written.index < head.search(/(?:href|src)="(?!\/|https?:)/), true);
 
 const listed = JSON.parse(/var collections = (\[[^\]]*\])/.exec(script)[1].replaceAll("'", '"'));
 

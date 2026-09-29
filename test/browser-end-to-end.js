@@ -134,7 +134,15 @@ chrome.on('error', e => {
                 responseCode: body === undefined ? 404 : 200,
                 responseHeaders: [
                     { name: 'Access-Control-Allow-Origin', value: '*' },
-                    ...(request.url.endsWith('.js') ? [{ name: 'Content-Type', value: 'text/javascript' }] : [])
+                    ...(request.url.endsWith('.js') ? [{ name: 'Content-Type', value: 'text/javascript' }] : []),
+                    // A page standing in for ghul.dev's, framing the playground:
+                    // it has to isolate itself as ghul.dev does, or the frame
+                    // it holds cannot be.
+                    ...(request.url.endsWith('.html') ? [
+                        { name: 'Content-Type', value: 'text/html' },
+                        { name: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+                        { name: 'Cross-Origin-Embedder-Policy', value: 'require-corp' }
+                    ] : [])
                 ],
                 body: Buffer.from(body ?? '').toString('base64')
             }
@@ -639,10 +647,26 @@ chrome.on('error', e => {
     intercepted.set(`${TASKS}tasks/reads-files/task.json`, '{ "task": "Reads files" }');
 
     // The analytics counter, replaced by one that records what it is asked
-    // to count, so the run events can be checked without a GoatCounter.
+    // to count, so the run events can be checked without a GoatCounter. It
+    // keeps the two rules of the real one that decide whether anything is
+    // counted at all: nothing from inside a frame unless allow_frame is set,
+    // and a pageview on load unless no_onload is. The pageview goes in a list
+    // of its own, so the checks on events are not shifted by it.
     const COUNTER = new URL('/stats/count.js', BASE).toString();
-    intercepted.set(COUNTER,
-        'window.goatcounter.count = e => (window.counted ??= []).push(e.path);');
+    intercepted.set(COUNTER, [
+        'window.goatcounter.count = e => {',
+        '    if (!window.goatcounter.allow_frame && location !== parent.location) return;',
+        '    (window.counted ??= []).push(e.path);',
+        '};',
+        'if (!window.goatcounter.no_onload && (window.goatcounter.allow_frame || location === parent.location)) {',
+        '    (window.pageviews ??= []).push(location.pathname);',
+        '}'
+    ].join('\n'));
+
+    // A page framing a task as ghul.dev's pages do, as a panel.
+    const FRAMING = new URL('framing.html', BASE).toString();
+    intercepted.set(FRAMING,
+        '<!DOCTYPE html><iframe src="rosetta-code/takes-args?panel" style="width: 1000px; height: 700px"></iframe>');
 
     // The real counter has already loaded on an earlier page, and a deployed
     // one is cacheable for a day: from the cache it would never reach the
@@ -651,7 +675,7 @@ chrome.on('error', e => {
     await cmd('Network.setCacheDisabled', { cacheDisabled: true });
 
     await cmd('Fetch.enable', { patterns: [
-        { urlPattern: `${TASKS}*` }, { urlPattern: INDEX_URL }, { urlPattern: COUNTER }
+        { urlPattern: `${TASKS}*` }, { urlPattern: INDEX_URL }, { urlPattern: COUNTER }, { urlPattern: FRAMING }
     ] });
     await cmd('Page.navigate', { url: new URL('rosetta-code/reads-files', BASE).toString() });
 
@@ -788,6 +812,38 @@ chrome.on('error', e => {
         withArguments.filter(p => p === 'playground-action/arguments').length === 1
         && !withArguments.some(p => /alpha|quoted|two words|plain/.test(p)),
         JSON.stringify(withArguments));
+
+    // --- a framed panel counts its runs -----------------------------------
+
+    // ghul.dev frames a task on its own page and counts the view there, so the
+    // panel counts no pageview of its own - but what happens inside it, the
+    // run and its result, only the panel can see.
+    await cmd('Page.navigate', { url: FRAMING });
+
+    const inFrame = expression => ev(`(() => {
+        const frame = document.querySelector('iframe')?.contentWindow;
+        return frame ? frame.eval(${JSON.stringify(expression)}) : null;
+    })()`);
+
+    let framedOutput = '';
+    for (let i = 0; i < 240; i++) {
+        framedOutput = await inFrame(`document.getElementById('output')?.innerText ?? ''`) ?? '';
+        if (framedOutput.includes('count ')) break;
+        await sleep(500);
+    }
+
+    check('a framed panel runs its task on arrival', framedOutput.includes('count 3'),
+        JSON.stringify(framedOutput.trim()));
+
+    const framedCounted = JSON.parse(await inFrame(`JSON.stringify(window.counted ?? [])`) ?? '[]');
+
+    check('and counts the run and its result',
+        framedCounted.some(p => /^playground-run\//.test(p))
+        && framedCounted.some(p => /^playground-result\//.test(p)),
+        JSON.stringify(framedCounted));
+
+    check('but no pageview of its own',
+        JSON.parse(await inFrame(`JSON.stringify(window.pageviews ?? [])`) ?? '[]').length === 0);
 
     // A program that takes none: the reader can still ask for the field.
     await cmd('Page.navigate', { url: new URL('rosetta-code/reads-files', BASE).toString() });
