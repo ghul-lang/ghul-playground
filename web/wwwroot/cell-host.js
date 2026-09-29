@@ -20,19 +20,25 @@
 // Only a parent of the same origin is answered. The frame is written as
 // srcdoc, where `location` is about:srcdoc, so the origin is `self.origin`.
 
+// First, for the same reason as on the pages; see errors.js.
+import { forwardErrors, reportError } from './errors.js'
 import { dotnet } from './_framework/dotnet.js'
 import { OUTPUT_WRITTEN, OUTPUT_TRUNCATED, channelViews, readOutput } from './channel.js'
 
 let exports = null;
 
 async function runtime() {
-    exports ??= (async () => {
-        const api = await dotnet.create();
-        const assembly = await api.getAssemblyExports(api.getConfig().mainAssemblyName);
-        const address = await assembly.GhulRunner.OpenChannel();
+    if (!exports) {
+        exports = (async () => {
+            const api = await dotnet.create();
+            const assembly = await api.getAssemblyExports(api.getConfig().mainAssemblyName);
+            const address = await assembly.GhulRunner.OpenChannel();
 
-        return { runner: assembly.GhulRunner, views: channelViews(api.Module, address) };
-    })();
+            return { runner: assembly.GhulRunner, views: channelViews(api.Module, address) };
+        })();
+
+        exports.catch(() => reportError('runtime-load'));
+    }
 
     return exports;
 }
@@ -108,5 +114,9 @@ window.addEventListener('message', event => {
         window.parent.postMessage({ id, result }, self.origin);
     });
 });
+
+// The frame counts nothing itself; the page holding it counts what went wrong
+// here as its own.
+forwardErrors(kind => window.parent.postMessage({ error: kind }, self.origin));
 
 window.parent.postMessage({ ready: true }, self.origin);
