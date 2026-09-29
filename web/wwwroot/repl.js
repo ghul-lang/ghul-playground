@@ -270,6 +270,10 @@ async function start() {
     // is what the next frame is rebuilt from, with no compile requests.
     let accepted = [];
 
+    // Counts the sessions started, so a cell stopped by New session, rather
+    // than by Stop, knows not to bring the old session's cells back.
+    let sessions = 0;
+
     // Diagnostics, hover and completion for what is being typed, from an
     // analyser of its own. It analyses the input as the next cell would be
     // compiled - the session's prelude, then the input - against the cells
@@ -520,6 +524,7 @@ async function start() {
         runtime.dispose();
         runtime = new CellRuntime(document.body, { onState: onRuntimeState });
         accepted = [];
+        sessions++;
         number = 1;
         closed = false;
         editor.updateOptions({ readOnly: busy });
@@ -633,6 +638,7 @@ async function start() {
         number = 1;
 
         const session = generation;
+        const started = sessions;
 
         setBusy(true, 'running');
 
@@ -644,6 +650,9 @@ async function start() {
 
             // A stop throws this frame away too, and with it the cells
             // already brought back, so those are brought back again.
+            // New session ended the replay along with everything else.
+            if (started !== sessions) return;
+
             if (session !== generation || prepared?.stopped || answer?.stopped) {
                 markNotRun(earlier.slice(index));
                 await replay(earlier.slice(0, index));
@@ -724,6 +733,7 @@ async function start() {
             // The cells accepted before this one, taken now: a stop throws
             // the frame away, and these are what the next one is rebuilt from.
             const before = accepted.slice();
+            const session = sessions;
 
             const ran = await runCell(text, { onPhase: phase => setBusy(true, phase), showLive, dropLive });
 
@@ -744,9 +754,11 @@ async function start() {
                 outcome = 'stopped';
                 line(result, 'muted', 'stopped');
 
-                if (before.length > 0) {
+                if (before.length > 0 && session === sessions) {
                     count('repl-action', 'replayed');
                     await replay(before);
+                } else {
+                    number = 1;
                 }
 
                 return;
