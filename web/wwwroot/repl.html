@@ -35,13 +35,38 @@
 
     .entry .input {
       display: grid;
-      grid-template-columns: 3.5rem 1fr;
+      grid-template-columns: 3.5rem 1fr auto;
       font-family: var(--mono);
       white-space: pre;
       overflow-x: auto;
     }
 
     .prompt { color: var(--fg-muted); font-family: var(--mono); user-select: none; }
+
+    /* Run a cell again: out of the way until the entry is pointed at. */
+    .entry .again {
+      border: none;
+      background: none;
+      padding: 0 0.3rem;
+      color: var(--fg-muted);
+      font: inherit;
+      cursor: pointer;
+      opacity: 0;
+    }
+
+    /* Opacity rather than visibility, which would take it out of the tab order. */
+    .entry:hover .again, .entry .again:focus-visible { opacity: 1; }
+    .entry .again:hover { color: var(--accent); }
+
+    @media (hover: none) {
+      .entry .again { opacity: 1; }
+    }
+
+    /* A cell whose definitions did not come back after a stop: dimmed, with
+       its run-again button always showing. */
+    .entry.not-run .input code, .entry.not-run .result { opacity: 0.45; }
+    .entry.not-run .input code { text-decoration: line-through; text-decoration-color: var(--fg-muted); }
+    .entry.not-run .again { opacity: 1; }
 
     .entry .result {
       margin-left: 3.5rem;
@@ -75,7 +100,8 @@
 
     @media (max-width: 640px) {
       main { padding: 0.5rem 0.5rem 1rem; }
-      .entry .input, #input-row { grid-template-columns: 2.5rem 1fr; }
+      .entry .input { grid-template-columns: 2.5rem 1fr auto; }
+      #input-row { grid-template-columns: 2.5rem 1fr; }
       .entry .result, #hint { margin-left: 2.5rem; }
     }
   </style>
@@ -184,6 +210,7 @@
         <li>A line holding only <code>.</code> runs what comes before it.</li>
         <li><kbd>Enter</kbd> on its own starts a new line.</li>
         <li><kbd>Alt</kbd>+<kbd>↑</kbd> and <kbd>Alt</kbd>+<kbd>↓</kbd> bring back earlier cells.</li>
+        <li><strong>↻</strong> beside a cell runs it again, as a new cell.</li>
       </ul>
 
       <h3>Showing a value as the cell runs</h3>
@@ -199,8 +226,13 @@
       <h3>Stopping and starting again</h3>
       <p>
         While a cell runs, <strong>Run</strong> becomes <strong>Stop</strong>, which ends a cell that will not finish. Code running in the
-        browser cannot be interrupted, so the session goes with it and the next
-        cell starts a new one. <strong>New session</strong> starts one on purpose.
+        browser cannot be interrupted, so the session goes with it. The cells
+        before the stopped one are then run again, without showing what they
+        write, so what they defined is back; a cell that takes a long time
+        does so again, and Stop stops the rerun too. A cell that does not come back
+        this way, and every cell after it, is shown dimmed and struck through;
+        <strong>↻</strong> beside it runs it again. <strong>New session</strong> starts an
+        empty session on purpose.
       </p>
 
       <h3>Limits</h3>

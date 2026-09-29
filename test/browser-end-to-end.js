@@ -1411,6 +1411,15 @@ chrome.on('error', e => {
             // A cell's output appears as it is written, not only once it ends.
             const lastResult = `[...document.querySelectorAll('.entry')].at(-1).querySelector('.result').innerText`;
 
+            // Until the page has nothing under way: a stop reruns the
+            // earlier cells, which can take a while after Stop is gone.
+            const untilIdle = async () => {
+                for (let i = 0; i < 600; i++) {
+                    if (await ev(`!document.getElementById('run').hasAttribute('data-stop') && !document.getElementById('run').hasAttribute('data-busy')`)) return;
+                    await sleep(100);
+                }
+            };
+
             await ev(`(() => { monaco.editor.getEditors()[0].setValue(${JSON.stringify(
                 'IO.Std.write_line("first"); System.Threading.Thread.sleep(3000); IO.Std.write_line("second");')}); return true; })()`);
             await ev(`document.getElementById('run').click(); true`);
@@ -1486,16 +1495,118 @@ chrome.on('error', e => {
             }
 
             await ev(`document.getElementById('run').click(); true`);
-
-            for (let i = 0; i < 100; i++) {
-                if (await ev(`!document.getElementById('run').hasAttribute('data-stop')`)) break;
-                await sleep(100);
-            }
+            await untilIdle();
 
             const afterStop = await ev(lastResult);
 
             check('stopping a cell keeps what it had written',
                 afterStop.startsWith('kept') && afterStop.includes('stopped'), JSON.stringify(afterStop));
+
+            // A stop throws the frame away; the cells before the stopped one
+            // are run again in the new frame, so what they defined is back.
+            await submit('let survivor = 41');
+
+            await ev(`(() => { monaco.editor.getEditors()[0].setValue(${JSON.stringify(
+                'let spin mut = 0; while true do spin = spin + 1; od')}); return true; })()`);
+            await ev(`document.getElementById('run').click(); true`);
+
+            for (let i = 0; i < 200; i++) {
+                if (await ev(`document.getElementById('run').hasAttribute('data-stop')`)) break;
+                await sleep(100);
+            }
+
+            await sleep(500);
+            await ev(`document.getElementById('run').click(); true`);
+            await untilIdle();
+
+            const replayed = await ev(lastResult);
+
+            check('a stop says only that the cell was stopped',
+                replayed === 'stopped', JSON.stringify(replayed));
+
+            const survived = await submit('survivor + 1');
+
+            check('and a later cell sees what they defined', survived === '42', JSON.stringify(survived));
+
+            // Any cell can be run again, as a new cell, from its entry,
+            // leaving what is being typed in the input alone.
+            await ev(`(() => { monaco.editor.getEditors()[0].setValue('half typed'); return true; })()`);
+            await ev(`[...document.querySelectorAll('.entry')].at(-1).querySelector('.again').click(); true`);
+            await sleep(500);
+            await untilIdle();
+
+            const draftKept = await ev(`monaco.editor.getEditors()[0].getValue()`);
+
+            check('running a cell again keeps what is being typed', draftKept === 'half typed', JSON.stringify(draftKept));
+
+            await ev(`(() => { monaco.editor.getEditors()[0].setValue(''); return true; })()`);
+
+            check('a cell can be run again from its entry',
+                await ev(lastResult) === '42' &&
+                (await ev(`[...document.querySelectorAll('.entry')].at(-1).querySelector('code').textContent`)).replace(/\s+/g, ' ').trim() === 'survivor + 1',
+                await ev(lastResult));
+
+            // A replay that cannot bring a cell back ends there. The middle
+            // cell here finishes at once before a moment a few seconds
+            // ahead, and spins for ever after it, so its replay has to be
+            // stopped: the cell before it comes back, and it and the cell
+            // after it are marked as not run. A new session first, so the
+            // replay holds only these cells and not the slow ones above.
+            await ev(`(() => { window.confirm = () => true; document.getElementById('reset').click(); return true; })()`);
+            await untilIdle();
+
+            await submit('let early = 5');
+            const middleEntry = await ev(`document.querySelectorAll('.entry').length`);
+            const turn = Date.now() + 6000;
+            await submit(`let late mut = 0; while System.DateTimeOffset.utc_now.to_unix_time_milliseconds() > ${turn}L do late = late + 1; od`);
+            await submit('let after = 7');
+
+            while (Date.now() < turn + 500) await sleep(250);
+
+            await ev(`(() => { monaco.editor.getEditors()[0].setValue(${JSON.stringify(
+                'let spin mut = 0; while true do spin = spin + 1; od')}); return true; })()`);
+            await ev(`document.getElementById('run').click(); true`);
+
+            for (let i = 0; i < 200; i++) {
+                if (await ev(`document.getElementById('run').hasAttribute('data-stop')`)) break;
+                await sleep(100);
+            }
+
+            await sleep(500);
+            await ev(`document.getElementById('run').click(); true`);
+
+            // The replay reaches the spinning cell and stays there: once the
+            // new frame's runtime has started, the cells before it take well
+            // under a second.
+            for (let i = 0; i < 240; i++) {
+                await sleep(250);
+                if (!(await ev(`document.getElementById('status').textContent`)).startsWith('starting')) break;
+            }
+
+            await sleep(3000);
+            const replaySpinning = await ev(`document.getElementById('run').hasAttribute('data-stop')`);
+
+            await ev(`document.getElementById('run').click(); true`);
+            await untilIdle();
+
+            const marked = JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('.entry')]
+                .slice(${middleEntry - 1}, ${middleEntry + 2})
+                .map(e => e.classList.contains('not-run')))`));
+
+            check('a replay stopped partway marks that cell and the ones after it as not run',
+                replaySpinning && JSON.stringify(marked) === JSON.stringify([false, true, true]),
+                JSON.stringify({ replaySpinning, marked, stopped: await ev(lastResult) }));
+
+            check('and the cells before it came back', await submit('early + 1') === '6');
+
+            // Run again from its entry, a cell marked as not run is back.
+            await ev(`document.querySelectorAll('.entry')[${middleEntry + 1}].querySelector('.again').click(); true`);
+            await sleep(500);
+            await untilIdle();
+
+            check('running a marked cell again brings it back',
+                await ev(`!document.querySelectorAll('.entry')[${middleEntry + 1}].classList.contains('not-run')`) &&
+                await submit('after + 1') === '8');
 
             // display and update_display: in their place among what the cell
             // writes, as text.
@@ -1543,10 +1654,7 @@ chrome.on('error', e => {
 
             await ev(`document.getElementById('run').click(); true`);
 
-            for (let i = 0; i < 100; i++) {
-                if (await ev(`!document.getElementById('run').hasAttribute('data-stop')`)) break;
-                await sleep(100);
-            }
+            await untilIdle();
 
             const shownThenStopped = await ev(lastParts);
 
@@ -1668,10 +1776,7 @@ chrome.on('error', e => {
 
             await ev(`document.getElementById('run').click(); true`);
 
-            for (let i = 0; i < 100; i++) {
-                if (await ev(`!document.getElementById('run').hasAttribute('data-stop')`)) break;
-                await sleep(100);
-            }
+            await untilIdle();
 
             const pictureStopped = JSON.parse(await ev(pictured));
 

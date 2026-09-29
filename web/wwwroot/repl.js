@@ -264,6 +264,16 @@ async function start() {
     const history = [];
     let historyAt = 0;
 
+    // Every cell the session has accepted, in order: its text, and the
+    // compile service's reply carrying its assembly. The runtime frame holds
+    // the session itself, and stopping a cell throws the frame away, so this
+    // is what the next frame is rebuilt from, with no compile requests.
+    let accepted = [];
+
+    // Counts the sessions started, so a cell stopped by New session, rather
+    // than by Stop, knows not to bring the old session's cells back.
+    let sessions = 0;
+
     // Diagnostics, hover and completion for what is being typed, from an
     // analyser of its own. It analyses the input as the next cell would be
     // compiled - the session's prelude, then the input - against the cells
@@ -450,6 +460,8 @@ async function start() {
 
     const scrollToInput = () => inputRow.scrollIntoView({ block: 'end' });
 
+    // A transcript entry for a cell: its prompt and text, and a button that
+    // submits the text again as a new cell. An entry with no text is a note.
     function addEntry(label, text) {
         const entry = document.createElement('div');
 
@@ -467,6 +479,21 @@ async function start() {
         monaco.editor.colorize(text, 'ghul', {}).then(html => { code.innerHTML = html; });
 
         input.append(promptLabel, code);
+
+        if (text) {
+            const again = document.createElement('button');
+
+            again.className = 'again';
+            again.title = 'Run this cell again, as a new cell';
+            again.setAttribute('aria-label', 'Run this cell again');
+            again.textContent = '↻';
+            again.addEventListener('click', () => {
+                count('repl-action', 'run-again');
+                submit(text, { fromEntry: true, restoring: entry.classList.contains('not-run') ? entry : null });
+            });
+
+            input.append(again);
+        }
 
         const result = document.createElement('div');
 
@@ -496,6 +523,8 @@ async function start() {
         generation++;
         runtime.dispose();
         runtime = new CellRuntime(document.body, { onState: onRuntimeState });
+        accepted = [];
+        sessions++;
         number = 1;
         closed = false;
         editor.updateOptions({ readOnly: busy });
@@ -543,13 +572,128 @@ async function start() {
         }
     }
 
-    async function submit(text) {
+    // Compiles and runs one cell in the current frame: the frame prepares
+    // the request, the compile service answers it, and the frame runs what
+    // came back, posting again when it asks to. What the cell writes goes to
+    // `showLive` as it runs. The transcript is the caller's; this says only
+    // how the cell ended.
+    async function runCell(text, { onPhase, showLive, dropLive }) {
+        const session = generation;
+
+        let prepared = await runtime.call('prepare', text);
+        let answer = null;
+
+        while (prepared && !prepared.stopped && !prepared.error) {
+            const posted = await post(prepared.cells);
+
+            if (session !== generation) return { stopped: true };
+            if (posted.broken) return { broken: true };
+
+            onPhase('running');
+
+            answer = await runtime.callLive('accept', showLive, posted.reply);
+
+            if (!answer.stopped) dropLive();
+
+            if (answer.accepted) adoptCells(prepared, posted.reply);
+
+            if (answer.retry) {
+                prepared = answer.retry;
+                onPhase('compiling');
+                continue;
+            }
+
+            if (answer.accepted) return { answer, reply: posted.reply };
+
+            break;
+        }
+
+        if (prepared?.error) return { error: prepared.error };
+        if (prepared?.stopped || answer?.stopped) return { stopped: true };
+
+        return { answer };
+    }
+
+    // The analyser is given the session's cells by the compile service's
+    // cache keys, which the reply names for each cell in the chain.
+    function adoptCells(prepared, reply) {
+        const keys = JSON.parse(reply).keys ?? [];
+
+        cells = prepared.cells
+            .map((cell, index) => ({ name: cell.name, key: keys[index] }))
+            .filter(cell => typeof cell.key === 'string');
+
+        cellsAdded = addCells();
+    }
+
+    // After a stop, the frame is a new one with none of the session in it.
+    // The cells it had accepted are run again in it, in order and without
+    // showing what they write, from the assemblies they were compiled to,
+    // so what they defined is back for the next cell and nothing is
+    // compiled again. A cell that throws where it did not before, or is
+    // stopped, ends the replay: it and the cells after it are marked as not
+    // run, and each can be run again from its entry.
+    async function replay(earlier) {
+        accepted = [];
+        number = 1;
+
+        const session = generation;
+        const started = sessions;
+
+        setBusy(true, 'running');
+
+        for (const [index, cell] of earlier.entries()) {
+            const prepared = await runtime.call('prepare', cell.text);
+            const answer = prepared && !prepared.stopped && !prepared.error && session === generation
+                ? await runtime.callLive('accept', () => { }, cell.reply)
+                : null;
+
+            // A stop throws this frame away too, and with it the cells
+            // already brought back, so those are brought back again.
+            // New session ended the replay along with everything else.
+            if (started !== sessions) return;
+
+            if (session !== generation || prepared?.stopped || answer?.stopped) {
+                markNotRun(earlier.slice(index));
+                await replay(earlier.slice(0, index));
+                return;
+            }
+
+            if (!answer?.accepted || answer.retry) {
+                markNotRun(earlier.slice(index));
+                return;
+            }
+
+            adoptCells(prepared, cell.reply);
+
+            if (Number.isFinite(answer.next)) number = answer.next;
+
+            if (answer.error && !cell.threw) {
+                markNotRun(earlier.slice(index));
+                return;
+            }
+
+            accepted.push(cell);
+        }
+    }
+
+    function markNotRun(cells) {
+        for (const cell of cells) {
+            cell.entry.classList.add('not-run');
+            cell.entry.title = 'Not run in this session';
+        }
+    }
+
+    // A cell run again from its entry leaves whatever is being typed in the
+    // input alone. restoring is the entry of an earlier cell that did not come
+    // back after a stop, run again from that entry; once this runs, it is back.
+    async function submit(text, { fromEntry = false, restoring = null } = {}) {
         if (busy || closed || !text.trim()) return;
 
         history.push(text);
         historyAt = history.length;
 
-        editor.setValue('');
+        if (!fromEntry) editor.setValue('');
         failure = null;
 
         const result = addEntry(`[${number}]`, text);
@@ -562,11 +706,6 @@ async function start() {
         setBusy(true, 'compiling');
 
         try {
-            const session = generation;
-
-            let prepared = await runtime.call('prepare', text);
-            let answer = null;
-
             // What the cell writes and displays, shown as it happens. The
             // answer carries the whole of it again, so once the answer is in
             // this goes and the answer is shown in its place; a cell that is
@@ -591,61 +730,52 @@ async function start() {
                 truncatedNote = null;
             };
 
-            while (prepared && !prepared.stopped && !prepared.error) {
-                const posted = await post(prepared.cells);
+            // The cells accepted before this one, taken now: a stop throws
+            // the frame away, and these are what the next one is rebuilt from.
+            const before = accepted.slice();
+            const session = sessions;
 
-                if (session !== generation) {
-                    prepared = { stopped: true };
-                    break;
-                }
+            const ran = await runCell(text, { onPhase: phase => setBusy(true, phase), showLive, dropLive });
 
-                if (posted.broken) {
-                    outcome = 'compile-error';
-                    line(result, 'error', 'compiler updated; start a new session');
-                    closed = true;
-                    return;
-                }
-
-                setBusy(true, 'running');
-
-                answer = await runtime.callLive('accept', showLive, posted.reply);
-
-                if (!answer.stopped) dropLive();
-
-                if (answer.accepted) {
-                    // Counted here rather than at the end, so a cell that fills the
-                    // session is counted into the session it filled.
-                    cellsThisSession++;
-
-                    const keys = JSON.parse(posted.reply).keys ?? [];
-
-                    cells = prepared.cells
-                        .map((cell, index) => ({ name: cell.name, key: keys[index] }))
-                        .filter(cell => typeof cell.key === 'string');
-
-                    cellsAdded = addCells();
-                }
-
-                if (answer.retry) {
-                    prepared = answer.retry;
-                    setBusy(true, 'compiling');
-                    continue;
-                }
-
-                break;
-            }
-
-            if (prepared?.error) {
+            if (ran.broken) {
                 outcome = 'compile-error';
-                line(result, 'error', prepared.error);
+                line(result, 'error', 'compiler updated; start a new session');
+                closed = true;
                 return;
             }
 
-            if (prepared?.stopped || answer?.stopped) {
+            if (ran.error) {
+                outcome = 'compile-error';
+                line(result, 'error', ran.error);
+                return;
+            }
+
+            if (ran.stopped) {
                 outcome = 'stopped';
                 line(result, 'muted', 'stopped');
-                number = 1;
+
+                if (before.length > 0 && session === sessions) {
+                    count('repl-action', 'replayed');
+                    await replay(before);
+                } else {
+                    number = 1;
+                }
+
                 return;
+            }
+
+            const answer = ran.answer;
+
+            if (answer.accepted) {
+                // Counted here rather than at the end, so a cell that fills the
+                // session is counted into the session it filled.
+                cellsThisSession++;
+                accepted.push({ text, reply: ran.reply, entry: result.parentElement, threw: !!answer.error });
+
+                if (restoring) {
+                    restoring.classList.remove('not-run');
+                    restoring.removeAttribute('title');
+                }
             }
 
             for (const d of answer.diagnostics ?? []) {
