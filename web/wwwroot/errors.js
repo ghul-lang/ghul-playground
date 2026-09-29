@@ -5,9 +5,9 @@
 // load, since one fault usually throws more than once.
 //
 // Import this before anything that loads the runtime: the runtime starts its
-// own workers, and the constructor it finds has to be the one below.
-
-import { countEvent } from './events.js'
+// own workers, and the constructor it finds has to be the one below. It counts
+// through the function a page hands it, so a frame that only forwards its
+// failures never loads the counting at all.
 
 export const ERROR_CLASSES = ['runtime-load', 'script', 'unhandled-rejection', 'worker'];
 
@@ -41,8 +41,9 @@ if (window.Worker) {
     };
 }
 
-// Counts each class once, as `{family}/{class}`.
-export function countErrors(family) {
+// Counts each class once, as `{family}/{class}`, through events.js's
+// countEvent.
+export function countErrors(family, countEvent) {
     sink = kind => countEvent(`${family}/${kind}`, family);
 }
 

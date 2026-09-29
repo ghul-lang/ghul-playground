@@ -17,7 +17,7 @@ import { whenReader } from './engagement.js'
 // Every event this page sends names what the reader did, never what they wrote.
 const count = (family, detail) => countEvent(detail ? `${family}/${detail}` : family, family);
 
-countErrors('playground-error');
+countErrors('playground-error', countEvent);
 
 const runButton = document.getElementById('run');
 const argumentsRow = document.getElementById('arguments-row');

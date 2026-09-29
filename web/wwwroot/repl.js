@@ -22,7 +22,7 @@ import { countEvent, countBand, countTimeOnPage } from './events.js'
 
 const count = (family, detail) => countEvent(detail ? `${family}/${detail}` : family, family);
 
-countErrors('repl-error');
+countErrors('repl-error', countEvent);
 
 // Once per page load, so a session's other events have a denominator.
 count('repl-open');
