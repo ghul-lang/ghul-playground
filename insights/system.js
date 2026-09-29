@@ -114,8 +114,8 @@ export async function system(base, from, to) {
 
         for (const chart of CONTAINER_CHARTS) {
             for (const series of await range(base, chart.query, from, to)) {
-                // The limit here is still a query; a usable answer to it
-                // replaces it below.
+                // The chart's limit is a query, not a value: it stays unset
+                // unless the answer to that query is usable.
                 service(series.metric.container).charts[chart.title] = { ...chart, points: series.points, limit: undefined };
             }
 
