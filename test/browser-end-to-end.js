@@ -1571,7 +1571,14 @@ chrome.on('error', e => {
             await sleep(500);
             await ev(`document.getElementById('run').click(); true`);
 
-            // The replay reaches the spinning cell and stays there.
+            // The replay reaches the spinning cell and stays there: once the
+            // new frame's runtime has started, the cells before it take well
+            // under a second.
+            for (let i = 0; i < 240; i++) {
+                await sleep(250);
+                if (!(await ev(`document.getElementById('status').textContent`)).startsWith('starting')) break;
+            }
+
             await sleep(3000);
             const replaySpinning = await ev(`document.getElementById('run').hasAttribute('data-stop')`);
 
