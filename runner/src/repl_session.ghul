@@ -11,6 +11,7 @@ namespace Playground is
     use Ghul.Repl.CELL_LOCATION;
     use Ghul.Repl.CELL_REPLY;
     use Ghul.Repl.CELL_REQUEST;
+    use Ghul.Repl.CELL_TAIL;
     use Ghul.Repl.CELL_RELATED;
     use Ghul.Repl.LOADED_CELL;
     use Ghul.Repl.STRAGGLERS;
@@ -218,11 +219,15 @@ namespace Playground is
             // place of its text; the text goes too, for the page to fall back on.
             let picture = if value? then PICTURE.of(run.value) else null fi;
 
-            return _answer(true, lines, writer.to_string(), value, run.error, picture);
+            // The expression the cell ended on, for the page to ask the
+            // analyser the type of and show beside the value.
+            let tail = if value? then CELL_TAIL.of(_pending_text) else null fi;
+
+            return _answer(true, lines, writer.to_string(), value, run.error, picture, tail);
         si
 
         _answer(accepted: bool, diagnostics: Collections.List[string], text: string, value: string?, error: string?) -> string static =>
-            _answer(accepted, diagnostics, text, value, error, null);
+            _answer(accepted, diagnostics, text, value, error, null, null);
 
         // The compile service's diagnostics are about the text it was
         // given, prelude included; the session core moves them back to what
@@ -271,7 +276,7 @@ namespace Playground is
             return null;
         si
 
-        _answer(accepted: bool, diagnostics: Collections.List[string], text: string, value: string?, error: string?, picture: PICTURE?) -> string static is
+        _answer(accepted: bool, diagnostics: Collections.List[string], text: string, value: string?, error: string?, picture: PICTURE?, tail: string?) -> string static is
             let buffer = IO.MemoryStream();
             let json = Utf8JsonWriter(buffer, _);
 
@@ -292,6 +297,10 @@ namespace Playground is
 
             if error? then
                 json.write_string("error", error);
+            fi
+
+            if tail? then
+                json.write_string("tail", tail);
             fi
 
             if let shown = picture then

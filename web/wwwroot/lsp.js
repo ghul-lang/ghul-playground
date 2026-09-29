@@ -91,6 +91,10 @@ export class GhulLanguageClient {
         // as a fault to retry.
         this.releasing = false;
 
+        // Set while a type probe has swapped the document out, so what the
+        // analyser reports about the probe is not shown on the input.
+        this.probing = false;
+
         // Set when the last attempt was turned away because this address
         // already holds as many sessions as it may. Retried on the timer,
         // and also on the reader's next move, which is usually just after
@@ -356,6 +360,9 @@ export class GhulLanguageClient {
         if (this.wake()) return;
         if (!this.ready) return;
 
+        // A probe puts the input's latest text back when it finishes.
+        if (this.probing) return;
+
         this.send('textDocument/didChange', {
             textDocument: { uri: DOCUMENT_URI, version: ++this.version },
             contentChanges: [{ text }]
@@ -370,6 +377,13 @@ export class GhulLanguageClient {
         }
 
         if (message.method === 'textDocument/publishDiagnostics') {
+            // What a type probe reports is about the probe, not the input;
+            // that it arrived says the probe has been analysed.
+            if (this.probing) {
+                this.probeAnalysed?.();
+                return;
+            }
+
             this.publishDiagnostics(message.params?.diagnostics ?? []);
         }
     }
@@ -426,6 +440,7 @@ export class GhulLanguageClient {
 
     async hover(position) {
         if (this.wake()) return null;
+        if (this.probing) return null;
         const result = await this.request('textDocument/hover', {
             textDocument: { uri: DOCUMENT_URI },
             position: { line: position.lineNumber - 1 + this.lineOffset(), character: position.column - 1 }
@@ -441,6 +456,65 @@ export class GhulLanguageClient {
                 : contents.value;
 
         return value ? { contents: [{ value }] } : null;
+    }
+
+    // What hover says about the name at a zero-based line and character of
+    // `source`, a document other than the input's: the document is swapped
+    // for `source` for the one request, and the input's put back after it.
+    async hoverIn(source, line, character) {
+        if (!this.ready || this.probing) return null;
+
+        this.probing = true;
+
+        try {
+            // The server analyses an edit after answering what came before
+            // it, so the hover waits for the probe's diagnostics, which say
+            // the probe has been analysed.
+            const analysed = new Promise(resolve => {
+                this.probeAnalysed = resolve;
+                setTimeout(resolve, 10000);
+            });
+
+            this.send('textDocument/didChange', {
+                textDocument: { uri: DOCUMENT_URI, version: ++this.version },
+                contentChanges: [{ text: source }]
+            }, true);
+
+            await analysed;
+
+            // The diagnostics waited for can be the input's, published just
+            // before the swap, and the service renumbers versions, so there
+            // is nothing to tell them apart by: a hover that comes back
+            // empty is asked again for a little while.
+            let contents = null;
+
+            for (let attempt = 0; attempt < 12 && !contents; attempt++) {
+                if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 250));
+
+                const result = await this.request('textDocument/hover', {
+                    textDocument: { uri: DOCUMENT_URI },
+                    position: { line, character }
+                });
+
+                contents = result?.result?.contents;
+            }
+
+            if (!contents) return null;
+
+            return typeof contents === 'string'
+                ? contents
+                : Array.isArray(contents)
+                    ? contents.map(c => (typeof c === 'string' ? c : c.value)).join('\n\n')
+                    : contents.value ?? null;
+        } finally {
+            this.send('textDocument/didChange', {
+                textDocument: { uri: DOCUMENT_URI, version: ++this.version },
+                contentChanges: [{ text: this.documentText() }]
+            }, true);
+
+            this.probing = false;
+            this.probeAnalysed = null;
+        }
     }
 
     // Whole-document semantic tokens. LSP and Monaco use the same relative
