@@ -230,10 +230,10 @@ async function start() {
         const running = phase === 'running';
 
         // With nothing typed there is nothing to run.
-        runButton.disabled = phase ? !running : full || !editor.getValue().trim();
+        runButton.disabled = phase ? !running : closed || !editor.getValue().trim();
 
         // Nothing to discard before the first cell, except a cell still under way.
-        resetButton.disabled = !phase && number === 1;
+        resetButton.disabled = !phase && number === 1 && !closed;
         runButton.toggleAttribute('data-busy', !!phase && !running);
         runButton.toggleAttribute('data-stop', running);
         runLabel.textContent = running ? 'Stop' : 'Run';
@@ -249,10 +249,11 @@ async function start() {
 
     let number = 1;
 
-    // Set when the session has taken as many cells as it can: the input stays
-    // closed until a new session is started, since a cell after that could not
-    // see the ones above it.
-    let full = false;
+    // Set when the session can take no more cells - it is full, or the
+    // compiler has changed under it - so the input stays closed until a new
+    // session is started, since a cell after that could not see the ones
+    // above it.
+    let closed = false;
     let busy = false;
     let runtime = new CellRuntime(document.body, { onState: onRuntimeState });
 
@@ -436,7 +437,7 @@ async function start() {
     const setBusy = (value, text = '') => {
         busy = value;
         phase = value ? text : '';
-        editor.updateOptions({ readOnly: value || full });
+        editor.updateOptions({ readOnly: value || closed });
         showCompiler();
     };
 
@@ -496,7 +497,7 @@ async function start() {
         runtime.dispose();
         runtime = new CellRuntime(document.body, { onState: onRuntimeState });
         number = 1;
-        full = false;
+        closed = false;
         editor.updateOptions({ readOnly: busy });
         setPrompt();
         startAnalysis();
@@ -543,7 +544,7 @@ async function start() {
     }
 
     async function submit(text) {
-        if (busy || full || !text.trim()) return;
+        if (busy || closed || !text.trim()) return;
 
         history.push(text);
         historyAt = history.length;
@@ -577,7 +578,7 @@ async function start() {
                 live.feed(chunk);
 
                 if (truncated && !truncatedNote) {
-                    line(result, 'muted', 'output truncated');
+                    line(result, 'muted', '…');
                     truncatedNote = result.lastChild;
                 }
 
@@ -600,8 +601,8 @@ async function start() {
 
                 if (posted.broken) {
                     outcome = 'compile-error';
-                    line(result, 'error', 'an earlier cell no longer compiles here, so the session has been reset; run this cell again');
-                    resetSession();
+                    line(result, 'error', 'compiler updated; start a new session');
+                    closed = true;
                     return;
                 }
 
@@ -673,7 +674,7 @@ async function start() {
 
             if (answer.accepted && number > limits.maxCells) {
                 line(result, 'muted', `limit of ${limits.maxCells} cells reached`);
-                full = true;
+                closed = true;
             }
         } catch (e) {
             outcome = 'error';
