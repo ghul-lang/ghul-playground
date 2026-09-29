@@ -37,6 +37,31 @@ escape() {
     printf '%s' "$1" | sed "s/'/''/g"
 }
 
+# The hits an agent rule names, as a query for their ids. Each field left empty
+# matches anything.
+agent_hits() {
+    conditions="1 = 1"
+
+    for spec in "2 b.name" "3 b.version" "4 s.name" "5 h.width"; do
+        field=${spec%% *}
+        column=${spec#* }
+        value=$(escape "$(printf '%s' "$1" | cut -d'|' -f"$field")")
+
+        [ -n "$value" ] && conditions="$conditions and $column = '$value'"
+    done
+
+    from=$(escape "$(printf '%s' "$1" | cut -d'|' -f6)")
+    to=$(escape "$(printf '%s' "$1" | cut -d'|' -f7)")
+
+    [ -n "$from" ] && conditions="$conditions and h.created_at >= '$from'"
+    [ -n "$to" ] && conditions="$conditions and h.created_at <= '$to'"
+
+    printf 'select h.hit_id from hits h
+            join browsers b on b.browser_id = h.browser_id
+            join systems s on s.system_id = h.system_id
+            where %s' "$conditions"
+}
+
 snapshot() {
     working="${TARGET}.new"
 
@@ -60,6 +85,15 @@ snapshot() {
     #   location|<prefix>                      every visit recorded in that place
     #   location-window|<prefix>|<from>|<to>   that place, between two times
     #   path|<pattern>                         paths matching a LIKE pattern
+    #   agent|<browser>|<version>|<system>|<width>[|<from>|<to>]
+    #                                          every visit with a hit from that
+    #                                          browser, browser version, system
+    #                                          and screen width, optionally only
+    #                                          where that hit falls between two
+    #                                          times; an empty field matches any
+    #
+    # An agent rule removes whole visits: every hit of a session with a
+    # matching hit goes, so a visit's events leave with its page views.
     #
     # A rule that names nothing removes nothing, so a wrong one is quiet rather
     # than destructive - and the next snapshot is five minutes away regardless.
@@ -81,6 +115,10 @@ snapshot() {
                 sqlite3 "$working" \
                     "delete from hits where location like '$first%'
                      and created_at between '$from' and '$to'" ;;
+            agent)
+                sqlite3 "$working" "delete from hits where hit_id in ($(agent_hits "$rule"))
+                     or session in (select session from hits where session is not null
+                                    and hit_id in ($(agent_hits "$rule")))" ;;
             path)
                 sqlite3 "$working" \
                     "delete from hits where path_id in
