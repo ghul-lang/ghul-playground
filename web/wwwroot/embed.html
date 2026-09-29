@@ -22,6 +22,16 @@
   <link rel="stylesheet" href="vs/editor/editor.main.css">
   <script src="vs/loader.js"></script>
   <script type='module' src="embed.js"></script>
+  <!-- The counter, for the failures this page alone can see. Everything else an
+       embedded editor does is counted by the documentation page around it, and
+       so is the view, so the counter sends no pageview. It also ignores
+       everything from inside a frame unless told otherwise, and this page is
+       only ever framed. -->
+  <script>
+    window.goatcounter = { allow_frame: true, no_onload: true };
+  </script>
+  <script id="goatcounter" data-goatcounter="/stats/count"
+          async src="/stats/count.js"></script>
   <style>
     html, body {
       margin: 0;

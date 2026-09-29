@@ -1,6 +1,9 @@
 // The standalone playground page. All the behaviour is in playground.js; this
 // is the chrome around it.
 
+// First, so that the runtime starts its workers from the constructor this
+// module wraps; see errors.js.
+import { countErrors } from './errors.js'
 import { createPlayground, replOffered } from './playground.js'
 import { replPageUrl } from './repl-route.js'
 import { setUpFullscreen, setUpHelp } from './chrome.js'
@@ -13,6 +16,8 @@ import { whenReader } from './engagement.js'
 
 // Every event this page sends names what the reader did, never what they wrote.
 const count = (family, detail) => countEvent(detail ? `${family}/${detail}` : family, family);
+
+countErrors('playground-error', countEvent);
 
 const runButton = document.getElementById('run');
 const argumentsRow = document.getElementById('arguments-row');

@@ -8,7 +8,13 @@
 // allowed to embed this, and messages claiming to come from elsewhere are
 // ignored.
 
+// First, so that the runtime starts its workers from the constructor this
+// module wraps; see errors.js.
+import { countErrors } from './errors.js'
+import { countEvent } from './events.js'
 import { createPlayground, DEFAULT_SOURCE } from './playground.js'
+
+countErrors('embed-error', countEvent);
 
 const ALLOWED_PARENTS = [
     'https://ghul.dev',

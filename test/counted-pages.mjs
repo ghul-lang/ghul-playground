@@ -60,15 +60,13 @@ function modulesReachedBy(entry) {
     return seen;
 }
 
-// embed.html deliberately carries no counter, and is the one page that is
-// checked for carrying none. It loads on every example edit on ghul.dev, where
-// the edit is already counted by the example's own event with the example's
-// name attached; counting the frame as well would count one act twice and say
-// less about it than the event it duplicated. It is named here rather than
-// passed over silently, so that giving it a counter is a decision somebody
-// makes rather than a check nobody notices, and so that the exception fails
-// loudly if the page ever starts sending events of its own.
-const NOT_COUNTED = ['embed.html'];
+// embed.html loads on every example edit on ghul.dev, where the edit is already
+// counted by the example's own event with the example's name attached, and the
+// view by the page around it. It carries the counter for its own failures,
+// which nothing around it can see, and must send no pageview: counting the
+// frame as a view would count one act twice and say less about it than the
+// event it duplicated.
+const NO_PAGEVIEW = ['embed.html'];
 
 const pages = readdirSync(fileURLToPath(wwwroot)).filter(name => name.endsWith('.html')).sort();
 
@@ -84,12 +82,9 @@ for (const page of pages) {
     const sends = modulesReachedBy(unfingerprinted(entry)).has('events.js');
     const counts = /id=['"]goatcounter['"]/.test(markup);
 
-    if (NOT_COUNTED.includes(page)) {
-        check(`${page} deliberately counts nothing`, !counts && !sends,
-            counts
-                ? 'it now carries a counter, so either the counter or this exception is wrong'
-                : 'it now sends events, which it has no counter to deliver');
-        continue;
+    if (NO_PAGEVIEW.includes(page)) {
+        check(`${page} sends no pageview`, /no_onload:\s*true/.test(markup.slice(0, markup.search(/id=['"]goatcounter['"]/))),
+            'the counter is not told no_onload before it loads, so the frame counts as a view');
     }
 
     if (!sends) {

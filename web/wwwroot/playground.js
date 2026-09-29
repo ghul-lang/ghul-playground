@@ -2,6 +2,7 @@
 // and run. No chrome and no layout opinions, so the standalone page and the
 // embedded one can present it differently without duplicating any of this.
 
+import { reportError } from './errors.js'
 import { dotnet } from './_framework/dotnet.js'
 import { GHUL_LANGUAGE, GHUL_CONFIGURATION } from './ghul-language.js'
 import { GhulLanguageClient } from './lsp.js'
@@ -133,6 +134,8 @@ function loadRuntime() {
 
             return loaded;
         })();
+
+        runtime.catch(() => reportError('runtime-load'));
     }
 
     return runtime;

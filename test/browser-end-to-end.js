@@ -104,11 +104,16 @@ chrome.on('error', e => {
     // Requests the browser has paused for the test to answer, by URL.
     const intercepted = new Map();
 
+    // Exceptions a check raises on purpose, which are not failures.
+    let expectedExceptions = 0;
+
     ws.addEventListener('message', e => {
         const m = JSON.parse(e.data);
         if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
         if (m.method === 'Fetch.requestPaused') answerIntercepted(m.params);
-        if (m.method === 'Runtime.exceptionThrown') {
+        if (m.method === 'Runtime.exceptionThrown' && expectedExceptions > 0) {
+            expectedExceptions--;
+        } else if (m.method === 'Runtime.exceptionThrown') {
             log(`page exception: ${m.params.exceptionDetails?.exception?.description
                 ?? m.params.exceptionDetails?.text}`);
             failures++;
@@ -812,6 +817,27 @@ chrome.on('error', e => {
         withArguments.filter(p => p === 'playground-action/arguments').length === 1
         && !withArguments.some(p => /alpha|quoted|two words|plain/.test(p)),
         JSON.stringify(withArguments));
+
+    // --- failures the server cannot see -----------------------------------
+
+    // Counted by class, once a page load, and never with what the error said.
+    expectedExceptions = 3;
+
+    await ev(`setTimeout(() => { throw new Error('secret-one'); }); true`);
+    await ev(`setTimeout(() => { throw new Error('secret-two'); }); true`);
+    await ev(`setTimeout(() => { Promise.reject(new Error('secret-three')); }); true`);
+    await sleep(500);
+
+    const withErrors = JSON.parse(await ev(`JSON.stringify(window.counted ?? [])`));
+
+    check('a script error is counted once, by class',
+        withErrors.filter(p => p === 'playground-error/script').length === 1, JSON.stringify(withErrors));
+    check('and an unhandled rejection likewise',
+        withErrors.filter(p => p === 'playground-error/unhandled-rejection').length === 1, JSON.stringify(withErrors));
+    check('with nothing the error said', !withErrors.some(p => p.includes('secret')), JSON.stringify(withErrors));
+
+    // Whatever the block did not use up must not excuse a real failure later.
+    expectedExceptions = 0;
 
     // --- a framed panel counts its runs -----------------------------------
 

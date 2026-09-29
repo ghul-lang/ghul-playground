@@ -7,6 +7,9 @@
 // REPL uses. The page moves text between that, the compile service and the
 // screen.
 
+// First, so that the runtime starts its workers from the constructor this
+// module wraps; see errors.js.
+import { countErrors } from './errors.js'
 import { GHUL_LANGUAGE, GHUL_CONFIGURATION } from './ghul-language.js'
 import { defineThemes, themeName } from './theme.js'
 import { getToken } from './token.js'
@@ -18,6 +21,8 @@ import { CellOutput, showValue } from './cell-output.js'
 import { countEvent, countBand, countTimeOnPage } from './events.js'
 
 const count = (family, detail) => countEvent(detail ? `${family}/${detail}` : family, family);
+
+countErrors('repl-error', countEvent);
 
 // Once per page load, so a session's other events have a denominator.
 count('repl-open');
