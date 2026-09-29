@@ -485,7 +485,7 @@ async function start() {
             again.textContent = '↻';
             again.addEventListener('click', () => {
                 count('repl-action', 'run-again');
-                submit(text, entry.classList.contains('not-run') ? entry : null);
+                submit(text, { fromEntry: true, restoring: entry.classList.contains('not-run') ? entry : null });
             });
 
             input.append(again);
@@ -675,15 +675,16 @@ async function start() {
         }
     }
 
-    // restoring is the entry of an earlier cell that did not come back after a
-    // stop, run again from that entry; once this runs, it is back.
-    async function submit(text, restoring = null) {
+    // A cell run again from its entry leaves whatever is being typed in the
+    // input alone. restoring is the entry of an earlier cell that did not come
+    // back after a stop, run again from that entry; once this runs, it is back.
+    async function submit(text, { fromEntry = false, restoring = null } = {}) {
         if (busy || closed || !text.trim()) return;
 
         history.push(text);
         historyAt = history.length;
 
-        editor.setValue('');
+        if (!fromEntry) editor.setValue('');
         failure = null;
 
         const result = addEntry(`[${number}]`, text);

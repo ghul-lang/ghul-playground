@@ -1528,10 +1528,18 @@ chrome.on('error', e => {
 
             check('and a later cell sees what they defined', survived === '42', JSON.stringify(survived));
 
-            // Any cell can be run again, as a new cell, from its entry.
+            // Any cell can be run again, as a new cell, from its entry,
+            // leaving what is being typed in the input alone.
+            await ev(`(() => { monaco.editor.getEditors()[0].setValue('half typed'); return true; })()`);
             await ev(`[...document.querySelectorAll('.entry')].at(-1).querySelector('.again').click(); true`);
             await sleep(500);
             await untilIdle();
+
+            const draftKept = await ev(`monaco.editor.getEditors()[0].getValue()`);
+
+            check('running a cell again keeps what is being typed', draftKept === 'half typed', JSON.stringify(draftKept));
+
+            await ev(`(() => { monaco.editor.getEditors()[0].setValue(''); return true; })()`);
 
             check('a cell can be run again from its entry',
                 await ev(lastResult) === '42' &&
