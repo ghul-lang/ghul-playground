@@ -104,11 +104,16 @@ chrome.on('error', e => {
     // Requests the browser has paused for the test to answer, by URL.
     const intercepted = new Map();
 
+    // Exceptions a check raises on purpose, which are not failures.
+    let expectedExceptions = 0;
+
     ws.addEventListener('message', e => {
         const m = JSON.parse(e.data);
         if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
         if (m.method === 'Fetch.requestPaused') answerIntercepted(m.params);
-        if (m.method === 'Runtime.exceptionThrown') {
+        if (m.method === 'Runtime.exceptionThrown' && expectedExceptions > 0) {
+            expectedExceptions--;
+        } else if (m.method === 'Runtime.exceptionThrown') {
             log(`page exception: ${m.params.exceptionDetails?.exception?.description
                 ?? m.params.exceptionDetails?.text}`);
             failures++;
@@ -844,6 +849,24 @@ chrome.on('error', e => {
 
     check('but no pageview of its own',
         JSON.parse(await inFrame(`JSON.stringify(window.pageviews ?? [])`) ?? '[]').length === 0);
+
+    // --- failures the server cannot see -----------------------------------
+
+    // Counted by class, once a page load, and never with what the error said.
+    expectedExceptions = 3;
+
+    await ev(`setTimeout(() => { throw new Error('secret-one'); }); true`);
+    await ev(`setTimeout(() => { throw new Error('secret-two'); }); true`);
+    await ev(`setTimeout(() => { Promise.reject(new Error('secret-three')); }); true`);
+    await sleep(500);
+
+    const withErrors = JSON.parse(await ev(`JSON.stringify(window.counted ?? [])`));
+
+    check('a script error is counted once, by class',
+        withErrors.filter(p => p === 'playground-error/script').length === 1, JSON.stringify(withErrors));
+    check('and an unhandled rejection likewise',
+        withErrors.filter(p => p === 'playground-error/unhandled-rejection').length === 1, JSON.stringify(withErrors));
+    check('with nothing the error said', !withErrors.some(p => p.includes('secret')), JSON.stringify(withErrors));
 
     // A program that takes none: the reader can still ask for the field.
     await cmd('Page.navigate', { url: new URL('rosetta-code/reads-files', BASE).toString() });

@@ -6,6 +6,8 @@
 // that without touching the page around it. The session goes with it: every
 // cell the frame had run is gone, and the next cell starts a new session.
 
+import { reportError } from './errors.js'
+
 export class CellRuntime {
     // `onState` hears where the runtime is: 'starting' while the frame loads it,
     // 'ready' once it can run a cell, and 'stopped' when the session ends.
@@ -62,6 +64,12 @@ export class CellRuntime {
         if (event.origin !== location.origin) return;
 
         const data = event.data ?? {};
+
+        // A failure in the frame, by class alone.
+        if (typeof data.error === 'string' && data.id === undefined) {
+            reportError(data.error);
+            return;
+        }
 
         if (data.ready) {
             this._resolveReady();

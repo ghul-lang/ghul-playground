@@ -551,14 +551,14 @@
   </style>
 
   <!-- Analytics, self-hosted on this same origin under /stats.
-       This page only, not embed.html - which is about where an edit is
-       counted, not whether it is. The embed loads inside a documentation page
-       whenever a reader opens an example, and that page already records the
-       edit as an event carrying the example's name. A pageview here as well
-       would count the same act twice, and the second copy would say only that
-       some example somewhere was opened - while burying the one thing this
-       page is worth measuring, which is whether anyone arrives at the
-       playground directly.
+       embed.html loads it too, but for its failures alone and with no
+       pageview - which is about where an edit is counted, not whether it is.
+       The embed loads inside a documentation page whenever a reader opens an
+       example, and that page already records the edit as an event carrying
+       the example's name. A pageview there as well would count the same act
+       twice, and the second copy would say only that some example somewhere
+       was opened - while burying the one thing this page is worth measuring,
+       which is whether anyone arrives at the playground directly.
        Readers who do not want to be counted can visit /#toggle-goatcounter
        once per browser; the flag is per-origin, and this page shares ghul.dev's
        origin, so setting it there covers this page too. -->
