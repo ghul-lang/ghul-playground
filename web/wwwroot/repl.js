@@ -77,6 +77,35 @@ const resetButton = document.getElementById('reset');
 
 const darkMode = matchMedia('(prefers-color-scheme: dark)');
 
+// Whether a value is shown after its type, remembered in this browser.
+const TYPES_KEY = 'ghul-repl-types';
+const typesButton = document.getElementById('types');
+
+let showTypes = (() => {
+    try {
+        return localStorage.getItem(TYPES_KEY) !== 'off';
+    } catch {
+        return true;
+    }
+})();
+
+function setShowTypes(on) {
+    showTypes = on;
+    typesButton.setAttribute('aria-pressed', String(on));
+    typesButton.title = on ? 'Show each value without its type' : 'Show each value with its type';
+
+    try {
+        localStorage.setItem(TYPES_KEY, on ? 'on' : 'off');
+    } catch { }
+}
+
+setShowTypes(showTypes);
+
+typesButton.addEventListener('click', () => {
+    setShowTypes(!showTypes);
+    count('repl-action', showTypes ? 'types-on' : 'types-off');
+});
+
 setUpFullscreen(document.getElementById('fullscreen'),
     () => count('repl-action', 'fullscreen'));
 
@@ -239,6 +268,10 @@ async function start() {
     let analysis = { source: '', offset: 0 };
     let cells = [];
     let added = 0;
+
+    // Settles when the analyser has the cells accepted so far, which a type
+    // probe waits for: the probe names what the newest cell defined.
+    let cellsAdded = Promise.resolve();
     let analysisTimer = null;
 
     const ANALYSER_TITLES = {
@@ -295,6 +328,39 @@ async function start() {
         await client.request('playground/addCells', { cells: adding });
 
         if (client === analyser) refreshAnalysis();
+    }
+
+    // The type of the expression a cell ended on, as `:type` on the CLI
+    // shows it: hover on a local initialized with the expression, analysed
+    // as the next cell would be, so the expression is not run again.
+    async function typeOf(tail) {
+        const client = analyser;
+
+        if (!client?.ready) return null;
+
+        await cellsAdded;
+
+        const probe = await runtime.call('analysis', `let it = ${tail}`);
+
+        if (client !== analyser || !probe || probe.stopped || probe.error) return null;
+
+        const shown = await client.hoverIn(probe.source, probe.offset, 4);
+        const match = /^it: (.+)$/m.exec(shown ?? '');
+
+        return match && !match[1].includes('!!!') ? match[1] : null;
+    }
+
+    // Puts the type in front of a value already shown, when it arrives.
+    function showType(valueLine, tail) {
+        typeOf(tail).then(type => {
+            if (!type) return;
+
+            const span = document.createElement('span');
+
+            span.className = 'value-type';
+            span.textContent = `${type}: `;
+            valueLine.prepend(span);
+        }).catch(() => { });
     }
 
     async function refreshAnalysis() {
@@ -536,7 +602,7 @@ async function start() {
                         .map((cell, index) => ({ name: cell.name, key: keys[index] }))
                         .filter(cell => typeof cell.key === 'string');
 
-                    addCells();
+                    cellsAdded = addCells();
                 }
 
                 if (answer.retry) {
@@ -571,7 +637,10 @@ async function start() {
             if (answer.value != null) {
                 line(result, 'value', answer.value);
 
-                if (answer.picture) showValue(result.lastChild, answer.value, answer.picture);
+                const valueLine = result.lastChild;
+
+                if (answer.picture) showValue(valueLine, answer.value, answer.picture);
+                if (showTypes && answer.tail) showType(valueLine, answer.tail);
             }
             if (answer.error) {
                 outcome = 'threw';

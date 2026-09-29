@@ -58,6 +58,8 @@
     .result .diagnostic.warn, .result .note { color: var(--warn); }
     .result .error { color: var(--bad); }
     .result .muted { color: var(--fg-muted); font-style: italic; }
+    .result .value-type { color: var(--fg-muted); }
+    #types[aria-pressed="false"] { opacity: 0.5; }
 
     #input-row {
       display: grid;
@@ -135,6 +137,12 @@
     </button>
 
     <div class="group">
+      <button id="types" aria-pressed="true" title="Show each value with its type" aria-label="Show types">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <text x="8" y="12" text-anchor="middle" font-size="11" font-family="monospace" font-weight="bold" fill="currentColor">T:</text>
+        </svg>
+      </button>
+
       <button id="fullscreen" title="Full screen (F11)" aria-label="Full screen">
         <svg class="enter" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M1 1h5v1.6H2.6V6H1V1zm9 0h5v5h-1.6V2.6H10V1zM1 10h1.6v3.4H6V15H1v-5zm12.4 0H15v5h-5v-1.6h3.4V10z" />
@@ -161,7 +169,8 @@
         An interactive session for <a href="https://ghul.dev" target="_blank" rel="noopener">ghūl</a>.
         Type a cell and run it: it is compiled on the server and runs in your
         browser, and whatever it defines stays available to the cells after it.
-        A cell that ends on a value shows it.
+        A cell that ends on a value shows it, after its type:
+        <code>int: 500</code>. The <strong>T:</strong> button turns the type off and on.
       </p>
 
       <p>

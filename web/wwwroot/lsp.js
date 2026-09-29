@@ -91,6 +91,10 @@ export class GhulLanguageClient {
         // as a fault to retry.
         this.releasing = false;
 
+        // Set while a type probe has swapped the document out, so what the
+        // analyser reports about the probe is not shown on the input.
+        this.probing = false;
+
         // Set when the last attempt was turned away because this address
         // already holds as many sessions as it may. Retried on the timer,
         // and also on the reader's next move, which is usually just after
@@ -356,6 +360,9 @@ export class GhulLanguageClient {
         if (this.wake()) return;
         if (!this.ready) return;
 
+        // A probe puts the input's latest text back when it finishes.
+        if (this.probing) return;
+
         this.send('textDocument/didChange', {
             textDocument: { uri: DOCUMENT_URI, version: ++this.version },
             contentChanges: [{ text }]
@@ -370,6 +377,9 @@ export class GhulLanguageClient {
         }
 
         if (message.method === 'textDocument/publishDiagnostics') {
+            // What a type probe reports is about the probe, not the input.
+            if (this.probing) return;
+
             this.publishDiagnostics(message.params?.diagnostics ?? []);
         }
     }
@@ -426,6 +436,7 @@ export class GhulLanguageClient {
 
     async hover(position) {
         if (this.wake()) return null;
+        if (this.probing) return null;
         const result = await this.request('textDocument/hover', {
             textDocument: { uri: DOCUMENT_URI },
             position: { line: position.lineNumber - 1 + this.lineOffset(), character: position.column - 1 }
@@ -441,6 +452,44 @@ export class GhulLanguageClient {
                 : contents.value;
 
         return value ? { contents: [{ value }] } : null;
+    }
+
+    // What hover says about the name at a zero-based line and character of
+    // `source`, a document other than the input's: the document is swapped
+    // for `source` for the one request, and the input's put back after it.
+    async hoverIn(source, line, character) {
+        if (!this.ready || this.probing) return null;
+
+        this.probing = true;
+
+        try {
+            this.send('textDocument/didChange', {
+                textDocument: { uri: DOCUMENT_URI, version: ++this.version },
+                contentChanges: [{ text: source }]
+            }, true);
+
+            const result = await this.request('textDocument/hover', {
+                textDocument: { uri: DOCUMENT_URI },
+                position: { line, character }
+            });
+
+            const contents = result?.result?.contents;
+
+            if (!contents) return null;
+
+            return typeof contents === 'string'
+                ? contents
+                : Array.isArray(contents)
+                    ? contents.map(c => (typeof c === 'string' ? c : c.value)).join('\n\n')
+                    : contents.value ?? null;
+        } finally {
+            this.send('textDocument/didChange', {
+                textDocument: { uri: DOCUMENT_URI, version: ++this.version },
+                contentChanges: [{ text: this.documentText() }]
+            }, true);
+
+            this.probing = false;
+        }
     }
 
     // Whole-document semantic tokens. LSP and Monaco use the same relative
