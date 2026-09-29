@@ -7,7 +7,7 @@
 // themselves rather than making the page scroll sideways.
 //
 // Links are relative, so the same pages work behind nginx under
-// /stats/insights/ and at the root of an ssh tunnel.
+// /insights/ and at the root of an ssh tunnel.
 
 import { TIME_BANDS } from './report.js';
 

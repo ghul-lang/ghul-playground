@@ -368,7 +368,7 @@ and is not in this repository.
 
 ## insights
 
-The pages for reading the numbers: `https://ghul.dev/stats/insights/`, behind a
+The pages for reading the numbers: `https://ghul.dev/insights/`, behind a
 password. They cover what visitors looked at and for how long (time in sight),
 how they moved through the site and where they stopped, the funnels through the
 playground, the REPL and the examples in the docs, what went wrong for them,

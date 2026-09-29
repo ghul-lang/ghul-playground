@@ -238,7 +238,7 @@ services:
     pids_limit: 64
 
   # The pages that say what visitors did and what the host is doing, for the
-  # one person who reads them. Published by nginx at ghul.dev/stats/insights/,
+  # one person who reads them. Published by nginx at ghul.dev/insights/,
   # behind INSIGHTS_PASSWORD; also on loopback, for an ssh tunnel. It reads the
   # snapshot, read-only, and asks Prometheus over this network; it writes
   # nothing anywhere. See "insights" in deploy/README.md.
