@@ -125,11 +125,14 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
 check('markup in a value is escaped', String(html`<td>${'<script>'}</td>`) === '<td>&lt;script&gt;</td>');
 check('and so is a quote in an attribute', escape('"x\'') === '&quot;x&#39;');
 
-// A Prometheus that answers every query with one short series.
+// A Prometheus that answers every query with one short series. A container's
+// limit is zero, as cAdvisor reports a container that has none.
 const prometheus = http.createServer((request, response) => {
     const url = new URL(request.url, 'http://x');
     const range = url.pathname.endsWith('query_range');
-    const metric = url.searchParams.get('query').includes('container') ? { container: 'compile' } : {};
+    const query = url.searchParams.get('query');
+    const metric = query.includes('container') ? { container: 'compile' } : {};
+    const limit = query.includes('container_spec_') ? '0' : '3';
     const t = Math.floor(Date.now() / 1000);
 
     response.setHeader('content-type', 'application/json');
@@ -137,7 +140,7 @@ const prometheus = http.createServer((request, response) => {
         status: 'success',
         data: {
             resultType: range ? 'matrix' : 'vector',
-            result: [range ? { metric, values: [[t - 60, '1'], [t, '2']] } : { metric, value: [t, '3'] }],
+            result: [range ? { metric, values: [[t - 60, '1'], [t, '2']] } : { metric, value: [t, limit] }],
         },
     }));
 });
@@ -215,6 +218,7 @@ try {
 
     const systemPage = await (await get(`${open.base}/system?days=1`, 'right-password')).text();
     check('the system page draws what Prometheus answered', systemPage.includes('Processor in use') && systemPage.includes('compile'));
+    check('the system page draws a service with no limit', !systemPage.includes('Could not build'), systemPage.slice(0, 400));
 } catch (e) {
     check('the service ran', false, e.message);
 } finally {
