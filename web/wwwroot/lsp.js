@@ -377,8 +377,12 @@ export class GhulLanguageClient {
         }
 
         if (message.method === 'textDocument/publishDiagnostics') {
-            // What a type probe reports is about the probe, not the input.
-            if (this.probing) return;
+            // What a type probe reports is about the probe, not the input;
+            // that it arrived says the probe has been analysed.
+            if (this.probing) {
+                this.probeAnalysed?.();
+                return;
+            }
 
             this.publishDiagnostics(message.params?.diagnostics ?? []);
         }
@@ -463,10 +467,20 @@ export class GhulLanguageClient {
         this.probing = true;
 
         try {
+            // The server analyses an edit after answering what came before
+            // it, so the hover waits for the probe's diagnostics, which say
+            // the probe has been analysed.
+            const analysed = new Promise(resolve => {
+                this.probeAnalysed = resolve;
+                setTimeout(resolve, 10000);
+            });
+
             this.send('textDocument/didChange', {
                 textDocument: { uri: DOCUMENT_URI, version: ++this.version },
                 contentChanges: [{ text: source }]
             }, true);
+
+            await analysed;
 
             const result = await this.request('textDocument/hover', {
                 textDocument: { uri: DOCUMENT_URI },
@@ -489,6 +503,7 @@ export class GhulLanguageClient {
             }, true);
 
             this.probing = false;
+            this.probeAnalysed = null;
         }
     }
 
