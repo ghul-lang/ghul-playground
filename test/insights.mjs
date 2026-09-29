@@ -26,7 +26,9 @@ const check = (what, ok, detail = '') => {
     console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}${ok || !detail ? '' : `: ${detail}`}`);
 };
 
-// GoatCounter v2.7.0's definitions, as in test/dashboard-queries.mjs.
+// GoatCounter v2.7.0's own definitions, copied from a running instance rather
+// than written from memory: `session` is a blob, `width` is nullable, and a
+// query that forgets either is wrong in a way a made-up schema would hide.
 const SCHEMA = `
 create table hits (hit_id integer primary key autoincrement, site_id integer not null,
   path_id integer not null, ref_id integer not null default 1, session blob default null,

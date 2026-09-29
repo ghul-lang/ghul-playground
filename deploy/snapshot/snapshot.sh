@@ -1,10 +1,11 @@
 #!/bin/sh
-# A copy of the analytics database for Grafana to read, taken every few minutes.
+# A copy of the analytics database for the insights pages to read, taken every
+# few minutes.
 #
-# Grafana cannot read the live file. It is in WAL mode, and a reader has to be
+# The pages cannot read the live file. It is in WAL mode, and a reader has to be
 # able to create the -shm file beside it, which a read-only mount refuses; a
 # read-write mount would put a second writer on the one thing on this host that
-# cannot be rebuilt. So this takes a copy instead, and Grafana mounts only the
+# cannot be rebuilt. So this takes a copy instead, and the pages mount only the
 # copy, read-only. That is the property worth having: nothing downstream of here
 # can write analytics data, and nothing downstream of here can reach the
 # original.
@@ -25,7 +26,7 @@ SOURCE="${SNAPSHOT_SOURCE:-/data/db.sqlite3}"
 TARGET="${SNAPSHOT_TARGET:-/snapshot/analytics.sqlite3}"
 INTERVAL="${SNAPSHOT_INTERVAL:-300}"
 
-# Tables Grafana has no business holding. `users` carries the dashboard login's
+# Tables the pages have no business holding. `users` carries the dashboard login's
 # password hash and `api_tokens` its tokens; `store` is upstream's own scratch
 # space. None of them says anything about a visit.
 PRIVATE_TABLES="users api_tokens store"
@@ -89,7 +90,7 @@ snapshot() {
         esac
     done
 
-    # Renamed rather than written in place: Grafana can open the snapshot at any
+    # Renamed rather than written in place: the pages can open the snapshot at any
     # moment, and rename within one filesystem is atomic, so it sees either the
     # previous copy or the new one and never a half-written file.
     mv "$working" "$TARGET"

@@ -144,17 +144,11 @@ jobs:
       - name: Check what the analytics snapshot keeps and drops
         run: test/snapshot-rules.sh
 
-      - name: Check the dashboard queries against GoatCounter's schema
-        run: node test/dashboard-queries.mjs
-
       - name: Check what the insights pages count, and that they need the password
         run: node test/insights.mjs
 
       - name: Check nothing mounts a single file into a container
         run: node test/bind-mounts.mjs
-
-      - name: Check nginx publishes no route to the dashboards
-        run: node test/no-route-to-grafana.mjs
 
       - name: Build the ghūl runner
         run: dotnet build runner --configuration Release

@@ -198,13 +198,14 @@ services:
     cpus: 0.5
     pids_limit: 128
 
-  # A copy of the analytics database for Grafana to read, and nothing else.
+  # A copy of the analytics database for the insights pages to read, and
+  # nothing else.
   #
-  # Grafana cannot read the live one: it is in WAL mode, so a reader has to be
+  # They cannot read the live one: it is in WAL mode, so a reader has to be
   # able to create the -shm file beside it, and a read-only mount refuses while
   # a read-write mount would put a second writer on the only irreplaceable thing
   # on this host. So this takes a copy. It is also where visits that are not
-  # visitors are removed, which keeps the rules out of the dashboards and out of
+  # visitors are removed, which keeps the rules out of the pages and out of
   # this repository - see deploy/snapshot/snapshot.sh.
   snapshot:
     <<: *hardening
@@ -254,7 +255,7 @@ services:
       - "127.0.0.1:5094:5094"
 
     volumes:
-      # The copy, not the database: the same one Grafana reads.
+      # The copy, not the database.
       - goatcounter-snapshot:/snapshot:ro
 
     environment:
@@ -272,73 +273,6 @@ services:
     cpus: 0.5
     pids_limit: 64
 
-  # Loopback only, reached over an ssh tunnel; nothing in nginx routes to it.
-  grafana:
-    <<: *hardening
-    cgroup_parent: playground-grafana.slice
-    build:
-      context: deploy/grafana
-      dockerfile: Dockerfile
-    image: ghul-playground-grafana
-
-    # Loopback, and nothing in front of it. The dashboards are reached by
-    # forwarding this port over ssh rather than by publishing a route to them:
-    #
-    #     ssh -L 3000:127.0.0.1:5093 playground.ghul.dev
-    #
-    # then http://localhost:3000/. The host is key-only with root login
-    # disabled, so this adds nothing to what is exposed - there is no route to
-    # secure, nothing for a scanner to find, and no second credential to keep.
-    ports:
-      - "127.0.0.1:5093:3000"
-
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./deploy/grafana/dashboards:/etc/grafana/dashboards:ro
-      # Read-only, and the snapshot rather than the database: nothing here can
-      # write analytics data or reach the original.
-      - goatcounter-snapshot:/snapshot:ro
-
-    environment:
-      # Reached through an ssh tunnel, so the origin a browser sees is
-      # localhost and the port is the one the tunnel was opened on. Grafana
-      # builds its own absolute links from this and its listening port, which
-      # is 3000 inside the container - so a tunnel opened as `-L 3000:` gives
-      # links that work, and one opened on another port gives links that do
-      # not. Hence the command written out above and in deploy/README.md.
-      GF_SERVER_DOMAIN: localhost
-
-      # Set on the host beside the counter's own credentials.
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}"
-
-      # Nobody reads this without logging in, nobody creates an account, and
-      # nothing is published from it. The numbers are the site owner's.
-      GF_AUTH_ANONYMOUS_ENABLED: "false"
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
-      GF_SECURITY_ALLOW_EMBEDDING: "false"
-      GF_FEATURE_TOGGLES_ENABLE: ""
-      GF_PUBLIC_DASHBOARDS_ENABLED: "false"
-
-      # This container has no egress, so both of these would fail anyway; off
-      # so that they are not tried and not logged as failures every hour.
-      GF_ANALYTICS_REPORTING_ENABLED: "false"
-      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
-      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
-
-      # Installing at run time is what the image was built to avoid; saying so
-      # here stops a future edit reintroducing it.
-      GF_INSTALL_PLUGINS: ""
-
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m
-
-    mem_limit: 512m
-    memswap_limit: 512m
-    cpus: 1.0
-    pids_limit: 256
-
   prometheus:
     <<: *hardening
     cgroup_parent: playground-prometheus.slice
@@ -355,7 +289,7 @@ services:
       # reach rather than for space.
       - --storage.tsdb.retention.time=90d
       # Nothing outside reaches it, so it needs no interface of its own; this is
-      # for Grafana's queries and for its own scrape.
+      # for the insights pages' queries and for its own scrape.
       - --web.listen-address=0.0.0.0:9090
 
     volumes:
@@ -444,12 +378,8 @@ volumes:
   goatcounter-data:
 
   # Rebuilt from goatcounter-data every few minutes, so losing it costs one
-  # interval. Named rather than a tmpfs only because Grafana should find a
-  # snapshot already there when the host restarts.
+  # interval. Named rather than a tmpfs only because the insights pages should
+  # find a snapshot already there when the host restarts.
   goatcounter-snapshot:
-
-  # Dashboards are provisioned from this repository; what lives here is the
-  # login, and Grafana's own bookkeeping.
-  grafana-data:
 
   prometheus-data:

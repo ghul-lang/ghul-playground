@@ -32,7 +32,12 @@ const compose = readFileSync(path.join(root, 'compose.yaml'), 'utf8');
 // marks; a named volume has no slash and is not this hazard.
 const mounts = [...compose.matchAll(/^\s+- (\.\/[^:\s]+):/gm)].map(m => m[1]);
 
-check('there are bind mounts to check', mounts.length > 0, `${mounts.length} found`);
+// None at all is the best outcome, so this checks instead that the volume lists
+// are being read: a pattern that had stopped matching anything would otherwise
+// pass for ever.
+const volumes = [...compose.matchAll(/^\s+- ([^\s:]+):\//gm)];
+
+check('the volume lists are being read', volumes.length > 0, `${volumes.length} found`);
 
 for (const mount of mounts) {
     let kind;
