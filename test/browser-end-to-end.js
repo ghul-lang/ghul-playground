@@ -1293,6 +1293,11 @@ chrome.on('error', e => {
         };
 
         if (replStarted) {
+            // A value's type arrives after the value itself, so the checks
+            // that read a value run with types off; the last check turns
+            // them on.
+            await ev(`(() => { const b = document.getElementById('types'); if (b.getAttribute('aria-pressed') === 'true') b.click(); return true; })()`);
+
             // Nothing to discard before the first cell.
             const resetBefore = await ev(`document.getElementById('reset').disabled`);
 
@@ -1673,6 +1678,22 @@ chrome.on('error', e => {
             check('stopping a cell keeps a picture it had displayed',
                 pictureStopped[0]?.[1] === 'img' && pictureStopped[0]?.[2] === 12 && JSON.stringify(pictureStopped).includes('stopped'),
                 JSON.stringify(pictureStopped));
+
+            // With types on, a value is shown after the type of the
+            // expression the cell ended on, which a lazy comprehension and
+            // an array would otherwise share a rendering with.
+            await ev(`document.getElementById('types').click(); true`);
+
+            await submit('let squares = {i * i for i in 0..5}');
+            let typed = await submit('squares');
+
+            for (let i = 0; i < 120 && !typed.startsWith('Pipe[int]: '); i++) {
+                await sleep(250);
+                typed = await ev(`[...document.querySelectorAll('.entry')].at(-1).querySelector('.result').innerText`);
+            }
+
+            check('with types on, a value is shown after its type',
+                typed === 'Pipe[int]: [0, 1, 4, 9, 16]', JSON.stringify(typed));
 
         }
     }
