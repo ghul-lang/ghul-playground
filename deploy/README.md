@@ -366,6 +366,63 @@ Deleting by path, from the dashboard, is the only narrower option.
 whose visits are not recorded. The list itself is written by hand on the host
 and is not in this repository.
 
+## insights
+
+The pages for reading the numbers: `https://ghul.dev/stats/insights/`, behind a
+password. They cover what visitors looked at and for how long (time in sight),
+how they moved through the site and where they stopped, the funnels through the
+playground, the REPL and the examples in the docs, what went wrong for them,
+the recent visits one by one, and what the host and each container were doing.
+It is a single column that reads on a phone, with a choice of the last day,
+week, month or quarter.
+
+They are the `insights` service in `compose.yaml`: node and a few files in
+`insights/`, with nothing installed from npm. They read the same snapshot
+Grafana does, read-only, and ask Prometheus for the host's numbers over the
+compose network. They write nothing anywhere.
+
+**This is published, where Grafana deliberately is not.** The case against
+publishing Grafana below still stands for Grafana. These pages are a much
+smaller thing to put on the internet: one password compared in constant time,
+no accounts, no sessions, no plugins and no write path, from a service that is
+a few hundred lines of this repository's own code. A deliberate choice was made
+that one command per look, over an ssh tunnel, was too high a price for
+readable numbers. What protects them:
+
+- `INSIGHTS_PASSWORD`, below, as HTTP basic authentication (any user name).
+  With it unset **every request is refused**, so a host that has not been
+  given one fails closed rather than publishing the visit log.
+- The `insights` limit zone in `nginx/playground-limits.conf`, 30 requests a
+  minute per address, which makes guessing a long random password hopeless.
+- `noindex`, `no-store` and `no-referrer` on every response, a content security
+  policy that allows nothing but inline styles, and no link to the pages from
+  anywhere.
+
+Over a tunnel works too, and needs the password as well:
+
+```sh
+ssh -L 5094:127.0.0.1:5094 playground.ghul.dev
+```
+
+then <http://localhost:5094/>.
+
+To turn it on, once the change is deployed:
+
+```sh
+# on the host, in /opt/ghul-playground/.env
+INSIGHTS_PASSWORD=<the output of: openssl rand -base64 24>
+
+sudo docker compose up -d insights
+sudo /opt/ghul-playground/deploy/apply-nginx.sh
+```
+
+Until `apply-nginx.sh` has been run, `check-nginx.sh` fails every deploy,
+because the live nginx files differ from the repository's.
+
+`test/insights.mjs` checks what the pages count against a snapshot whose
+numbers are known, and that the service refuses no password, refuses a wrong
+one, and refuses everything when none is set.
+
 ## dashboards, and what the host is doing
 
 **Grafana is not published.** It listens on loopback and nothing in nginx
@@ -437,10 +494,14 @@ The cgroups that are not containers are dropped at scrape time - there are sixty
 of them to every container, the machine's own numbers come from node-exporter,
 and they would otherwise be most of what this job stores.
 
-### two settings the host supplies
+### three settings the host supplies
 
-Both go in `/opt/ghul-playground/.env` beside the tokens, written by hand, and
-neither is in this repository.
+All three go in `/opt/ghul-playground/.env` beside the tokens, written by hand, and
+none is in this repository.
+
+`INSIGHTS_PASSWORD` is the password for the insights pages, above. Unlike
+Grafana's, compose does not require it: a deploy made before it is set still
+succeeds, and the service refuses every request until it is.
 
 `GRAFANA_ADMIN_PASSWORD` is the dashboard login, asked for at
 <http://localhost:3000/> through the tunnel above. Compose refuses to start

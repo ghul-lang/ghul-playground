@@ -105,7 +105,7 @@ jobs:
 
       - name: Check the service and front-end sources parse
         run: |
-          for f in shared/*.js analyse-service/*.js compile-service/*.js \
+          for f in shared/*.js analyse-service/*.js compile-service/*.js insights/*.js \
                    scripts/*.js web/wwwroot/main.js web/wwwroot/lsp.js web/wwwroot/embed.js \
                    web/wwwroot/playground.js web/wwwroot/token.js web/wwwroot/theme.js \
                    web/wwwroot/collections.js web/wwwroot/files.js \
@@ -146,6 +146,9 @@ jobs:
 
       - name: Check the dashboard queries against GoatCounter's schema
         run: node test/dashboard-queries.mjs
+
+      - name: Check what the insights pages count, and that they need the password
+        run: node test/insights.mjs
 
       - name: Check nothing mounts a single file into a container
         run: node test/bind-mounts.mjs

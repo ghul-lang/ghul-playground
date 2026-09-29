@@ -237,8 +237,42 @@ services:
     cpus: 0.5
     pids_limit: 64
 
-  # The only one of these four reachable from outside, and only through nginx
-  # under /stats/insights/ with a login.
+  # The pages that say what visitors did and what the host is doing, for the
+  # one person who reads them. Published by nginx at ghul.dev/stats/insights/,
+  # behind INSIGHTS_PASSWORD; also on loopback, for an ssh tunnel. It reads the
+  # snapshot, read-only, and asks Prometheus over this network; it writes
+  # nothing anywhere. See "insights" in deploy/README.md.
+  insights:
+    <<: *hardening
+    cgroup_parent: playground-insights.slice
+    build:
+      context: insights
+      dockerfile: Dockerfile
+    image: ghul-playground-insights
+
+    ports:
+      - "127.0.0.1:5094:5094"
+
+    volumes:
+      # The copy, not the database: the same one Grafana reads.
+      - goatcounter-snapshot:/snapshot:ro
+
+    environment:
+      SNAPSHOT: /snapshot/analytics.sqlite3
+      PROMETHEUS_URL: http://prometheus:9090
+      # Set on the host in .env, never here. Left empty rather than required,
+      # so that a deploy made before it is set still succeeds: the service
+      # then refuses every request, which fails closed.
+      INSIGHTS_PASSWORD: "${INSIGHTS_PASSWORD:-}"
+
+    # A page reads a period's rows into memory - tens of thousands for a
+    # quarter at this site's volume, a few megabytes - and nothing else.
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+
+  # Loopback only, reached over an ssh tunnel; nothing in nginx routes to it.
   grafana:
     <<: *hardening
     cgroup_parent: playground-grafana.slice
