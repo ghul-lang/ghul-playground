@@ -157,6 +157,18 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
     check('entries and exits add up the same either way',
         report.pages(folded).reduce((n, p) => n + p.entries + p.exits, 0) === report.pages(each).reduce((n, p) => n + p.entries + p.exits, 0));
 
+    check('a folded row says how many different pages it holds, and how often they were seen',
+        row(folded, '/rosetta/*')?.distinct === 3 && row(folded, '/rosetta/*')?.views === 4, JSON.stringify(row(folded, '/rosetta/*')));
+    check('and a folded event how many different events', named(folded, 'rosetta-open/*')?.distinct === 2);
+    check('a row of its own holds nothing else', row(folded, '/rosetta')?.distinct === 0);
+
+    const [tasks, examples] = report.explored(each);
+    const bins = r => r.bins.map(b => b.count).join(',');
+    check('tasks per visit, by name, the same task twice counted once',
+        tasks.visits === 2 && tasks.distinct === 3 && bins(tasks) === '1,0,1,0', JSON.stringify(tasks));
+    check('examples per visit, across pages and events',
+        examples.visits === 1 && examples.distinct === 2 && bins(examples) === '0,1,0,0', JSON.stringify(examples));
+
     const tasksOnly = report.groupVisits(each, { tasks: true, examples: false });
     check('each grouping is its own choice', row(tasksOnly, '/rosetta/*') && named(tasksOnly, 'example-edit/x') && !named(tasksOnly, 'example-edit/*'));
     check('with neither, every row is its own', report.groupVisits(each, { tasks: false, examples: false }) === each);
@@ -257,6 +269,8 @@ try {
     check('and by the period links', off.includes('href="pages?days=90&amp;tasks=each"'));
     check('and can be turned back on', off.includes('href="pages?days=30"'));
     check('each grouping has its own switch', off.includes('href="pages?days=30&amp;tasks=each&amp;examples=each"'));
+    check('tasks per visit is shown with folding off', off.includes('Tasks and examples per visit'));
+    check('and on the overview', (await (await get(`${open.base}/?days=7`, 'right-password')).text()).includes('Tasks and examples per visit'));
 
     const missing = await get(`${open.base}/nothing-here`, 'right-password');
     check('an unknown page is not found', missing.status === 404, `${missing.status}`);

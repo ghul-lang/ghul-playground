@@ -70,11 +70,14 @@ async function page(name, days, groups) {
     } else {
         if (!existsSync(SNAPSHOT)) throw new Error(`no analytics snapshot at ${SNAPSHOT} yet`);
 
-        const visits = (start, end) => report.groupVisits(report.visitsOf(report.readHits(SNAPSHOT, start, end)), groups);
+        const each = report.visitsOf(report.readHits(SNAPSHOT, from, to));
 
-        context.visits = visits(from, to);
+        context.visits = report.groupVisits(each, groups);
+        context.explore = report.explored(each);
 
-        if (name === 'overview') context.before = visits(earlier, from);
+        if (name === 'overview') {
+            context.before = report.groupVisits(report.visitsOf(report.readHits(SNAPSHOT, earlier, from)), groups);
+        }
     }
 
     const title = PAGES.find(([p]) => (p || 'overview') === name)[1];
