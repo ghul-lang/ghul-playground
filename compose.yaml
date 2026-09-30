@@ -311,7 +311,9 @@ services:
       - --path.sysfs=/host/sys
       # The container filesystems are Docker's business and are covered by
       # cAdvisor; this is about the machine.
-      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($$|/)
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)
+      # The network is host-network-exporter's: this one would count its own.
+      - --no-collector.netdev
 
     pid: host
 
@@ -322,6 +324,35 @@ services:
     memswap_limit: 128m
     cpus: 0.5
     pids_limit: 64
+
+  # The host's network traffic. A container reading /proc/net/dev sees its own
+  # network namespace, however the host's /proc is mounted, so node-exporter
+  # above counted only the traffic of its own container. The host's namespace is
+  # the one its process 1 is in, and /proc/1/net/dev is read through that
+  # process, so this instance reads there: pointed at /proc/1 as its procfs,
+  # with only the network collector, and with netlink off, since netlink always
+  # answers for the namespace of the process asking. No host networking and no
+  # firewall change: it is reached on the compose network like the other one.
+  host-network-exporter:
+    <<: *hardening
+    cgroup_parent: playground-host-network-exporter.slice
+    image: prom/node-exporter:v1.12.1
+
+    command:
+      - --path.procfs=/host/proc/1
+      - --collector.disable-defaults
+      - --collector.netdev
+      - --no-collector.netdev.netlink
+
+    pid: host
+
+    volumes:
+      - /proc:/host/proc:ro
+
+    mem_limit: 64m
+    memswap_limit: 64m
+    cpus: 0.25
+    pids_limit: 32
 
   # Deliberately without the Docker socket. The usual recipe mounts it, which
   # is root on this machine for anything that gets into this container, and it
