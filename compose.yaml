@@ -311,7 +311,7 @@ services:
       - --path.sysfs=/host/sys
       # The container filesystems are Docker's business and are covered by
       # cAdvisor; this is about the machine.
-      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($$|/)
       # The network is host-network-exporter's: this one would count its own.
       - --no-collector.netdev
 
