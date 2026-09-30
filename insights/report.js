@@ -18,7 +18,7 @@ export const TIME_FAMILIES = ['site-time', 'example-page-time', 'rosetta-time', 
 export const TIME_BANDS = ['under-10s', '10-30s', '30s-2m', '2-10m', 'over-10m'];
 
 // Outcomes that mean the site let the reader down, as against the reader's own
-// program not compiling or throwing, which is what a playground is for. Anything
+// program not compiling or throwing, which is what a mini-IDE is for. Anything
 // in a family ending `-error` is also one: those are the page's own faults.
 const TROUBLE = {
     'mini-ide-result': ['busy', 'error', 'timeout', 'too-big'],
