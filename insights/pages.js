@@ -106,7 +106,7 @@ export function problems({ visits, days, period }) {
 <section class="card"><h2>Every problem</h2>
 <p class="note">${badge('fault')} the page itself failed: a script error, a runtime that would not load, a worker that died.
 ${badge('trouble')} the services let the reader down: busy, unreachable, timed out, or slow to first output.
-${badge('program')} the reader's own program did not compile or threw, which is what a playground is for, but a lot of it on one example is worth a look.</p>
+${badge('program')} the reader's own program did not compile or threw, which is what a mini-IDE is for, but a lot of it on one example is worth a look.</p>
 ${table(['What', 'Kind', 'Times ', 'Visits ', 'Of all visits ', 'Per day'], rows.map(p => html`<tr>
 ${cell.path(p.key)}${cell.text(badge(p.kind))}${cell.n(p.times)}${cell.n(p.visits)}${cell.n(percent(p.visits, total))}<td>${spark(p.byDay)}</td></tr>`), 'No problems recorded in this period.')}
 </section>

@@ -14,7 +14,7 @@ import { countErrors } from './errors.js'
 import { countEvent } from './events.js'
 import { createPlayground, DEFAULT_SOURCE } from './playground.js'
 
-countErrors('embed-error', countEvent);
+countErrors('mini-ide-error/docs-code-example', countEvent);
 
 const ALLOWED_PARENTS = [
     'https://ghul.dev',

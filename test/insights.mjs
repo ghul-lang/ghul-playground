@@ -108,9 +108,9 @@ check('counts the visits that hit trouble, not a reader\'s own compile error', s
 
 const kinds = Object.fromEntries(report.problems(visits, report.daysBetween(week, now)).map(p => [p.key, p.kind]));
 check('a page error is a fault', kinds['repl-error/script'] === 'fault');
-check('a busy service is trouble', kinds['playground-result/busy'] === 'trouble');
+check('a busy service is trouble', kinds['mini-ide-result/unknown-host/busy'] === 'trouble');
 check('a cell that does not compile is the reader\'s program', kinds['repl-cell/compile-error'] === 'program');
-check('a clean result is no problem', !('playground-result/compiled-ok' in kinds));
+check('a clean result is no problem', !('mini-ide-result/unknown-host/compiled-ok' in kinds));
 
 const [site, playground, repl, examples] = report.funnels(visits);
 const counts = f => f.steps.map(s => s.count).join(',');
@@ -129,10 +129,10 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
     const hit = (session, path, event = 0) => ({ session, at: '2019-04-01 10:00:00', path, event, place: 'GB', width: 1280, first: 0, ref: '' });
     const rows = [
         hit('g', '/rosetta/a'), hit('g', 'rosetta-open/a', 1), hit('g', '/rosetta'), hit('g', '/rosetta/b'),
-        hit('g', 'rosetta-open/b', 1), hit('g', '/rosetta/c'), hit('g', 'playground-run/manual/rosetta-code/c', 1),
+        hit('g', 'rosetta-open/b', 1), hit('g', '/rosetta/c'), hit('g', 'mini-ide-run/rosetta-task-page/manual/rosetta-code/c', 1),
         hit('h', '/rosetta/a'), hit('h', 'rosetta-open/a', 1), hit('h', '/playground/rosetta-code/a'),
-        hit('i', '/control-flow'), hit('i', 'example-edit/x', 1), hit('i', 'example-run/y', 1),
-        hit('i', 'example-result/ok', 1), hit('i', '/playground/ghul-examples/y'),
+        hit('i', '/control-flow'), hit('i', 'example-edit/x', 1), hit('i', 'mini-ide-run/docs-code-example/manual/y', 1),
+        hit('i', 'example-result/ok', 1), hit('i', 'code-copy/x', 1), hit('i', '/playground/ghul-examples/y'),
     ];
 
     const each = report.visitsOf(rows);
@@ -147,9 +147,11 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
     check('an example in the playground folds', row(folded, '/playground/ghul-examples/*')?.visits === 1);
     check('a task event folds, counted per time and per visit',
         named(folded, 'rosetta-open/*')?.count === 3 && named(folded, 'rosetta-open/*')?.visits === 2, JSON.stringify(named(folded, 'rosetta-open/*')));
-    check('a run keeps its mode when its task folds', Boolean(named(folded, 'playground-run/manual/rosetta-code/*')));
-    check('example events fold', named(folded, 'example-edit/*')?.count === 1 && named(folded, 'example-run/*')?.count === 1);
-    check('an event naming no task or example is left as it is', named(folded, 'example-result/ok')?.count === 1);
+    check('a run keeps its host and mode when its task folds', Boolean(named(folded, 'mini-ide-run/rosetta-task-page/manual/rosetta-code/*')));
+    check('docs code example events fold, old names and new',
+        named(folded, 'mini-ide-open/docs-code-example/*')?.count === 1 && named(folded, 'mini-ide-run/docs-code-example/manual/*')?.count === 1
+        && named(folded, 'code-copy/*')?.count === 1, JSON.stringify(report.events(folded).map(e => e.name)));
+    check('an event naming no task or example is left as it is', named(folded, 'mini-ide-result/docs-code-example/ok')?.count === 1);
     check('folding changes no total',
         JSON.stringify(report.summary(folded)) === JSON.stringify(report.summary(each)), JSON.stringify(report.summary(folded)));
     check('folding changes no funnel',
@@ -170,8 +172,38 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
         examples.visits === 1 && examples.distinct === 2 && bins(examples) === '0,1,0,0', JSON.stringify(examples));
 
     const tasksOnly = report.groupVisits(each, { tasks: true, examples: false });
-    check('each grouping is its own choice', row(tasksOnly, '/rosetta/*') && named(tasksOnly, 'example-edit/x') && !named(tasksOnly, 'example-edit/*'));
+    check('each grouping is its own choice', row(tasksOnly, '/rosetta/*') && named(tasksOnly, 'mini-ide-open/docs-code-example/x') && !named(tasksOnly, 'mini-ide-open/docs-code-example/*'));
     check('with neither, every row is its own', report.groupVisits(each, { tasks: false, examples: false }) === each);
+}
+
+// The names events had before the mini-IDE vocabulary are read as the names
+// they have now, and a mini-IDE event's host is split out of it.
+{
+    const cases = [
+        ['playground-run/manual/rosetta-code/x', 'mini-ide-run/unknown-host/manual/rosetta-code/x'],
+        ['playground-result/busy', 'mini-ide-result/unknown-host/busy'],
+        ['playground-time/2-10m', 'mini-ide-time/unknown-host/2-10m'],
+        ['playground-error/script', 'mini-ide-error/unknown-host/script'],
+        ['embed-error/script', 'mini-ide-error/docs-code-example/script'],
+        ['rosetta-part/next', 'mini-ide-nav/unknown-host/part-next'],
+        ['rosetta-more/related/2', 'mini-ide-nav/unknown-host/more-related-2'],
+        ['rosetta-more/tag/1', 'rosetta-more/tag/1'],
+        ['rosetta-what-is-ghul', 'mini-ide-nav/unknown-host/what-is-ghul'],
+        ['example-edit/a', 'mini-ide-open/docs-code-example/a'],
+        ['example-run/a', 'mini-ide-run/docs-code-example/manual/a'],
+        ['example-result/ok', 'mini-ide-result/docs-code-example/ok'],
+        ['example-copy/a', 'code-copy/a'],
+        ['examples-time/under-10s', 'example-page-time/under-10s'],
+        ['mini-ide-run/example-page/automatic/ghul-examples/a', 'mini-ide-run/example-page/automatic/ghul-examples/a'],
+        ['rosetta-open/a', 'rosetta-open/a'],
+    ];
+    const wrong = cases.filter(([old, now]) => report.renamed(old) !== now).map(([old]) => `${old} -> ${report.renamed(old)}`);
+
+    check('old event names are read as their new names, and new ones are left alone', !wrong.length, wrong.join('; '));
+
+    const e = report.splitEvent('mini-ide-result/rosetta-task-page/compiled-ok');
+    check('a mini-IDE event names its host', e.host === 'rosetta-task-page' && e.what === 'compiled-ok', JSON.stringify(e));
+    check('and is classified by what happened, wherever it was', report.classify('mini-ide-result', 'busy') === 'trouble');
 }
 
 check('markup in a value is escaped', String(html`<td>${'<script>'}</td>`) === '<td>&lt;script&gt;</td>');
@@ -276,7 +308,7 @@ try {
     check('an unknown page is not found', missing.status === 404, `${missing.status}`);
 
     const text = await (await get(`${open.base}/problems?days=7`, 'right-password')).text();
-    check('the problems page names the busy service', text.includes('playground-result/busy'));
+    check('the problems page names the busy service', text.includes('mini-ide-result/unknown-host/busy'));
 
     const systemPage = await (await get(`${open.base}/system?days=1`, 'right-password')).text();
     check('the system page draws what Prometheus answered', systemPage.includes('Processor in use') && systemPage.includes('compile'));
