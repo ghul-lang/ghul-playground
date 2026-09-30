@@ -17,7 +17,7 @@ import { existsSync, statSync } from 'node:fs';
 
 import * as report from './report.js';
 import * as body from './pages.js';
-import { layout, PAGES, PERIODS } from './render.js';
+import { layout, queryFor, GROUPINGS, PAGES, PERIODS } from './render.js';
 import { system } from './system.js';
 
 const PORT = Number(process.env.PORT ?? 5094);
@@ -58,21 +58,23 @@ function send(response, status, text, extra = {}) {
 
 const periodName = days => days === 1 ? '24 hours' : `${days} days`;
 
-async function page(name, days) {
+async function page(name, days, groups) {
     const to = new Date();
     const from = new Date(to.getTime() - days * 86400000);
     const earlier = new Date(from.getTime() - days * 86400000);
 
-    const context = { period: periodName(days), days: report.daysBetween(from, to) };
+    const context = { period: periodName(days), days: report.daysBetween(from, to), query: queryFor(days, groups) };
 
     if (name === 'system') {
         context.system = await system(PROMETHEUS, from, to);
     } else {
         if (!existsSync(SNAPSHOT)) throw new Error(`no analytics snapshot at ${SNAPSHOT} yet`);
 
-        context.visits = report.visitsOf(report.readHits(SNAPSHOT, from, to));
+        const visits = (start, end) => report.groupVisits(report.visitsOf(report.readHits(SNAPSHOT, start, end)), groups);
 
-        if (name === 'overview') context.before = report.visitsOf(report.readHits(SNAPSHOT, earlier, from));
+        context.visits = visits(from, to);
+
+        if (name === 'overview') context.before = visits(earlier, from);
     }
 
     const title = PAGES.find(([p]) => (p || 'overview') === name)[1];
@@ -89,6 +91,7 @@ async function page(name, days) {
         title,
         current: name === 'overview' ? '' : name,
         days,
+        groups,
         generated: `${to.toISOString().slice(0, 16).replace('T', ' ')}${snapshotAge}`,
         body: body[name](context),
     });
@@ -118,9 +121,10 @@ export const server = http.createServer(async (request, response) => {
 
     const asked = Number(url.searchParams.get('days'));
     const days = PERIODS.includes(asked) ? asked : 7;
+    const groups = Object.fromEntries(GROUPINGS.map(([key]) => [key, url.searchParams.get(key) !== 'each']));
 
     try {
-        send(response, 200, request.method === 'HEAD' ? '' : await page(name, days));
+        send(response, 200, request.method === 'HEAD' ? '' : await page(name, days, groups));
     } catch (e) {
         console.error(`insights: ${name}: ${e.stack ?? e}`);
         send(response, 500, `Could not build this page: ${e.message ?? e}`, { 'content-type': 'text/plain' });

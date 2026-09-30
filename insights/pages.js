@@ -9,7 +9,7 @@ import {
 
 const intro = (title, lede) => html`<h1>${title}</h1><p class="lede">${lede}</p>`;
 
-export function overview({ visits, before, days, period }) {
+export function overview({ visits, before, days, period, query }) {
     const now = report.summary(visits);
     const then = report.summary(before);
     const top = report.pages(visits).slice(0, 8);
@@ -28,13 +28,13 @@ ${tile('Hit a problem', percent(now.troubled, now.visits), `${number(now.trouble
 <div class="grid">
 <section class="card"><h2>Most visited pages</h2>
 ${table(['Page', 'Visits '], top.map(p => html`<tr>${cell.path(p.path)}<td>${meter(p.visits, now.visits)}</td></tr>`))}
-<p class="note"><a href="pages?days=${days.length}">All pages</a></p></section>
+<p class="note"><a href="pages${query}">All pages</a></p></section>
 ${funnel(site)}
 </div>
 <section class="card"><h2>Problems readers ran into</h2>
 ${table(['What', 'Kind', 'Visits '], problems.map(p =>
         html`<tr>${cell.path(p.key)}${cell.text(badge(p.kind))}${cell.n(p.visits)}</tr>`), 'No problems recorded in this period.')}
-<p class="note"><a href="problems?days=${days.length}">All problems</a></p></section>`;
+<p class="note"><a href="problems${query}">All problems</a></p></section>`;
 }
 
 export function pages({ visits, period }) {

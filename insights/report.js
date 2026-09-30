@@ -56,6 +56,53 @@ export function area(path) {
     return 'docs';
 }
 
+// Rosetta Code tasks and documentation examples each number in the dozens, and
+// a row apiece buries everything else, so the pages can fold each kind into
+// one row. Only what names a single task or example is folded: the section's
+// own page, /rosetta, stays itself, as does an event that names no task or
+// example, such as playground-open/rosetta-code or example-result/ok. Folding
+// renames a page or an event and never merges two in a visit, so a visit's
+// counts are the same either way and a visit touching several tasks is one
+// visit in the row they fold into.
+const TASK_PAGES = [[/^\/rosetta\/[^/]/, '/rosetta/*'], [/^\/playground\/rosetta-code\/./, '/playground/rosetta-code/*']];
+const EXAMPLE_PAGES = [[/^\/playground\/ghul-examples\/./, '/playground/ghul-examples/*']];
+const TASK_EVENTS = new Set(['rosetta-open']);
+const EXAMPLE_EVENTS = new Set(['example-edit', 'example-run', 'example-copy']);
+
+// The row a page is shown in: its own path, or the one it folds into.
+export function groupPage(path, groups) {
+    const folds = [...(groups.tasks ? TASK_PAGES : []), ...(groups.examples ? EXAMPLE_PAGES : [])];
+
+    return folds.find(([pattern]) => pattern.test(path))?.[1] ?? path;
+}
+
+// Likewise for an event. A run keeps its mode, since the funnels read it.
+export function groupEvent(family, detail, groups) {
+    if (groups.tasks && TASK_EVENTS.has(family) && detail) return { family, detail: '*' };
+    if (groups.examples && EXAMPLE_EVENTS.has(family) && detail) return { family, detail: '*' };
+
+    const run = /^(automatic|manual)\/(rosetta-code|ghul-examples)\/./.exec(detail);
+
+    if (family === 'playground-run' && run && groups[run[2] === 'rosetta-code' ? 'tasks' : 'examples']) {
+        return { family, detail: `${run[1]}/${run[2]}/*` };
+    }
+
+    return { family, detail };
+}
+
+export function groupVisits(visits, groups) {
+    if (!groups.tasks && !groups.examples) return visits;
+
+    const event = e => ({ ...e, ...groupEvent(e.family, e.detail, groups) });
+
+    return visits.map(visit => ({
+        ...visit,
+        pages: visit.pages.map(path => groupPage(path, groups)),
+        events: visit.events.map(event),
+        problems: visit.problems.map(event),
+    }));
+}
+
 export function splitEvent(path) {
     const at = path.indexOf('/');
 

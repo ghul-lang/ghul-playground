@@ -122,6 +122,46 @@ check('the examples funnel', counts(examples) === '1,1,1,1', counts(examples));
 const landing = report.pages(visits).find(p => p.path === '/');
 check('a page counts entries and exits', landing?.entries === 1 && landing?.exits === 0, JSON.stringify(landing));
 
+// Folding tasks and examples into one row each. Two visits touch tasks - one
+// three of them, around the section's own page - and one touches two examples;
+// the rows fold and every count that is not a row's stays as it was.
+{
+    const hit = (session, path, event = 0) => ({ session, at: '2019-04-01 10:00:00', path, event, place: 'GB', width: 1280, first: 0, ref: '' });
+    const rows = [
+        hit('g', '/rosetta/a'), hit('g', 'rosetta-open/a', 1), hit('g', '/rosetta'), hit('g', '/rosetta/b'),
+        hit('g', 'rosetta-open/b', 1), hit('g', '/rosetta/c'), hit('g', 'playground-run/manual/rosetta-code/c', 1),
+        hit('h', '/rosetta/a'), hit('h', 'rosetta-open/a', 1), hit('h', '/playground/rosetta-code/a'),
+        hit('i', '/control-flow'), hit('i', 'example-edit/x', 1), hit('i', 'example-run/y', 1),
+        hit('i', 'example-result/ok', 1), hit('i', '/playground/ghul-examples/y'),
+    ];
+
+    const each = report.visitsOf(rows);
+    const folded = report.groupVisits(each, { tasks: true, examples: true });
+    const row = (list, path) => report.pages(list).find(p => p.path === path);
+    const named = (list, name) => report.events(list).find(e => e.name === name);
+
+    check('tasks fold into one row, counting a visit once however many it saw',
+        row(folded, '/rosetta/*')?.visits === 2 && !row(folded, '/rosetta/a'), JSON.stringify(row(folded, '/rosetta/*')));
+    check('the section\'s own page is not folded', row(folded, '/rosetta')?.visits === 1);
+    check('a task in the playground folds into its own row', row(folded, '/playground/rosetta-code/*')?.visits === 1);
+    check('an example in the playground folds', row(folded, '/playground/ghul-examples/*')?.visits === 1);
+    check('a task event folds, counted per time and per visit',
+        named(folded, 'rosetta-open/*')?.count === 3 && named(folded, 'rosetta-open/*')?.visits === 2, JSON.stringify(named(folded, 'rosetta-open/*')));
+    check('a run keeps its mode when its task folds', Boolean(named(folded, 'playground-run/manual/rosetta-code/*')));
+    check('example events fold', named(folded, 'example-edit/*')?.count === 1 && named(folded, 'example-run/*')?.count === 1);
+    check('an event naming no task or example is left as it is', named(folded, 'example-result/ok')?.count === 1);
+    check('folding changes no total',
+        JSON.stringify(report.summary(folded)) === JSON.stringify(report.summary(each)), JSON.stringify(report.summary(folded)));
+    check('folding changes no funnel',
+        JSON.stringify(report.funnels(folded)) === JSON.stringify(report.funnels(each)));
+    check('entries and exits add up the same either way',
+        report.pages(folded).reduce((n, p) => n + p.entries + p.exits, 0) === report.pages(each).reduce((n, p) => n + p.entries + p.exits, 0));
+
+    const tasksOnly = report.groupVisits(each, { tasks: true, examples: false });
+    check('each grouping is its own choice', row(tasksOnly, '/rosetta/*') && named(tasksOnly, 'example-edit/x') && !named(tasksOnly, 'example-edit/*'));
+    check('with neither, every row is its own', report.groupVisits(each, { tasks: false, examples: false }) === each);
+}
+
 check('markup in a value is escaped', String(html`<td>${'<script>'}</td>`) === '<td>&lt;script&gt;</td>');
 check('and so is a quote in an attribute', escape('"x\'') === '&quot;x&#39;');
 
@@ -209,6 +249,14 @@ try {
             }
         }
     }
+
+    // The groupings are links rather than a form, so a page with one turned off
+    // has to carry that into every other link it offers.
+    const off = await (await get(`${open.base}/pages?days=30&tasks=each`, 'right-password')).text();
+    check('a grouping turned off is carried by the navigation', off.includes('href="journeys?days=30&amp;tasks=each"'));
+    check('and by the period links', off.includes('href="pages?days=90&amp;tasks=each"'));
+    check('and can be turned back on', off.includes('href="pages?days=30"'));
+    check('each grouping has its own switch', off.includes('href="pages?days=30&amp;tasks=each&amp;examples=each"'));
 
     const missing = await get(`${open.base}/nothing-here`, 'right-password');
     check('an unknown page is not found', missing.status === 404, `${missing.status}`);
