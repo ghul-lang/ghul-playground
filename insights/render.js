@@ -249,11 +249,11 @@ export function dayBars(series, label = 'visits') {
     const bars = series.map((d, i) => {
         const h = (d.visits / max) * 86;
 
-        return html`<rect x="${(i * w + gap / 2).toFixed(2)}" y="${(90 - h).toFixed(2)}" width="${(w - gap).toFixed(2)}" height="${h.toFixed(2)}" rx="2" fill="var(--series-1)"><title>${d.day}: ${number(d.visits)} ${label}</title></rect>`;
+        return html`<rect x="${(i * w + gap / 2).toFixed(2)}" y="${(90 - h).toFixed(2)}" width="${(w - gap).toFixed(2)}" height="${h.toFixed(2)}" rx="2" fill="var(--series-1)"${new Html(d.partial ? ' fill-opacity="0.4"' : '')}><title>${d.day}: ${number(d.visits)} ${label}${d.partial ? ', part of the day' : ''}</title></rect>`;
     });
 
     return html`<div class="chart">
-<div class="head"><span class="range">busiest day ${number(max)}</span></div>
+<div class="head"><span class="range">busiest day ${number(max)}${series.some(d => d.partial) ? '; the paler first and last bars are part-days, today so far' : ''}</span></div>
 <svg viewBox="0 0 1000 90" preserveAspectRatio="none" role="img" aria-label="${label} per day">
 <line x1="0" x2="1000" y1="89.5" y2="89.5" stroke="var(--axis)" vector-effect="non-scaling-stroke"/>
 ${bars}</svg>

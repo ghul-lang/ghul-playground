@@ -30,8 +30,8 @@ export const HOST_CHARTS = [
     {
         title: 'Disk free',
         unit: 'bytes',
-        query: 'node_filesystem_avail_bytes{mountpoint="/host"}',
-        limit: 'node_filesystem_size_bytes{mountpoint="/host"}',
+        query: 'node_filesystem_avail_bytes{mountpoint="/"}',
+        limit: 'node_filesystem_size_bytes{mountpoint="/"}',
     },
     {
         title: 'Network in',
