@@ -36,12 +36,12 @@ export const HOST_CHARTS = [
     {
         title: 'Network in',
         unit: 'rate',
-        query: 'sum(rate(node_network_receive_bytes_total{device!="lo"}[5m]))',
+        query: 'sum(rate(node_network_receive_bytes_total{job="host-network",device="eth0"}[5m]))',
     },
     {
         title: 'Network out',
         unit: 'rate',
-        query: 'sum(rate(node_network_transmit_bytes_total{device!="lo"}[5m]))',
+        query: 'sum(rate(node_network_transmit_bytes_total{job="host-network",device="eth0"}[5m]))',
     },
 ];
 
