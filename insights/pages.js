@@ -9,7 +9,22 @@ import {
 
 const intro = (title, lede) => html`<h1>${title}</h1><p class="lede">${lede}</p>`;
 
-export function overview({ visits, before, days, period }) {
+// A row's path, and for a row that folds many into one, how many it holds.
+const noun = path => /rosetta/.test(path) ? 'tasks' : 'examples';
+
+const pathCell = (path, distinct) => distinct
+    ? html`<td class="path" title="${path}">${short(path)} <span class="note">· ${number(distinct)} ${noun(path)}</span></td>`
+    : cell.path(path);
+
+// Whether a reader who arrives at one task or example goes on to another,
+// counted by name before any folding.
+const explored = rows => html`<section class="card"><h2>Tasks and examples per visit</h2>
+<p class="note">Of the visits that saw any, how many saw one, two, or more different ones. The same one seen twice is one.</p>
+${table(['', 'Visits ', 'Different ', ...report.EXPLORED_BINS.map(([label]) => `${label} `)], rows.map(r =>
+        html`<tr>${cell.text(r.name)}${cell.n(r.visits)}${cell.n(r.distinct)}${r.bins.map(b => cell.n(b.count))}</tr>`))}
+</section>`;
+
+export function overview({ visits, before, days, period, query, explore }) {
     const now = report.summary(visits);
     const then = report.summary(before);
     const top = report.pages(visits).slice(0, 8);
@@ -27,17 +42,18 @@ ${tile('Hit a problem', percent(now.troubled, now.visits), `${number(now.trouble
 <section class="card"><h2>Visits per day</h2>${dayBars(report.perDay(visits, days))}</section>
 <div class="grid">
 <section class="card"><h2>Most visited pages</h2>
-${table(['Page', 'Visits '], top.map(p => html`<tr>${cell.path(p.path)}<td>${meter(p.visits, now.visits)}</td></tr>`))}
-<p class="note"><a href="pages?days=${days.length}">All pages</a></p></section>
+${table(['Page', 'Visits '], top.map(p => html`<tr>${pathCell(p.path, p.distinct)}<td>${meter(p.visits, now.visits)}</td></tr>`))}
+<p class="note"><a href="pages${query}">All pages</a></p></section>
 ${funnel(site)}
 </div>
+${explored(explore)}
 <section class="card"><h2>Problems readers ran into</h2>
 ${table(['What', 'Kind', 'Visits '], problems.map(p =>
         html`<tr>${cell.path(p.key)}${cell.text(badge(p.kind))}${cell.n(p.visits)}</tr>`), 'No problems recorded in this period.')}
-<p class="note"><a href="problems?days=${days.length}">All problems</a></p></section>`;
+<p class="note"><a href="problems${query}">All problems</a></p></section>`;
 }
 
-export function pages({ visits, period }) {
+export function pages({ visits, period, explore }) {
     const rows = report.pages(visits);
     const time = report.timeInSight(visits);
     const total = report.summary(visits).visits;
@@ -47,10 +63,11 @@ export function pages({ visits, period }) {
 <p class="note">How long a page was actually in front of the reader, reported once as it goes away. Hidden time is not counted. Grouped by the part of the site that reported it.</p>
 ${time.length ? [time.map(bands), bandLegend()] : html`<p class="note">No page reported its time in this period.</p>`}
 </section>
+${explored(explore)}
 <section class="card"><h2>Every page</h2>
-<p class="note">Visits that saw the page; how many started there, ended there, and how many saw nothing else. Hover a shortened path for all of it.</p>
-${table(['Page', 'Visits ', 'Share', 'Started ', 'Ended ', 'Only page '], rows.map(p => html`<tr>
-${cell.path(p.path)}${cell.n(p.visits)}<td>${meter(p.visits, total, percent(p.visits, total))}</td>${cell.n(p.entries)}${cell.n(p.exits)}${cell.n(p.bounces)}</tr>`))}
+<p class="note">Visits that saw the page, and how many times it was seen; how many started there, ended there, and how many saw nothing else. Hover a shortened path for all of it.</p>
+${table(['Page', 'Visits ', 'Views ', 'Share', 'Started ', 'Ended ', 'Only page '], rows.map(p => html`<tr>
+${pathCell(p.path, p.distinct)}${cell.n(p.visits)}${cell.n(p.views)}<td>${meter(p.visits, total, percent(p.visits, total))}</td>${cell.n(p.entries)}${cell.n(p.exits)}${cell.n(p.bounces)}</tr>`))}
 </section>`;
 }
 
@@ -64,11 +81,11 @@ export function journeys({ visits, period }) {
 <div class="grid">${report.funnels(visits).map(funnel)}</div>
 <div class="grid">
 <section class="card"><h2>Where visits started</h2>
-${table(['Page', 'Visits '], entries.map(p => html`<tr>${cell.path(p.path)}<td>${meter(p.entries, total)}</td></tr>`))}
+${table(['Page', 'Visits '], entries.map(p => html`<tr>${pathCell(p.path, p.distinct)}<td>${meter(p.entries, total)}</td></tr>`))}
 </section>
 <section class="card"><h2>Where visits stopped</h2>
 <p class="note">The last page a visit saw. "Only page" is how many of those saw nothing before it.</p>
-${table(['Page', 'Stopped ', 'Only page '], exits.map(p => html`<tr>${cell.path(p.path)}${cell.n(p.exits)}${cell.n(p.bounces)}</tr>`))}
+${table(['Page', 'Stopped ', 'Only page '], exits.map(p => html`<tr>${pathCell(p.path, p.distinct)}${cell.n(p.exits)}${cell.n(p.bounces)}</tr>`))}
 </section>
 <section class="card"><h2>Commonest next steps</h2>
 ${table(['From', 'To', 'Times '], report.steps(visits).slice(0, 20).map(s =>
@@ -99,7 +116,7 @@ ${table(['Outcome', 'Share'], o.details.map(d => html`<tr>${cell.text(d.kind ? [
 </section>`)}</div>
 <section class="card"><h2>Every event</h2>
 <p class="note">Everything the pages counted other than time in sight, for anything the pages here do not already name.</p>
-${table(['Event', 'Times ', 'Visits '], report.events(visits).map(e => html`<tr>${cell.path(e.name)}${cell.n(e.count)}${cell.n(e.visits)}</tr>`))}
+${table(['Event', 'Times ', 'Visits '], report.events(visits).map(e => html`<tr>${pathCell(e.name, e.distinct)}${cell.n(e.count)}${cell.n(e.visits)}</tr>`))}
 </section>`;
 }
 

@@ -76,6 +76,17 @@ export const PAGES = [
 
 export const PERIODS = [1, 7, 30, 90];
 
+// The query every link carries, so a period or a grouping chosen on one page
+// holds on the next. Folding is the default and the parameters say when it is
+// off, so a bare address shows the folded rows.
+export const GROUPINGS = [['tasks', 'Rosetta tasks'], ['examples', 'Examples']];
+
+export function queryFor(days, groups) {
+    const off = GROUPINGS.filter(([key]) => !groups[key]).map(([key]) => `&${key}=each`);
+
+    return `?days=${days}${off.join('')}`;
+}
+
 const STYLE = `
 :root {
     color-scheme: light;
@@ -109,12 +120,15 @@ body {
 header { background: var(--surface); border-bottom: 1px solid var(--ring); position: sticky; top: 0; z-index: 1; }
 .bar { max-width: 1100px; margin: 0 auto; padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; }
 .bar strong { font-size: 15px; margin-right: 8px; }
-nav, .periods { display: flex; flex-wrap: wrap; gap: 2px; }
-nav a, .periods a {
+nav, .periods, .groups { display: flex; flex-wrap: wrap; gap: 2px; }
+.groups { flex-basis: 100%; align-items: center; font-size: 13px; color: var(--ink-2); }
+.groups span { margin: 0 4px 0 12px; }
+.groups span:first-child { margin-left: 0; }
+nav a, .periods a, .groups a {
     color: var(--ink-2); text-decoration: none; padding: 4px 8px; border-radius: 6px; font-size: 14px;
 }
-nav a:hover, .periods a:hover { background: var(--wash); }
-nav a[aria-current], .periods a[aria-current] { color: var(--ink); background: var(--wash); font-weight: 600; }
+nav a:hover, .periods a:hover, .groups a:hover { background: var(--wash); }
+nav a[aria-current], .periods a[aria-current], .groups a[aria-current] { color: var(--ink); background: var(--wash); font-weight: 600; }
 .periods { margin-left: auto; }
 main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 h1 { font-size: 20px; margin: 4px 0 4px; }
@@ -173,9 +187,10 @@ td.path { word-break: break-all; }
 a { color: var(--series-1); }
 `;
 
-export function layout({ title, current, days, generated, body }) {
-    const query = `?days=${days}`;
+export function layout({ title, current, days, groups, generated, body }) {
+    const query = queryFor(days, groups);
     const href = page => (page ? page : './') + query;
+    const here = current || './';
 
     return html`<!doctype html>
 <html lang="en">
@@ -193,7 +208,9 @@ export function layout({ title, current, days, generated, body }) {
 <nav>${PAGES.map(([page, name]) =>
         html`<a href="${href(page)}"${new Html(page === current ? ' aria-current="page"' : '')}>${name}</a>`)}</nav>
 <div class="periods">${PERIODS.map(n =>
-        html`<a href="${(current || './') + `?days=${n}`}"${new Html(n === days ? ' aria-current="true"' : '')}>${n === 1 ? '24h' : `${n}d`}</a>`)}</div>
+        html`<a href="${here + queryFor(n, groups)}"${new Html(n === days ? ' aria-current="true"' : '')}>${n === 1 ? '24h' : `${n}d`}</a>`)}</div>
+${current === 'system' ? '' : html`<div class="groups">${GROUPINGS.map(([key, name]) => html`<span>${name}:</span>${[true, false].map(on =>
+        html`<a href="${here + queryFor(days, { ...groups, [key]: on })}"${new Html(groups[key] === on ? ' aria-current="true"' : '')}>${on ? 'one row' : 'each'}</a>`)}`)}</div>`}
 </div></header>
 <main>
 ${body}

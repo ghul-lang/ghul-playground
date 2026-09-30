@@ -56,6 +56,106 @@ export function area(path) {
     return 'docs';
 }
 
+// Rosetta Code tasks and documentation examples each number in the dozens, and
+// a row apiece buries everything else, so the pages can fold each kind into
+// one row. Only what names a single task or example is folded: the section's
+// own page, /rosetta, stays itself, as does an event that names no task or
+// example, such as playground-open/rosetta-code or example-result/ok. Folding
+// renames a page or an event and never merges two in a visit, so a visit's
+// counts are the same either way and a visit touching several tasks is one
+// visit in the row they fold into.
+const TASK_PAGES = [[/^\/rosetta\/[^/]/, '/rosetta/*'], [/^\/playground\/rosetta-code\/./, '/playground/rosetta-code/*']];
+const EXAMPLE_PAGES = [[/^\/playground\/ghul-examples\/./, '/playground/ghul-examples/*']];
+const TASK_EVENTS = new Set(['rosetta-open']);
+const EXAMPLE_EVENTS = new Set(['example-edit', 'example-run', 'example-copy']);
+
+// The row a page is shown in: its own path, or the one it folds into.
+export function groupPage(path, groups) {
+    const folds = [...(groups.tasks ? TASK_PAGES : []), ...(groups.examples ? EXAMPLE_PAGES : [])];
+
+    return folds.find(([pattern]) => pattern.test(path))?.[1] ?? path;
+}
+
+// Likewise for an event. A run keeps its mode, since the funnels read it.
+export function groupEvent(family, detail, groups) {
+    if (groups.tasks && TASK_EVENTS.has(family) && detail) return { family, detail: '*' };
+    if (groups.examples && EXAMPLE_EVENTS.has(family) && detail) return { family, detail: '*' };
+
+    const run = /^(automatic|manual)\/(rosetta-code|ghul-examples)\/./.exec(detail);
+
+    if (family === 'playground-run' && run && groups[run[2] === 'rosetta-code' ? 'tasks' : 'examples']) {
+        return { family, detail: `${run[1]}/${run[2]}/*` };
+    }
+
+    return { family, detail };
+}
+
+// What a folded row stands for is kept beside it, as the pages and events it
+// took in, so a row can say how many different ones it holds.
+export function groupVisits(visits, groups) {
+    if (!groups.tasks && !groups.examples) return visits;
+
+    const event = e => ({ ...e, ...groupEvent(e.family, e.detail, groups) });
+
+    return visits.map(visit => {
+        const members = new Map();
+
+        const note = (row, original) => {
+            if (row === original) return;
+            if (!members.has(row)) members.set(row, new Set());
+            members.get(row).add(original);
+        };
+
+        const pages = visit.pages.map(path => {
+            const row = groupPage(path, groups);
+            note(row, path);
+            return row;
+        });
+
+        const events = visit.events.map(e => {
+            const folded = event(e);
+            note(eventName(folded), eventName(e));
+            return folded;
+        });
+
+        return { ...visit, pages, events, problems: visit.problems.map(event), members };
+    });
+}
+
+// How many different tasks, and different examples, visits went on to see:
+// the answer to whether a reader who arrives at one looks at another. Read from
+// the visits before any folding, and by name, so the same task seen twice is
+// one task.
+export const EXPLORED_BINS = [['1', n => n === 1], ['2', n => n === 2], ['3-5', n => n >= 3 && n <= 5], ['6+', n => n >= 6]];
+
+const taskOf = path => /^\/(?:rosetta|playground\/rosetta-code)\/([^/]+)/.exec(path)?.[1];
+const exampleOf = path => /^\/playground\/ghul-examples\/([^/]+)/.exec(path)?.[1];
+
+export function explored(visits) {
+    const kinds = [
+        ['Rosetta tasks', v => [
+            ...v.pages.map(taskOf),
+            ...v.events.filter(e => e.family === 'rosetta-open').map(e => e.detail),
+        ]],
+        ['Examples', v => [
+            ...v.pages.map(exampleOf),
+            ...v.events.filter(e => EXAMPLE_EVENTS.has(e.family)).map(e => e.detail),
+        ]],
+    ];
+
+    return kinds.map(([name, seen]) => {
+        const counts = visits.map(v => new Set(seen(v).filter(Boolean)).size).filter(n => n > 0);
+        const all = new Set(visits.flatMap(v => seen(v).filter(Boolean)));
+
+        return {
+            name,
+            visits: counts.length,
+            distinct: all.size,
+            bins: EXPLORED_BINS.map(([label, test]) => ({ label, count: counts.filter(test).length })),
+        };
+    });
+}
+
 export function splitEvent(path) {
     const at = path.indexOf('/');
 
@@ -263,14 +363,20 @@ export function pages(visits) {
     const rows = new Map();
 
     const row = path => {
-        if (!rows.has(path)) rows.set(path, { path, visits: 0, entries: 0, exits: 0, bounces: 0 });
+        if (!rows.has(path)) rows.set(path, { path, visits: 0, views: 0, entries: 0, exits: 0, bounces: 0, members: null });
         return rows.get(path);
     };
 
     for (const visit of visits) {
         if (!visit.pages.length) continue;
 
-        for (const path of unique(visit.pages)) row(path).visits++;
+        for (const path of unique(visit.pages)) {
+            row(path).visits++;
+
+            for (const member of visit.members?.get(path) ?? []) (row(path).members ??= new Set()).add(member);
+        }
+
+        for (const path of visit.pages) row(path).views++;
 
         row(visit.pages[0]).entries++;
         row(visit.pages.at(-1)).exits++;
@@ -278,7 +384,9 @@ export function pages(visits) {
         if (visit.pages.length === 1) row(visit.pages[0]).bounces++;
     }
 
-    return [...rows.values()].sort((a, b) => b.visits - a.visits || a.path.localeCompare(b.path));
+    return [...rows.values()]
+        .map(({ members, ...rest }) => ({ ...rest, distinct: members?.size ?? 0 }))
+        .sort((a, b) => b.visits - a.visits || a.path.localeCompare(b.path));
 }
 
 export function steps(visits) {
@@ -340,12 +448,21 @@ export function outcomes(visits) {
 }
 
 // Every event, for anything the pages above do not already name.
-export function events(visits) {
-    const name = e => e.detail ? `${e.family}/${e.detail}` : e.family;
-    const inVisits = new Map(tally(visits.flatMap(v => unique(v.events.map(name)))));
+const eventName = e => e.detail ? `${e.family}/${e.detail}` : e.family;
 
-    return tally(visits.flatMap(v => v.events), name)
-        .map(([name, count]) => ({ name, count, visits: inVisits.get(name) }));
+export function events(visits) {
+    const inVisits = new Map(tally(visits.flatMap(v => unique(v.events.map(eventName)))));
+    const members = new Map();
+
+    for (const visit of visits) {
+        for (const [row, originals] of visit.members ?? []) {
+            if (!members.has(row)) members.set(row, new Set());
+            for (const original of originals) members.get(row).add(original);
+        }
+    }
+
+    return tally(visits.flatMap(v => v.events), eventName)
+        .map(([name, count]) => ({ name, count, visits: inVisits.get(name), distinct: members.get(name)?.size ?? 0 }));
 }
 
 // The UTC days from `from` up to `to`, as `YYYY-MM-DD`.
