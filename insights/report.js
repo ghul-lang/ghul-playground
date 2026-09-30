@@ -14,26 +14,53 @@ import { DatabaseSync } from 'node:sqlite';
 
 // The families whose events say how long a page was in sight rather than what
 // the reader did, sent once as the page goes away, in these bands.
-export const TIME_FAMILIES = ['site-time', 'examples-time', 'rosetta-time', 'playground-time', 'repl-time'];
+export const TIME_FAMILIES = ['site-time', 'example-page-time', 'rosetta-time', 'mini-ide-time', 'repl-time'];
 export const TIME_BANDS = ['under-10s', '10-30s', '30s-2m', '2-10m', 'over-10m'];
 
 // Outcomes that mean the site let the reader down, as against the reader's own
 // program not compiling or throwing, which is what a playground is for. Anything
 // in a family ending `-error` is also one: those are the page's own faults.
 const TROUBLE = {
-    'playground-result': ['busy', 'error', 'timeout', 'too-big'],
+    'mini-ide-result': ['busy', 'error', 'timeout', 'too-big'],
     'repl-cell': ['error'],
-    'playground-analyser': ['refused', 'unavailable', 'dropped'],
+    'mini-ide-analyser': ['refused', 'unavailable', 'dropped'],
     'repl-analyser': ['refused', 'unavailable', 'dropped'],
-    'playground-first-output': ['over-10s'],
+    'mini-ide-first-output': ['over-10s'],
 };
 
 // A reader's program that did not work. Worth seeing - a lot of these on one
 // example says the example is hard - but not a fault of the site's.
 const PROGRAM_FAILED = {
-    'playground-result': ['compile-error', 'threw'],
+    'mini-ide-result': ['compile-error', 'threw'],
     'repl-cell': ['compile-error', 'threw'],
 };
+
+// The names events had before the mini-IDE vocabulary, written as the names
+// they have now, so a period spanning the change reads as one. Where the old
+// name did not say which page the mini-IDE was on, the host is unknown-host
+// rather than a guess. Events from the Rosetta task list keep their names; the
+// mini-IDE's own suggestions shared the family and are told apart by kind.
+const RENAMED = [
+    [/^playground-(open|run|result|first-output|analyser|action|theme|time|error)\//, 'mini-ide-$1/unknown-host/'],
+    [/^embed-error\//, 'mini-ide-error/docs-code-example/'],
+    [/^rosetta-part\/(.*)$/, 'mini-ide-nav/unknown-host/part-$1'],
+    [/^rosetta-more\/(showcase|related)\/(.*)$/, 'mini-ide-nav/unknown-host/more-$1-$2'],
+    [/^rosetta-(what-is-ghul|browse-all)$/, 'mini-ide-nav/unknown-host/$1'],
+    [/^example-edit\//, 'mini-ide-open/docs-code-example/'],
+    [/^example-run\//, 'mini-ide-run/docs-code-example/manual/'],
+    [/^example-result\//, 'mini-ide-result/docs-code-example/'],
+    [/^example-copy\//, 'code-copy/'],
+    [/^examples-time\//, 'example-page-time/'],
+];
+
+export function renamed(event) {
+    const rule = RENAMED.find(([pattern]) => pattern.test(event));
+
+    return rule ? event.replace(rule[0], rule[1]) : event;
+}
+
+// A mini-IDE event names the page it was on first: <family>/<host>/<rest>.
+export const HOSTED = family => family.startsWith('mini-ide-');
 
 // Paths recorded before the playground moved under ghul.dev, and ghul.dev's
 // own name where GoatCounter kept it, written as the path they are today.
@@ -60,14 +87,20 @@ export function area(path) {
 // a row apiece buries everything else, so the pages can fold each kind into
 // one row. Only what names a single task or example is folded: the section's
 // own page, /rosetta, stays itself, as does an event that names no task or
-// example, such as playground-open/rosetta-code or example-result/ok. Folding
+// example, such as mini-ide-open/<host>/rosetta-code or a result. Folding
 // renames a page or an event and never merges two in a visit, so a visit's
 // counts are the same either way and a visit touching several tasks is one
 // visit in the row they fold into.
 const TASK_PAGES = [[/^\/rosetta\/[^/]/, '/rosetta/*'], [/^\/playground\/rosetta-code\/./, '/playground/rosetta-code/*']];
 const EXAMPLE_PAGES = [[/^\/playground\/ghul-examples\/./, '/playground/ghul-examples/*']];
-const TASK_EVENTS = new Set(['rosetta-open']);
-const EXAMPLE_EVENTS = new Set(['example-edit', 'example-run', 'example-copy']);
+const DOCS = 'docs-code-example';
+
+// The docs code example an event names, if it names one.
+const docsExample = e =>
+    e.host === DOCS && e.family === 'mini-ide-open' ? e.what
+    : e.host === DOCS && e.family === 'mini-ide-run' ? e.what.replace(/^[^/]+\//, '')
+    : e.family === 'code-copy' ? e.detail
+    : '';
 
 // The row a page is shown in: its own path, or the one it folds into.
 export function groupPage(path, groups) {
@@ -76,18 +109,22 @@ export function groupPage(path, groups) {
     return folds.find(([pattern]) => pattern.test(path))?.[1] ?? path;
 }
 
-// Likewise for an event. A run keeps its mode, since the funnels read it.
-export function groupEvent(family, detail, groups) {
-    if (groups.tasks && TASK_EVENTS.has(family) && detail) return { family, detail: '*' };
-    if (groups.examples && EXAMPLE_EVENTS.has(family) && detail) return { family, detail: '*' };
+// Likewise for an event, answered as the event it folds into. A run keeps its
+// host and mode, since the funnels read them.
+export function groupEvent(e, groups) {
+    const folded = what => ({ ...e, what, detail: e.host ? `${e.host}/${what}` : what });
 
-    const run = /^(automatic|manual)\/(rosetta-code|ghul-examples)\/./.exec(detail);
+    if (groups.tasks && e.family === 'rosetta-open' && e.detail) return folded('*');
 
-    if (family === 'playground-run' && run && groups[run[2] === 'rosetta-code' ? 'tasks' : 'examples']) {
-        return { family, detail: `${run[1]}/${run[2]}/*` };
+    if (groups.examples && docsExample(e)) {
+        return folded(e.family === 'mini-ide-run' ? e.what.replace(/\/.*$/, '/*') : '*');
     }
 
-    return { family, detail };
+    const run = e.family === 'mini-ide-run' && /^(automatic|manual)\/(rosetta-code|ghul-examples)\/./.exec(e.what);
+
+    if (run && groups[run[2] === 'rosetta-code' ? 'tasks' : 'examples']) return folded(`${run[1]}/${run[2]}/*`);
+
+    return e;
 }
 
 // What a folded row stands for is kept beside it, as the pages and events it
@@ -95,7 +132,7 @@ export function groupEvent(family, detail, groups) {
 export function groupVisits(visits, groups) {
     if (!groups.tasks && !groups.examples) return visits;
 
-    const event = e => ({ ...e, ...groupEvent(e.family, e.detail, groups) });
+    const event = e => groupEvent(e, groups);
 
     return visits.map(visit => {
         const members = new Map();
@@ -139,7 +176,7 @@ export function explored(visits) {
         ]],
         ['Examples', v => [
             ...v.pages.map(exampleOf),
-            ...v.events.filter(e => EXAMPLE_EVENTS.has(e.family)).map(e => e.detail),
+            ...v.events.map(docsExample),
         ]],
     ];
 
@@ -156,17 +193,24 @@ export function explored(visits) {
     });
 }
 
+// An event as its family, the page a mini-IDE was on, and the rest.
 export function splitEvent(path) {
     const at = path.indexOf('/');
+    const family = at < 0 ? path : path.slice(0, at);
+    const detail = at < 0 ? '' : path.slice(at + 1);
 
-    return at < 0 ? { family: path, detail: '' } : { family: path.slice(0, at), detail: path.slice(at + 1) };
+    if (!HOSTED(family)) return { family, host: '', detail, what: detail };
+
+    const cut = detail.indexOf('/');
+
+    return { family, host: cut < 0 ? detail : detail.slice(0, cut), detail, what: cut < 0 ? '' : detail.slice(cut + 1) };
 }
 
-export function classify(family, detail) {
+// Whether an event is a problem, read from what happened rather than where.
+export function classify(family, what) {
     if (family.endsWith('-error')) return 'fault';
-    if (TROUBLE[family]?.includes(detail)) return 'trouble';
-    if (PROGRAM_FAILED[family]?.includes(detail)) return 'program';
-    if (family === 'example-result' && detail !== 'ok') return 'program';
+    if (TROUBLE[family]?.includes(what)) return 'trouble';
+    if (PROGRAM_FAILED[family]?.includes(what)) return 'program';
     return null;
 }
 
@@ -227,18 +271,18 @@ export function visitsOf(rows) {
             continue;
         }
 
-        const { family, detail } = splitEvent(path);
+        const { family, host, detail, what } = splitEvent(renamed(path));
 
         if (TIME_FAMILIES.includes(family)) {
-            visit.time.push({ family, band: detail });
+            visit.time.push({ family, band: what });
             continue;
         }
 
-        visit.events.push({ family, detail });
+        visit.events.push({ family, host, detail, what });
 
-        const kind = classify(family, detail);
+        const kind = classify(family, what);
 
-        if (kind) visit.problems.push({ kind, family, detail });
+        if (kind) visit.problems.push({ kind, family, host, detail, what });
     }
 
     return [...visits.values()];
@@ -262,8 +306,16 @@ const reached = (visit, test) => visit.events.some(test) || false;
 
 const pageIn = (visit, name) => visit.pages.some(p => area(p) === name);
 
-const event = (family, detail) => e =>
-    e.family === family && (detail === undefined || (typeof detail === 'function' ? detail(e.detail) : e.detail === detail));
+// An event of a family, optionally with a given outcome (or one passing a
+// test), and for the mini-IDE optionally only on some pages.
+const event = (family, what, host) => e =>
+    e.family === family
+    && (what === undefined || (typeof what === 'function' ? what(e.what) : e.what === what))
+    && (host === undefined || host(e.host));
+
+// The full mini-IDE on any page, and a docs code example.
+const full = host => host !== DOCS;
+const docs = host => host === DOCS;
 
 // Each funnel is a list of steps, and a step is counted as reached by a visit
 // whatever order it did them in: the counter says what happened, not always
@@ -282,22 +334,22 @@ export const FUNNELS = [
         steps: [
             ['saw a page', () => true],
             ['read the docs or Rosetta', v => ['docs', 'landing', 'rosetta'].some(a => pageIn(v, a))],
-            ['ran an example in the docs', v => reached(v, event('example-run'))],
-            ['opened the playground', v => pageIn(v, 'playground')],
-            ['ran something by hand', v => reached(v, event('playground-run', d => d.startsWith('manual/')))],
+            ['ran a docs code example', v => reached(v, event('mini-ide-run', undefined, docs))],
+            ['opened the standalone mini-IDE', v => pageIn(v, 'playground')],
+            ['ran something by hand in the full mini-IDE', v => reached(v, event('mini-ide-run', d => d.startsWith('manual/'), full))],
             ['opened the REPL', v => pageIn(v, 'repl')],
             ['ran a REPL cell', v => reached(v, event('repl-cell'))],
         ],
     },
     {
-        name: 'The playground',
-        note: 'Visits that opened the playground.',
-        within: v => reached(v, event('playground-open')),
+        name: 'The full mini-IDE',
+        note: 'Visits that opened the full mini-IDE, on its own page, an example page or a Rosetta task page.',
+        within: v => reached(v, event('mini-ide-open', undefined, full)),
         steps: [
             ['opened it', () => true],
-            ['ran a program', v => reached(v, event('playground-run'))],
-            ['got a result', v => reached(v, event('playground-result'))],
-            ['compiled and ran cleanly', v => reached(v, event('playground-result', 'compiled-ok'))],
+            ['ran a program', v => reached(v, event('mini-ide-run', undefined, full))],
+            ['got a result', v => reached(v, event('mini-ide-result', undefined, full))],
+            ['compiled and ran cleanly', v => reached(v, event('mini-ide-result', 'compiled-ok', full))],
         ],
     },
     {
@@ -311,14 +363,14 @@ export const FUNNELS = [
         ],
     },
     {
-        name: 'Examples in the docs',
-        note: 'Visits that touched an example on a documentation page.',
-        within: v => reached(v, e => ['example-edit', 'example-run', 'example-copy'].includes(e.family)),
+        name: 'Docs code examples',
+        note: 'Visits that opened, ran or copied a code example on a documentation page.',
+        within: v => reached(v, e => Boolean(docsExample(e))),
         steps: [
             ['touched one', () => true],
-            ['ran one', v => reached(v, event('example-run'))],
-            ['got a result', v => reached(v, event('example-result'))],
-            ['it worked', v => reached(v, event('example-result', 'ok'))],
+            ['ran one', v => reached(v, event('mini-ide-run', undefined, docs))],
+            ['got a result', v => reached(v, event('mini-ide-result', undefined, docs))],
+            ['it worked', v => reached(v, event('mini-ide-result', 'ok', docs))],
         ],
     },
 ];
@@ -432,15 +484,18 @@ export function problems(visits, days) {
 // The outcome mix for the families that report one per attempt, so a rate can
 // be read as well as a count.
 export function outcomes(visits) {
-    const families = ['playground-result', 'repl-cell', 'example-result', 'playground-first-output'];
+    const families = [
+        ['mini-ide-result', 'full mini-IDE', full], ['mini-ide-result', 'docs code examples', docs],
+        ['repl-cell'], ['mini-ide-first-output', 'full mini-IDE', full],
+    ];
 
-    return families.map(family => {
-        const seen = visits.flatMap(v => v.events.filter(e => e.family === family));
+    return families.map(([family, which, host]) => {
+        const seen = visits.flatMap(v => v.events.filter(event(family, undefined, host)));
 
         return {
-            family,
+            family: which ? `${family}, ${which}` : family,
             total: seen.length,
-            details: tally(seen, e => e.detail).map(([detail, count]) => ({
+            details: tally(seen, e => e.what).map(([detail, count]) => ({
                 detail, count, kind: classify(family, detail),
             })),
         };
@@ -492,6 +547,6 @@ export function summary(visits) {
         bounced: withPages.filter(v => v.pages.length === 1 && !v.events.length).length,
         troubled: withPages.filter(v => v.problems.some(p => p.kind !== 'program')).length,
         ranCode: withPages.filter(v => v.events.some(e =>
-            ['playground-run', 'repl-cell', 'example-run'].includes(e.family))).length,
+            ['mini-ide-run', 'repl-cell'].includes(e.family))).length,
     };
 }

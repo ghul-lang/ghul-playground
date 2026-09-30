@@ -14,10 +14,17 @@ import { countEvent, countPageview, band, countTimeOnPage } from './events.js'
 import { isAheadOfWiki, loadIndex, suggestions as suggest, taskFor } from './rosetta-index.js'
 import { whenReader } from './engagement.js'
 
-// Every event this page sends names what the reader did, never what they wrote.
-const count = (family, detail) => countEvent(detail ? `${family}/${detail}` : family, family);
+// Where this mini-IDE is: its own page, or framed on an example page or a
+// Rosetta task page, which the framing page says in the address. Every event
+// carries it, since the same action means something different in each.
+const HOSTS = ['example-page', 'rosetta-task-page'];
+const HOST = HOSTS.find(h => h === new URLSearchParams(location.search).get('host')) ?? 'standalone';
 
-countErrors('playground-error', countEvent);
+// Every event this page sends names what the reader did, never what they wrote:
+// mini-ide-<what>/<host>/<detail>.
+const count = (what, detail) => countEvent(`mini-ide-${what}/${HOST}${detail ? `/${detail}` : ''}`, `mini-ide-${what}`);
+
+countErrors(`mini-ide-error/${HOST}`, countEvent);
 
 const runButton = document.getElementById('run');
 const argumentsRow = document.getElementById('arguments-row');
@@ -272,7 +279,7 @@ function showImages(list) {
         download.title = `Save ${image.name}`;
         download.setAttribute('aria-label', `Save ${image.name}`);
         download.addEventListener('click', () => {
-            count('playground-action', 'save-image');
+            count('action', 'save-image');
 
             files.saveImage(shown.url, image.name);
         });
@@ -329,7 +336,7 @@ if (panel) {
 // --- full screen ----------------------------------------------------------
 
 setUpFullscreen(document.getElementById('fullscreen'),
-    () => count('playground-action', 'fullscreen'));
+    () => count('action', 'fullscreen'));
 
 // --- the about panel ------------------------------------------------------
 
@@ -337,7 +344,7 @@ const help = setUpHelp(
     document.getElementById('help'),
     document.getElementById('help-toggle'),
     document.getElementById('help-close'),
-    () => count('playground-action', 'help'));
+    () => count('action', 'help'));
 
 // Innermost first: the about panel sits over the images, which sit over the
 // editor, and Escape should dismiss one layer rather than all of them.
@@ -402,18 +409,18 @@ let provenance = requested;
 // last visit, or the one the page ships with. The collection rather than the
 // program, because the program is already the run event's business and a path
 // per task would say the same thing twice.
-count('playground-open', requested ? requested.name.split('/')[0]
+count('open', requested ? requested.name.split('/')[0]
     : savedSource ? 'restored'
     : 'default');
 
 // Which theme the reader is actually shown. It follows the system preference
 // and there is no control for it, so this is the only way to know.
-count('playground-theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+count('theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 
 // How long the page was actually in front of the reader, counted once as they
 // leave. Nothing else can recover it: every other event says something happened
 // and none says how long nothing did.
-countTimeOnPage('playground-time');
+countTimeOnPage(`mini-ide-time/${HOST}`);
 
 function forgetProvenance() {
     if (!provenance) return;
@@ -457,7 +464,7 @@ const playground = await createPlayground({
     ...(initialSource ? { source: initialSource } : {}),
     files: program?.files ?? [],
 
-    onAnalyserOutcome: outcome => count('playground-analyser', outcome),
+    onAnalyserOutcome: outcome => count('analyser', outcome),
 
     onOutput: text => {
         if (!text) followingOutput = true;
@@ -671,7 +678,7 @@ function link(text, href, counted, title = null) {
         { textContent: text, href, target: '_blank', rel: 'noopener' });
 
     if (title) a.title = title;
-    if (counted) a.addEventListener('click', () => count(counted));
+    if (counted) a.addEventListener('click', () => count('nav', counted));
 
     return a;
 }
@@ -738,7 +745,7 @@ function renderIdentity() {
 
         if (previous) {
             taskIdentity.append(swapLink(`${collection}/${previous.id}`,
-                { family: 'rosetta-part', detail: 'previous' },
+                { family: 'nav', detail: 'part-previous' },
                 { text: ['← previous', heading(previous)] }));
         }
 
@@ -746,7 +753,7 @@ function renderIdentity() {
 
         if (next) {
             taskIdentity.append(swapLink(`${collection}/${next.id}`,
-                { family: 'rosetta-part', detail: 'next' },
+                { family: 'nav', detail: 'part-next' },
                 { text: ['next', heading(next), ' →'] }));
         }
     }
@@ -777,7 +784,7 @@ function renderMoreToRun() {
         const name = `${collection}/${task.parts?.[0]?.id ?? task.slug}`;
 
         suggestions.append(swapLink(name,
-            { family: 'rosetta-more', detail: `${task.kind}/${position + 1}` },
+            { family: 'nav', detail: `more-${task.kind}-${position + 1}` },
             { text: [task.title], title: task.reason ?? undefined }));
     });
 
@@ -787,9 +794,9 @@ function renderMoreToRun() {
     // arrived rather than showing a number that might be wrong.
     moreLinks.append(
         link(taskIndex ? `all ${taskIndex.tasks.length} solutions` : 'all solutions',
-            'https://ghul.dev/rosetta', 'rosetta-browse-all'),
+            'https://ghul.dev/rosetta', 'browse-all'),
         muted(' · '),
-        link('what is ghūl?', 'https://ghul.dev/', 'rosetta-what-is-ghul'));
+        link('what is ghūl?', 'https://ghul.dev/', 'what-is-ghul'));
 }
 
 // Both surfaces read the same two things - which program this is, and the index
@@ -895,7 +902,7 @@ function countFirstOutput() {
 
     firstOutputCounted = true;
 
-    count('playground-first-output', band(performance.now() - inFlight.at));
+    count('first-output', band(performance.now() - inFlight.at));
 }
 
 function countOutcome(outcome) {
@@ -903,7 +910,7 @@ function countOutcome(outcome) {
 
     inFlight.counted = true;
 
-    count('playground-result', outcome);
+    count('result', outcome);
 }
 
 // The command line the program is run with. Read from the field on every run
@@ -929,7 +936,7 @@ function countArguments() {
 
     argumentsCounted = true;
 
-    count('playground-action', 'arguments');
+    count('action', 'arguments');
 }
 
 // Enter in the field runs the program, which is what a reader who has just
@@ -945,7 +952,7 @@ argumentsInput.addEventListener('input', countArguments);
 function runProgram({ automatic = false } = {}) {
     inFlight = { at: performance.now(), stopped: false, counted: false };
 
-    count('playground-run', `${automatic ? 'automatic' : 'manual'}/${provenance?.name ?? 'editor'}`);
+    count('run', `${automatic ? 'automatic' : 'manual'}/${provenance?.name ?? 'editor'}`);
 
     playground.run(programArguments());
 }
@@ -1076,7 +1083,7 @@ playground.editor.onDidChangeModelContent(event => {
 const copyButton = document.getElementById('copy');
 
 copyButton.addEventListener('click', () => {
-    count('playground-action', 'copy');
+    count('action', 'copy');
 
     navigator.clipboard?.writeText(playground.getSource()).then(() => {
         copyButton.dataset.copied = '';
@@ -1189,17 +1196,17 @@ async function saveFileAs() {
 // stopped by the browser's own dialogue still asked, and whether the two differ
 // is worth being able to see.
 document.getElementById('file-open').addEventListener('click', () => {
-    count('playground-action', 'open-file');
+    count('action', 'open-file');
     openFile();
 });
 
 saveItem.addEventListener('click', () => {
-    count('playground-action', 'save-file');
+    count('action', 'save-file');
     saveFile();
 });
 
 document.getElementById('file-save-as').addEventListener('click', () => {
-    count('playground-action', 'save-file-as');
+    count('action', 'save-file-as');
     saveFileAs();
 });
 

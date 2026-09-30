@@ -671,7 +671,7 @@ chrome.on('error', e => {
     // A page framing a task as ghul.dev's pages do, as a panel.
     const FRAMING = new URL('framing.html', BASE).toString();
     intercepted.set(FRAMING,
-        '<!DOCTYPE html><iframe src="rosetta-code/takes-args?panel" style="width: 1000px; height: 700px"></iframe>');
+        '<!DOCTYPE html><iframe src="rosetta-code/takes-args?panel&host=rosetta-task-page" style="width: 1000px; height: 700px"></iframe>');
 
     // The real counter has already loaded on an earlier page, and a deployed
     // one is cacheable for a day: from the cache it would never reach the
@@ -728,20 +728,20 @@ chrome.on('error', e => {
     // exactly right, and the only part that does not depend on how long
     // anything took or on what the browser's colour scheme is.
     check('the run on arrival and the one asked for are counted apart, each with one outcome',
-        JSON.stringify(counted.filter(p => /^playground-(run|result)\//.test(p))) === JSON.stringify([
-            'playground-run/automatic/rosetta-code/reads-files',
-            'playground-result/compiled-ok',
-            'playground-run/manual/rosetta-code/reads-files',
-            'playground-result/compiled-ok'
+        JSON.stringify(counted.filter(p => /^mini-ide-(run|result)\/standalone\//.test(p))) === JSON.stringify([
+            'mini-ide-run/standalone/automatic/rosetta-code/reads-files',
+            'mini-ide-result/standalone/compiled-ok',
+            'mini-ide-run/standalone/manual/rosetta-code/reads-files',
+            'mini-ide-result/standalone/compiled-ok'
         ]), shown);
 
     check('the page load is counted once, saying where the program came from',
-        counted.filter(p => p === 'playground-open/rosetta-code').length === 1, shown);
+        counted.filter(p => p === 'mini-ide-open/standalone/rosetta-code').length === 1, shown);
 
     // Twice would mean the second run was counted as a cold start, which it is
     // not: the runtime is in the browser's cache by then.
     check('the wait for first output is counted once, for the first run only',
-        counted.filter(p => /^playground-first-output\/(under-1s|1-3s|3-10s|over-10s)$/.test(p)).length === 1,
+        counted.filter(p => /^mini-ide-first-output\/standalone\/(under-1s|1-3s|3-10s|over-10s)$/.test(p)).length === 1,
         shown);
 
     // --- a command line ---------------------------------------------------
@@ -814,7 +814,7 @@ chrome.on('error', e => {
     const withArguments = JSON.parse(await ev(`JSON.stringify(window.counted ?? [])`));
 
     check('using the arguments field is counted once, and its contents are not',
-        withArguments.filter(p => p === 'playground-action/arguments').length === 1
+        withArguments.filter(p => p === 'mini-ide-action/standalone/arguments').length === 1
         && !withArguments.some(p => /alpha|quoted|two words|plain/.test(p)),
         JSON.stringify(withArguments));
 
@@ -831,9 +831,9 @@ chrome.on('error', e => {
     const withErrors = JSON.parse(await ev(`JSON.stringify(window.counted ?? [])`));
 
     check('a script error is counted once, by class',
-        withErrors.filter(p => p === 'playground-error/script').length === 1, JSON.stringify(withErrors));
+        withErrors.filter(p => p === 'mini-ide-error/standalone/script').length === 1, JSON.stringify(withErrors));
     check('and an unhandled rejection likewise',
-        withErrors.filter(p => p === 'playground-error/unhandled-rejection').length === 1, JSON.stringify(withErrors));
+        withErrors.filter(p => p === 'mini-ide-error/standalone/unhandled-rejection').length === 1, JSON.stringify(withErrors));
     check('with nothing the error said', !withErrors.some(p => p.includes('secret')), JSON.stringify(withErrors));
 
     // Whatever the block did not use up must not excuse a real failure later.
@@ -863,9 +863,9 @@ chrome.on('error', e => {
 
     const framedCounted = JSON.parse(await inFrame(`JSON.stringify(window.counted ?? [])`) ?? '[]');
 
-    check('and counts the run and its result',
-        framedCounted.some(p => /^playground-run\//.test(p))
-        && framedCounted.some(p => /^playground-result\//.test(p)),
+    check('and counts the run and its result, saying which page it was on',
+        framedCounted.some(p => /^mini-ide-run\/rosetta-task-page\//.test(p))
+        && framedCounted.some(p => /^mini-ide-result\/rosetta-task-page\//.test(p)),
         JSON.stringify(framedCounted));
 
     check('but no pageview of its own',
@@ -1040,7 +1040,7 @@ chrome.on('error', e => {
     const swapped = JSON.parse(await ev(`JSON.stringify(window.counted ?? [])`));
 
     check('taking a part is counted, with a pageview for the task it opened',
-        swapped.includes('rosetta-part/next')
+        swapped.includes('mini-ide-nav/standalone/part-next')
         && swapped.includes(new URL('rosetta-code/two-parts/02-second', BASE).pathname),
         JSON.stringify(swapped));
 
