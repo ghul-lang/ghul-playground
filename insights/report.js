@@ -520,21 +520,29 @@ export function events(visits) {
         .map(([name, count]) => ({ name, count, visits: inVisits.get(name), distinct: members.get(name)?.size ?? 0 }));
 }
 
-// The UTC days from `from` up to `to`, as `YYYY-MM-DD`.
+// Every UTC day the period touches, as `YYYY-MM-DD`, from the day `from` falls
+// in to the day `to` falls in. A period is a number of days back from now, so
+// it starts partway through its first day and ends partway through today, and
+// both of those are days with visits in them.
 export function daysBetween(from, to) {
     const days = [];
+    const last = to.toISOString().slice(0, 10);
 
-    for (let d = new Date(from); d < to; d = new Date(d.getTime() + 86400000)) {
-        days.push(d.toISOString().slice(0, 10));
+    for (let d = new Date(`${from.toISOString().slice(0, 10)}T00:00:00Z`); ; d = new Date(d.getTime() + 86400000)) {
+        const day = d.toISOString().slice(0, 10);
+
+        days.push(day);
+
+        if (day >= last) return days;
     }
-
-    return days;
 }
 
+// Visits started on each day. The first and last days are only partly in the
+// period, and are marked so that a short bar there is not read as a quiet day.
 export function perDay(visits, days) {
     const counts = new Map(tally(visits.filter(v => v.pages.length), v => v.started.slice(0, 10)));
 
-    return days.map(day => ({ day, visits: counts.get(day) ?? 0 }));
+    return days.map((day, i) => ({ day, visits: counts.get(day) ?? 0, partial: i === 0 || i === days.length - 1 }));
 }
 
 // The headline numbers for one period.

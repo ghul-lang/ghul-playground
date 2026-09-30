@@ -206,6 +206,22 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
     check('and is classified by what happened, wherever it was', report.classify('mini-ide-result', 'busy') === 'trouble');
 }
 
+// A period runs back from now, so it touches one more calendar day than it is
+// long: part of its first day, and today so far. Both are shown, marked.
+{
+    const to = new Date('2026-09-30T10:00:00Z');
+    const days = report.daysBetween(new Date(to.getTime() - 7 * 86400000), to);
+
+    check('a week touches eight days, ending today', days.length === 8 && days[0] === '2026-09-23' && days.at(-1) === '2026-09-30', days.join(' '));
+
+    const today = [{ pages: ['/'], started: '2026-09-30 09:00:00' }];
+    const bars = report.perDay(today, days);
+
+    check('a visit today has a bar', bars.at(-1).visits === 1, JSON.stringify(bars.at(-1)));
+    check('and the first and last bars are marked as part-days',
+        bars[0].partial && bars.at(-1).partial && !bars.slice(1, -1).some(b => b.partial));
+}
+
 check('markup in a value is escaped', String(html`<td>${'<script>'}</td>`) === '<td>&lt;script&gt;</td>');
 check('and so is a quote in an attribute', escape('"x\'') === '&quot;x&#39;');
 
