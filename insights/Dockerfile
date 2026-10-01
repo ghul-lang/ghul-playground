@@ -4,7 +4,7 @@
 # pages are written as strings, so there is nothing to install and nothing to
 # keep up to date beyond the node image.
 
-FROM node:24-alpine
+FROM node:26-alpine
 
 # Copied in rather than mounted, like everything else here: a change to a file
 # changes the image, and compose replaces the container.
