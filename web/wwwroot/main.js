@@ -456,6 +456,48 @@ const followOutput = () => {
     if (followingOutput) outputPane.scrollTop = outputPane.scrollHeight;
 };
 
+// Whether the current run has written anything, set false when a run starts
+// and true by the first output that arrives. The pane's no-output verdict is
+// decided from it at the run's terminal state, rather than from an empty
+// onOutput: an empty one is only ever the run clearing the pane, so reading
+// it as a verdict would declare a run output-less while it is still
+// compiling.
+let runShowedOutput = false;
+
+const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+let spinTimer = null;
+let runUnderway = false;
+
+// The braille spinner sits where a terminal's cursor would be: after whatever
+// the run has written, from the moment the run starts to the moment it ends.
+// While there is nothing yet it is the pane's whole content; once there is
+// output it follows the last character, so a program that prints a message
+// and then works in silence still shows that it is working. The status bar
+// beneath says which phase the run is in, so the spinner needs no words of
+// its own. Left on its first frame where the reader has asked reduced motion.
+const spinner = document.createElement('span');
+spinner.className = 'spin';
+spinner.setAttribute('aria-hidden', 'true');
+spinner.textContent = SPIN_FRAMES[0];
+
+const showSpinner = () => {
+    if (outputPane.lastChild !== spinner) outputPane.appendChild(spinner);
+
+    if (spinTimer || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let i = 0;
+    spinTimer = setInterval(() => {
+        i = (i + 1) % SPIN_FRAMES.length;
+        spinner.textContent = SPIN_FRAMES[i];
+    }, 80);
+};
+
+const hideSpinner = () => {
+    if (spinTimer) clearInterval(spinTimer);
+    spinTimer = null;
+    spinner.remove();
+};
+
 const initialSource = program?.source ?? savedSource;
 
 const playground = await createPlayground({
@@ -469,11 +511,18 @@ const playground = await createPlayground({
     onOutput: text => {
         if (!text) followingOutput = true;
 
-        if (text) countFirstOutput();
+        if (text) {
+            countFirstOutput();
+            runShowedOutput = true;
+            outputPane.textContent = text;
+        } else {
+            // An empty call is only ever the run clearing the pane: the
+            // no-output verdict is decided at the run's terminal state, from
+            // whether output ever arrived, and never here.
+            outputPane.textContent = '';
+        }
 
-        outputPane.textContent = text;
-        if (!text) outputPane.innerHTML = '<span class="empty">The program produced no output.</span>';
-
+        if (runUnderway) showSpinner();
         followOutput();
     },
 
@@ -549,6 +598,30 @@ const playground = await createPlayground({
         // whose output is on screen.
         if (state === 'done') reportCost(detail);
         if (BUSY.has(state)) reportCost(null);
+
+        // The spinner follows the run itself: shown from the first busy state
+        // to the terminal one, so it rides after output that has already been
+        // written and is taken away when the run ends. `unauthorized` is not
+        // terminal - the run resumes once the reader has answered - but the
+        // work is paused rather than under way, and the spinner says which.
+        if (BUSY.has(state) && !runUnderway) {
+            runUnderway = true;
+            showSpinner();
+        } else if (!BUSY.has(state) && runUnderway) {
+            runUnderway = false;
+            hideSpinner();
+        }
+
+        // The no-output verdict, decided once the run is over: every terminal
+        // state is covered however the run ended - a run that never compiled
+        // (`failed`, `busy`, `error`) reaches no final onOutput at all, and a
+        // run the reader stopped keeps its own message rather than being
+        // declared output-less.
+        const terminal = state === 'done' || state === 'failed' || state === 'busy' || state === 'error';
+
+        if (terminal && !runShowedOutput && !inFlight?.stopped) {
+            outputPane.innerHTML = '<span class="empty">The program produced no output.</span>';
+        }
 
         // How the run ended, one event per run. A run the reader stopped keeps
         // that as its outcome whatever it goes on to do once its input has been
@@ -951,6 +1024,7 @@ argumentsInput.addEventListener('input', countArguments);
 
 function runProgram({ automatic = false } = {}) {
     inFlight = { at: performance.now(), stopped: false, counted: false };
+    runShowedOutput = false;
 
     count('run', `${automatic ? 'automatic' : 'manual'}/${provenance?.name ?? 'editor'}`);
 
