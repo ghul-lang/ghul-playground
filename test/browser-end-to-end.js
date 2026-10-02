@@ -274,6 +274,63 @@ chrome.on('error', e => {
     check('standard error reaches the output pane', output.includes('and complained'),
         JSON.stringify(output.trim()));
 
+    // The pane's empty state is a verdict - the program produced no output -
+    // and it used to appear the moment a run began, while the status bar still
+    // said the run was compiling, telling a reader there was nothing to wait
+    // for. What stands in the pane instead is the spinner, and the verdict is
+    // for a run that has finished with nothing. A program that prints, goes
+    // quiet, then prints again covers both: the spinner rides after the first
+    // line through the quiet stretch, and neither line is ever called no
+    // output.
+    await ev(`(() => {
+        monaco.editor.getModels()[0].setValue(
+            'use IO.Std.write_line;\\n\\nentry() is\\n    write_line("before the wait");\\n'
+            + '    System.Threading.Thread.sleep(System.TimeSpan.from_milliseconds(4000L));\\n'
+            + '    write_line("after the wait");\\nsi\\n');
+        return true;
+    })()`);
+    await sleep(1000);
+    await ev(`document.getElementById('run').click(); true`);
+
+    const paneWithSpinner = () => ev(`(() => {
+        const pane = document.getElementById('output').innerText;
+        const spin = document.querySelector('#output .spin');
+        return { pane: pane.trim(), spinning: Boolean(spin) };
+    })()`);
+
+    let spinnerAfterOutput = false;
+    let verdictWhileRunning = false;
+    let afterTheWait = null;
+    for (let i = 0; i < 90; i++) {
+        const state = await paneWithSpinner();
+        if (state.pane.includes('before the wait') && state.spinning) spinnerAfterOutput = true;
+        if (state.spinning && state.pane.includes('produced no output')) verdictWhileRunning = true;
+        if (state.pane.includes('after the wait')) { afterTheWait = state; break; }
+        await sleep(250);
+    }
+    check('the spinner rides after output through a quiet stretch', spinnerAfterOutput);
+    check('no verdict while a run is under way', !verdictWhileRunning);
+    check('the second line arrives and the spinner goes',
+        afterTheWait && afterTheWait.pane.includes('after the wait') && !afterTheWait.spinning,
+        afterTheWait ? JSON.stringify(afterTheWait.pane.slice(0, 60)) : 'never finished');
+
+    // A run that genuinely produces nothing is told so, once it has finished.
+    await ev(`(() => {
+        monaco.editor.getModels()[0].setValue('entry() is\\n    let quiet = 1;\\nsi\\n');
+        return true;
+    })()`);
+    await sleep(1000);
+    await ev(`document.getElementById('run').click(); true`);
+
+    let quietPane = null;
+    for (let i = 0; i < 60; i++) {
+        quietPane = await ev(`document.getElementById('output').innerText.trim()`);
+        if (quietPane.includes('produced no output')) break;
+        await sleep(500);
+    }
+    check('a run that produces nothing is said so at the end',
+        quietPane.includes('The program produced no output.'), JSON.stringify(quietPane));
+
     // A program that reads a line. This is the one thing on the page that
     // cannot work at all unless the runtime is on a worker thread and the page
     // is cross-origin isolated, so it is also the check that says both are

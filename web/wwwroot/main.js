@@ -456,6 +456,44 @@ const followOutput = () => {
     if (followingOutput) outputPane.scrollTop = outputPane.scrollHeight;
 };
 
+// Whether a run has started and shown nothing yet, which is how an empty
+// onOutput that begins a run is told from one that ends it.
+let awaitingFirstOutput = false;
+
+const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+let spinTimer = null;
+let runUnderway = false;
+
+// The braille spinner sits where a terminal's cursor would be: after whatever
+// the run has written, from the moment the run starts to the moment it ends.
+// While there is nothing yet it is the pane's whole content; once there is
+// output it follows the last character, so a program that prints a message
+// and then works in silence still shows that it is working. The status bar
+// beneath says which phase the run is in, so the spinner needs no words of
+// its own. Left on its first frame where the reader has asked reduced motion.
+const spinner = document.createElement('span');
+spinner.className = 'spin';
+spinner.setAttribute('aria-hidden', 'true');
+spinner.textContent = SPIN_FRAMES[0];
+
+const showSpinner = () => {
+    if (outputPane.lastChild !== spinner) outputPane.appendChild(spinner);
+
+    if (spinTimer || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let i = 0;
+    spinTimer = setInterval(() => {
+        i = (i + 1) % SPIN_FRAMES.length;
+        spinner.textContent = SPIN_FRAMES[i];
+    }, 80);
+};
+
+const hideSpinner = () => {
+    if (spinTimer) clearInterval(spinTimer);
+    spinTimer = null;
+    spinner.remove();
+};
+
 const initialSource = program?.source ?? savedSource;
 
 const playground = await createPlayground({
@@ -469,11 +507,26 @@ const playground = await createPlayground({
     onOutput: text => {
         if (!text) followingOutput = true;
 
-        if (text) countFirstOutput();
+        if (text) {
+            countFirstOutput();
+            awaitingFirstOutput = false;
+            outputPane.textContent = text;
+        } else {
+            // An empty call is the run clearing the pane at its start, or the
+            // run ending having produced nothing. The pane's empty state is a
+            // verdict, and a verdict shown while the run is still compiling or
+            // starting the runtime tells a reader there is nothing to wait
+            // for - so the wait shows as one, and only a run that has finished
+            // with nothing is said to have produced no output.
+            const starting = !awaitingFirstOutput;
+            awaitingFirstOutput = starting;
 
-        outputPane.textContent = text;
-        if (!text) outputPane.innerHTML = '<span class="empty">The program produced no output.</span>';
+            hideSpinner();
+            outputPane.textContent = '';
+            if (!starting) outputPane.innerHTML = '<span class="empty">The program produced no output.</span>';
+        }
 
+        if (runUnderway) showSpinner();
         followOutput();
     },
 
@@ -549,6 +602,27 @@ const playground = await createPlayground({
         // whose output is on screen.
         if (state === 'done') reportCost(detail);
         if (BUSY.has(state)) reportCost(null);
+
+        // The spinner follows the run itself: shown from the first busy state
+        // to the terminal one, so it rides after output that has already been
+        // written and is taken away when the run ends. `unauthorized` is not
+        // terminal - the run resumes once the reader has answered - but the
+        // work is paused rather than under way, and the spinner says which.
+        if (BUSY.has(state) && !runUnderway) {
+            runUnderway = true;
+            showSpinner();
+        } else if (!BUSY.has(state) && runUnderway) {
+            runUnderway = false;
+            hideSpinner();
+        }
+
+        // A run that ends without compiling never reaches the final onOutput,
+        // so the pane would keep saying a run is on its way. It is not: this
+        // run is over, and it produced no output.
+        if (state === 'failed' && awaitingFirstOutput) {
+            awaitingFirstOutput = false;
+            outputPane.innerHTML = '<span class="empty">The program produced no output.</span>';
+        }
 
         // How the run ended, one event per run. A run the reader stopped keeps
         // that as its outcome whatever it goes on to do once its input has been

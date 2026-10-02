@@ -221,6 +221,12 @@
 
     .empty { color: var(--fg-muted); font-style: italic; }
 
+    /* The braille spinner that stands where a terminal's cursor would be
+       while a run is under way: muted whether the pane is empty or it rides
+       after output, and set off from the text it follows. */
+    #output .spin { color: var(--fg-muted); margin-left: 1ch; }
+    #output:has(> .spin:only-child) .spin { margin-left: 0; }
+
     #arguments-row[hidden] { display: none; }
 
     #arguments-row {
