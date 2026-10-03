@@ -659,7 +659,12 @@ const playground = await createPlayground({
 
         // A finished run whose task carries a recorded time says how fast
         // this browser is, which is what scales the next task's estimate.
-        if (state === 'done') rememberSpeed(detail?.ran, program?.runMs);
+        // Only a run that ran to its end measures the browser: one the reader
+        // stopped or that threw partway finished early, and its fraction of
+        // the recorded time would say this browser is faster than it is.
+        if (state === 'done' && !inFlight?.stopped && !detail?.threw) {
+            rememberSpeed(detail?.ran, program?.runMs);
+        }
 
         // The spinner follows the run itself: shown from the first busy state
         // to the terminal one, so it rides after output that has already been
