@@ -27,7 +27,7 @@ RUN useradd --create-home --shell /usr/sbin/nologin playground
 USER playground
 WORKDIR /home/playground
 
-ARG GHUL_COMPILER_VERSION=64.5.22
+ARG GHUL_COMPILER_VERSION=64.7.8
 ARG GHUL_RUNTIME_VERSION=25.0.0
 ARG GHUL_RASTER_VERSION=0.11.0
 
