@@ -76,5 +76,31 @@ check("a whole example's title", whole.title, 'generics');
 check("a later program's title", later.title, 'functional: map filter reduce');
 check('a name that is not an example', requestedProgram('/ghul-examples/Not An Example').error, 'ghul-examples/Not An Example is not the name of a program');
 
+// A task whose slug has a letter outside ASCII: the browser hands the path
+// over percent-encoded, and the corpus's directory name is what the source,
+// the task.json and the ghul.dev page links are built from.
+const erdos = requestedProgram('/rosetta-code/erd%C5%91s-woods-numbers');
+
+check('a percent-encoded slug names the task', erdos.name, 'rosetta-code/erdős-woods-numbers');
+check("a percent-encoded slug reads the task's source", erdos.source,
+    'https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/main/tasks/erdős-woods-numbers/erdős-woods-numbers.ghul');
+check("a percent-encoded slug reads the task's task.json", erdos.about,
+    'https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/main/tasks/erdős-woods-numbers/task.json');
+check("a percent-encoded slug links to the task's page", erdos.page, 'https://ghul.dev/rosetta/erdős-woods-numbers');
+
+// A name a suggestion carries has already been decoded, and reads as itself.
+check('a decoded slug reads the same task',
+    requestedProgram('/rosetta-code/erdős-woods-numbers').source, erdos.source);
+
+// So does the same name spelled with a combining mark, as another writer of
+// the address could have handed it over.
+check('a combining-mark spelling reads the same task',
+    requestedProgram('/rosetta-code/erdo%CC%8Bs-woods-numbers').source, erdos.source);
+
+// A % that opens no escape is refused where the output is shown, not thrown
+// while the page loads.
+check('a stray % is refused, not thrown',
+    requestedProgram('/rosetta-code/100%').error, 'rosetta-code/100% is not the name of a program');
+
 console.log(failures ? `${failures} failure(s)` : 'all checks passed');
 process.exit(failures ? 1 : 0);

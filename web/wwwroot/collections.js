@@ -33,7 +33,9 @@ const COLLECTIONS = {
     // runner uses. The task's own directory holds task.json, whose task field
     // is the task's name on the wiki.
     'rosetta-code': {
-        pattern: /^([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([0-9]{2}(?:-[a-z0-9]+)+))?$/,
+        // A slug is the corpus's directory name, lowered: lowercase letters
+        // (some not ASCII - erdős-woods-numbers), digits, hyphens between.
+        pattern: /^([\p{Ll}0-9]+(?:-[\p{Ll}0-9]+)*)(?:\/([0-9]{2}(?:-[\p{Ll}0-9]+)+))?$/u,
 
         locate: ([slug, part]) => {
             const directory = part ? `${ROSETTA_CODE}/${slug}/${part}` : `${ROSETTA_CODE}/${slug}`;
@@ -55,7 +57,8 @@ const COLLECTIONS = {
     // a topic's first program is on the topic's own page, and each of the
     // others on a page named for the topic and the part.
     'ghul-examples': {
-        pattern: /^([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([0-9]{2}(?:-[a-z0-9]+)+))?$/,
+        // The same shape a task slug has, so the two collections stay in step.
+        pattern: /^([\p{Ll}0-9]+(?:-[\p{Ll}0-9]+)*)(?:\/([0-9]{2}(?:-[\p{Ll}0-9]+)+))?$/u,
 
         locate: ([topic, part]) => {
             const directory = part
@@ -96,8 +99,23 @@ export function requestedProgram(pathname) {
 
     if (!collection) return null;
 
-    const name = `${match[1]}/${match[2]}`;
-    const id = collection.pattern.exec(match[2]);
+    // location.pathname holds the address percent-encoded, and a slug can name
+    // a directory whose name is not ASCII: erdős-woods-numbers arrives as
+    // erd%C5%91s-woods-numbers. Decoding puts the directory's own name back,
+    // which is what the name, the title and the links are built from. A name
+    // that arrives already decoded - a suggestion's - carries no escapes and
+    // reads as itself, NFC spells composed and combining forms alike, and a
+    // stray % that opens no escape is refused below rather than thrown here.
+    let slug;
+
+    try {
+        slug = decodeURIComponent(match[2]).normalize('NFC');
+    } catch {
+        slug = match[2];
+    }
+
+    const name = `${match[1]}/${slug}`;
+    const id = collection.pattern.exec(slug);
 
     if (!id) return { name, error: `${name} is not the name of a program` };
 
