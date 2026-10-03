@@ -480,7 +480,64 @@ spinner.className = 'spin';
 spinner.setAttribute('aria-hidden', 'true');
 spinner.textContent = SPIN_FRAMES[0];
 
+// How much slower this browser runs a program than the machine the tasks'
+// recorded timings were measured on: the ratio of a finished run's own time
+// to the task's recorded one, kept from the last run long enough to say it.
+// The wasm interpreter costs anywhere from twice to fifty times a native run
+// depending on how much of the program's time is in its own loops, so one
+// measured ratio beats any single assumed number, and eight is what a reader
+// gets before anything has been measured.
+const SPEED_KEY = 'ghul-playground-speed';
+const DEFAULT_SPEED = 8;
+const STARTUP_MS = 2500;
+
+const recordedSpeed = () => {
+    try {
+        const speed = Number(localStorage.getItem(SPEED_KEY));
+
+        return Number.isFinite(speed) && speed >= 1 && speed <= 50 ? speed : DEFAULT_SPEED;
+    } catch {
+        return DEFAULT_SPEED;
+    }
+};
+
+const rememberSpeed = (ran_ms, recorded_ms) => {
+    if (!recorded_ms || ran_ms < 1000) return;
+
+    try {
+        const speed = Math.min(50, Math.max(1, ran_ms / recorded_ms));
+
+        localStorage.setItem(SPEED_KEY, String(speed));
+    } catch { /* nothing stored is the status quo */ }
+};
+
+// What a wait is expected to cost this reader, in words coarse enough that
+// the estimate's assumptions (a recorded timing from one machine, a speed
+// ratio from one earlier run) are not lent a precision they do not have.
+const waitWords = first_output_ms => {
+    const wait = STARTUP_MS + first_output_ms * recordedSpeed();
+
+    if (wait < 90_000) return `up to about ${Math.max(5, Math.round(wait / 5000) * 5)} seconds`;
+    if (wait < 300_000) return 'over a minute';
+
+    return 'several minutes';
+};
+
+// Said beside the spinner while the program has yet to print anything, for
+// the tasks whose recorded wait before a first line reaches half a second:
+// a reader told nothing assumes the blank pane is a broken one.
+const waitNote = document.createElement('span');
+waitNote.className = 'empty note';
+
 const showSpinner = () => {
+    if (!runShowedOutput && program?.firstOutputMs) {
+        waitNote.textContent =
+            ` This program works silently for a while before its first output: `
+            + `in a browser that can be ${waitWords(program.firstOutputMs)}.`;
+
+        if (waitNote.parentNode !== outputPane) outputPane.appendChild(waitNote);
+    }
+
     if (outputPane.lastChild !== spinner) outputPane.appendChild(spinner);
 
     if (spinTimer || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -496,6 +553,7 @@ const hideSpinner = () => {
     if (spinTimer) clearInterval(spinTimer);
     spinTimer = null;
     spinner.remove();
+    waitNote.remove();
 };
 
 const initialSource = program?.source ?? savedSource;
@@ -598,6 +656,10 @@ const playground = await createPlayground({
         // whose output is on screen.
         if (state === 'done') reportCost(detail);
         if (BUSY.has(state)) reportCost(null);
+
+        // A finished run whose task carries a recorded time says how fast
+        // this browser is, which is what scales the next task's estimate.
+        if (state === 'done') rememberSpeed(detail?.ran, program?.runMs);
 
         // The spinner follows the run itself: shown from the first busy state
         // to the terminal one, so it rides after output that has already been
