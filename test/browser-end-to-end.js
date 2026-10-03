@@ -706,7 +706,10 @@ chrome.on('error', e => {
     intercepted.set(`${TASKS}tasks/reads-files/playground-files`, '../../data/words.txt\nnotes.txt\n');
     intercepted.set(`${TASKS}data/words.txt`, 'alpha\nbeta\n');
     intercepted.set(`${TASKS}tasks/reads-files/notes.txt`, 'from the notes');
-    intercepted.set(`${TASKS}tasks/reads-files/task.json`, '{ "task": "Reads files" }');
+    // Carries a recorded wait before the program's first line, as the tasks
+    // measured as slow do, so the run below can check the page says so.
+    intercepted.set(`${TASKS}tasks/reads-files/task.json`,
+        '{ "task": "Reads files", "first_output_ms": 5000 }');
 
     // The analytics counter, replaced by one that records what it is asked
     // to count, so the run events can be checked without a GoatCounter. It
@@ -753,11 +756,21 @@ chrome.on('error', e => {
     // Run twice: the program overwrites one of its inputs, and the second run
     // has to be handed the original again. The first run is the one the page
     // starts itself on arrival.
+    let waitNoteSeen = false;
+    let waitNoteText = '';
+
     for (const attempt of ['first', 'second']) {
         if (attempt === 'second') await ev(`document.getElementById('run').click(); true`);
 
         let read = '';
         for (let i = 0; i < 180; i++) {
+            const note = await ev(`document.querySelector('#output .note')?.textContent`);
+
+            if (note) {
+                waitNoteSeen = true;
+                waitNoteText = note;
+            }
+
             read = await ev(`document.getElementById('output').innerText`) ?? '';
             if (read.includes('from the notes') || read.includes('unhandled')) break;
             await sleep(500);
@@ -771,6 +784,15 @@ chrome.on('error', e => {
             await sleep(500);
         }
     }
+
+    // The recorded wait is said beside the spinner while the program has yet
+    // to print, and only there: once its output arrives the pane is the
+    // program's again.
+    check('a recorded wait is said while the program is silent',
+        waitNoteSeen && waitNoteText.includes('works silently') && waitNoteText.includes('seconds'),
+        JSON.stringify(waitNoteText.trim()));
+    check('and stops being said once the program has printed',
+        !(await ev(`Boolean(document.querySelector('#output .note'))`)));
 
     const about = await ev(`(() => { const a = document.getElementById('task-identity');
                  return a.offsetParent !== null ? a.innerText : null; })()`);

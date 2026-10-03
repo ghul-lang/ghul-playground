@@ -163,17 +163,30 @@ export async function loadProgram(request, fetchImpl = fetch) {
     }
 
     // Only a label, so a task.json that is missing or unreadable costs the
-    // title and nothing else.
-    const title = about.ok ? await about.json().then(a => a.task, () => null) : null;
+    // title and nothing else. The timings it may carry are the same file's:
+    // how long the task's program waits before its first line of output and
+    // how long it runs, measured on the machine that tests the tasks, for the
+    // page to scale by the browser's own speed.
+    const aboutJson = about.ok ? await about.json().catch(() => null) : null;
+
+    const timing = name => {
+        const ms = Number(aboutJson?.[name]);
+
+        return Number.isFinite(ms) && ms > 0 ? ms : null;
+    };
 
     return {
-        title: typeof title === 'string' ? title : request.title ?? null,
+        title: aboutJson && typeof aboutJson.task === 'string'
+            ? aboutJson.task
+            : request.title ?? null,
         source: await source.text(),
         unsupported: unsupported.ok ? (await unsupported.text()).trim() : null,
         files,
         // The arguments the task is run with, as its own run.args gives them:
         // one a line. A task that takes none has no such file, and gets none.
         arguments: runArgs.ok ? argumentsFromFile(await runArgs.text()) : [],
+        firstOutputMs: timing('first_output_ms'),
+        runMs: timing('run_ms'),
         ...(error ? { error } : {})
     };
 }
