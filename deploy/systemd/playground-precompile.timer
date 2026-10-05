@@ -1,0 +1,14 @@
+# The result cache is a tmpfs inside the compile container, emptied whenever
+# the container restarts: after a reboot, and when a deploy replaces it. A
+# deploy starts the service itself; this covers the rest.
+[Unit]
+Description=Refill the playground's result cache after a restart, and daily
+
+[Timer]
+OnBootSec=10min
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

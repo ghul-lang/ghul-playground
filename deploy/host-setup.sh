@@ -72,7 +72,8 @@ apt-get install -y -qq --no-install-recommends \
     nginx libnginx-mod-http-brotli-static certbot python3-certbot-nginx \
     docker.io docker-compose-v2 \
     iptables-persistent netfilter-persistent \
-    chrony unattended-upgrades rsync
+    chrony unattended-upgrades rsync \
+    git jq curl
 
 say "ssh"
 
@@ -278,6 +279,16 @@ APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 CONF
 install -m 644 "$tmpdir/20auto-upgrades" /etc/apt/apt.conf.d/20auto-upgrades
+
+say "pre-compile job"
+
+# Fills the compile service's result cache after a restart and daily. The
+# unit runs deploy/precompile.sh from the checkout as the deploy user; a deploy
+# starts the script itself, so the timer covers reboots and the days between.
+install -m 644 "$here/systemd/playground-precompile.service" \
+    "$here/systemd/playground-precompile.timer" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now playground-precompile.timer > /dev/null
 
 say "root password"
 

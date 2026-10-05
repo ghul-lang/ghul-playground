@@ -1,0 +1,12 @@
+# Fills the compile service's result cache with every program a ghul.dev page
+# offers to run. See deploy/precompile.sh.
+[Unit]
+Description=Pre-compile the ghul.dev programs into the playground's result cache
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Nice=10
+ExecStart=/opt/ghul-playground/deploy/precompile.sh
