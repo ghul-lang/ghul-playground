@@ -73,30 +73,33 @@ services:
       COMPILE_TIMEOUT_MS: "10000"
       # The cells of an interactive session: off unless REPL_ENABLED is 1 in
       # the environment, in which case /compile/cell exists at all. Its cache
-      # of built cell assemblies is the `cells` volume below.
+      # of built cell assemblies is the `cell-cache` volume below.
       REPL_ENABLED: "${REPL_ENABLED:-}"
       MAX_CELLS: "50"
       MAX_CHAIN_BYTES: "262144"
-      CELL_CACHE_DIR: "/cells"
+      CELL_CACHE_DIR: "/home/playground/cells"
       CELL_CACHE_BYTES: "67108864"
-      # Compiled results, kept in /tmp below. The tmpfs is sized for this much
-      # cache plus room for the compiles themselves, which write there too: a
-      # cache allowed to fill the tmpfs leaves no compile anywhere to write.
-      RESULT_CACHE_BYTES: "134217728"
+      # Compiled results, kept on the `results` volume below. It is on disk so
+      # that it costs no memory and survives the restart every deploy does;
+      # this cap is what keeps it bounded.
+      RESULT_CACHE_DIR: "/home/playground/results"
+      RESULT_CACHE_BYTES: "536870912"
 
     # Bound to loopback: these sit behind a reverse proxy that terminates TLS,
     # rather than facing the internet themselves.
     ports:
       - "127.0.0.1:5090:5090"
 
-    # The compiler writes its output next to the source it was given, and the
-    # result cache lives here too: 128 MB of cache, and 64 MB for the compiles
-    # in flight.
+    # The compiler writes its output next to the source it was given, and
+    # nothing else is written here: a directory per compile in flight, removed
+    # when it answers, and the runtime's diagnostic pipes. Anything that
+    # accumulates belongs on a volume, since a tmpfs is memory.
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=192m
+      - /tmp:rw,noexec,nosuid,size=64m
 
     volumes:
-      - cells:/cells
+      - results:/home/playground/results
+      - cell-cache:/home/playground/cells
 
     # A compile of a single file peaks under 200 MB measured; the cap is here so
     # a runaway allocation fails rather than taking the host down.
@@ -148,15 +151,16 @@ services:
       # compile service's cache, which it cannot write.
       REPL_ENABLED: "${REPL_ENABLED:-}"
       MAX_CELLS: "50"
-      CELL_CACHE_DIR: "/cells"
+      CELL_CACHE_DIR: "/home/playground/cells"
 
     # Each session gets its own workspace directory here, and the analyser
-    # writes the document to it.
+    # writes the document to it: a few kilobytes a session, removed when the
+    # session ends.
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
+      - /tmp:rw,noexec,nosuid,size=32m
 
     volumes:
-      - cells:/cells:ro
+      - cell-cache:/home/playground/cells:ro
 
     # Well above what the sessions above can hold - a measured analyser is
     # around 90 MB, so a full house is under 3 GB. The limit is here to make a
@@ -190,10 +194,10 @@ services:
     volumes:
       - goatcounter-data:/home/goatcounter/goatcounter-data
 
-    # CSV exports are written to TMPDIR. Small, and nothing else needs scratch
-    # space, so this is well clear of what it will ever hold.
+    # CSV exports are written to TMPDIR, a few hundred kilobytes at this site's
+    # volume, and nothing else needs scratch space.
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m
+      - /tmp:rw,noexec,nosuid,size=16m
 
     # An order of magnitude below the other two. It serves a dashboard and
     # appends rows; the work is neither CPU- nor memory-shaped, and on SQLite
@@ -398,20 +402,22 @@ services:
     cpus: 1.0
     pids_limit: 128
 
-# Analytics history. Nothing else on this host is stateful, and this is
-# deliberately a named volume rather than a bind mount so that a stray
-# `docker compose down -v` is the only way to lose it by accident.
+# A tmpfs is memory, so nothing that accumulates is kept on one: the two caches
+# below are on disk, bounded by their own byte caps, and the tmpfs mounts above
+# hold only what a request in flight writes.
 volumes:
-  # The compile service's cache of built session cells: tmpfs, since it is a
-  # cache and a restart losing it costs a recompile, and a volume rather than
-  # a per-container tmpfs so that the analyse service can read it. Room for
-  # the 64 MB cache with headroom for writes in flight.
-  cells:
-    driver_opts:
-      type: tmpfs
-      device: tmpfs
-      o: "size=72m,mode=1777,noexec,nosuid"
+  # The compile service's cache of built session cells, a volume so that the
+  # analyse service can read it. Bounded by CELL_CACHE_BYTES.
+  cell-cache:
 
+  # The compile service's cache of compiled programs, filled by
+  # deploy/precompile.sh. Bounded by RESULT_CACHE_BYTES; losing it costs only
+  # recompiles.
+  results:
+
+  # Analytics history, the one thing on this host that cannot be rebuilt.
+  # Deliberately a named volume rather than a bind mount, so that a stray
+  # `docker compose down -v` is the only way to lose it by accident.
   goatcounter-data:
 
   # Rebuilt from goatcounter-data every few minutes, so losing it costs one

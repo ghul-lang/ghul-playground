@@ -152,7 +152,7 @@ session has accepted, in order, with the new cell last, so only source ever
 reaches the service, as for a whole program. The reply is the new cell's
 assembly.
 
-The service keeps the cell assemblies it builds in a cache on a tmpfs, keyed by
+The service keeps the cell assemblies it builds in a cache on a disk volume, keyed by
 a hash it computes over the toolchain and the ordered chain of cells up to and
 including each one, and evicts the least recently used past 64 MB. A request
 whose earlier cells are all cached compiles one cell; any that are missing are

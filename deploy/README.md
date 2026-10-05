@@ -679,8 +679,10 @@ raw.githubusercontent.com serves it, and each ghul.dev example's `fullSource`.
 Those are the bytes a page posts unedited, so the reader who first presses Run
 on one gets a cached answer. An edited program misses and compiles as before.
 
-The cache is a tmpfs inside the compile container, so a container restart
-empties it. The deploy workflow starts the script detached after it swaps the
+The cache is the `results` volume, on disk and capped by `RESULT_CACHE_BYTES`,
+so it survives the restart a deploy does; entries are keyed by the toolchain,
+so a deploy that changes the compiler or the libraries leaves the old ones to
+be evicted rather than served. The deploy workflow starts the script detached after it swaps the
 services (log in `~deploy/precompile.log`), and
 `deploy/systemd/playground-precompile.timer`, which host-setup.sh installs,
 runs it ten minutes after boot and daily. A full run is about 1,800 programs
