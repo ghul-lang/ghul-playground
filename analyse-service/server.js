@@ -21,6 +21,7 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 
 const { resolveCompiler, resolveReferencePaths } = require('../shared/toolchain');
+const { resolveWasmLibraries } = require('../shared/wasm-libraries');
 const { Analyser } = require('./analyser');
 const { MAX_SOURCE_BYTES } = require('../shared/limits');
 const origins = require('../shared/origins');
@@ -100,6 +101,10 @@ let references = null;
 // is left to hunt for - see createWorkspace.
 let compiler = null;
 
+// The library sources a wasm analyser reads in place of the reference
+// assemblies, or null where the image has none and every session is .NET.
+let wasm = null;
+
 // --- the pool -------------------------------------------------------------
 
 const idle = [];
@@ -151,8 +156,10 @@ function replenish() {
 
 // An analyser started for one client, with nothing warmed in advance, or null
 // if it would not start.
-async function startCold(otherFlags = []) {
-    const analyser = new Analyser({ command: SERVER_COMMAND, compiler, references, log, otherFlags });
+async function startCold(otherFlags = [], withReferences = references) {
+    const analyser = new Analyser({
+        command: SERVER_COMMAND, compiler, references: withReferences, log, otherFlags
+    });
 
     try {
         await analyser.start();
@@ -324,6 +331,14 @@ class Session {
                 waiter(message);
                 return;
             }
+        }
+
+        // A wasm analyser also reports on the library sources it was started
+        // with, which live outside the session's workspace. The reader has no
+        // document for them, and passing them on would hand the browser the
+        // server's own paths.
+        if (body.includes('"textDocument/publishDiagnostics"') && !body.includes(this.analyser.realRoot)) {
+            return;
         }
 
         if (this.socket.readyState === this.socket.OPEN) {
@@ -518,6 +533,20 @@ function isRepl(request) {
     return new URL(request.url, 'http://localhost').searchParams.has('repl');
 }
 
+// A connection asking for its program to be analysed as the wasm target would
+// compile it. Honoured only where the image carries the library sources; an
+// analyser for .NET answers otherwise, as every one did before.
+function isWasm(request) {
+    return wasm !== null &&
+        new URL(request.url, 'http://localhost').searchParams.get('target') === 'wasm';
+}
+
+// What a wasm analyser is started with: the target, and the library sources
+// named on its command line in place of reference assemblies, exactly as the
+// compile service compiles for wasm. Started for the client rather than taken
+// from the pool, like a REPL session's: about two seconds to a first answer.
+const wasmFlags = () => ['--target', 'wasm', ...wasm.args];
+
 // A browser cannot set headers on a WebSocket, so the token arrives as a
 // subprotocol rather than a query parameter, which keeps it out of access logs.
 //
@@ -597,6 +626,13 @@ wss.on('connection', async (socket, request) => {
         return;
     }
 
+    // A client speaks as soon as the socket opens, and an analyser started
+    // cold takes seconds to arrive, so what it says meanwhile is kept for the
+    // session rather than dropped.
+    const early = [];
+    const keep = data => early.push(data);
+    socket.on('message', keep);
+
     // Hold the slot while acquiring, so two connections arriving together
     // cannot both pass the checks above. It counts against the address and is
     // never evicted, since nobody has used it yet.
@@ -609,7 +645,9 @@ wss.on('connection', async (socket, request) => {
     // analysers do not, so it is started for the client.
     let analyser;
     try {
-        analyser = repl ? await startCold(REPL_FLAGS) : await acquire();
+        analyser = repl ? await startCold(REPL_FLAGS)
+            : isWasm(request) ? await startCold(wasmFlags(), [])
+                : await acquire();
     } finally {
         sessions.delete(placeholder);
     }
@@ -629,10 +667,13 @@ wss.on('connection', async (socket, request) => {
     session.log(`${repl ? 'REPL: ' : ''}took analyser ${analyser.id} (${analyser.warm ? 'warm' : 'cold'}), ` +
         `pool now ${JSON.stringify(poolState())}`);
 
+    socket.off('message', keep);
     socket.on('message', data => {
         session.touch();
         session.fromClient(data.toString());
     });
+
+    for (const data of early) session.fromClient(data.toString());
 
     socket.on('close', () => session.close('client disconnected'));
     socket.on('error', () => session.close('socket error'));
@@ -641,9 +682,13 @@ wss.on('connection', async (socket, request) => {
 (async () => {
     references = await resolveReferencePaths();
     compiler = `dotnet ${await resolveCompiler()}`;
+    wasm = await resolveWasmLibraries();
 
     log(`references: ${references.length}`);
     log(`compiler: ${compiler}`);
+    log(wasm
+        ? `wasm: ${wasm.libraries.map(l => `${l.name}@${l.version}, ${l.files.length} files`).join('; ')}`
+        : 'wasm: off, no library sources configured');
 
     server.listen(PORT, HOST, () => {
         log(`analyse service on ws://${HOST}:${PORT}/analyse ` +

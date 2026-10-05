@@ -441,12 +441,13 @@ export async function createPlayground({
 
     async function reportTargets() {
         const supported = await wasmAvailable();
+        const effective = wasmCapable && supported ? target : 'dotnet';
 
-        onTargets({
-            capable: wasmCapable,
-            supported,
-            target: wasmCapable && supported ? target : 'dotnet'
-        });
+        // The analyser describes the program as the target it will run on
+        // compiles it, so a change of target is a change of session.
+        client.setUrl(effective === 'wasm' ? `${ANALYSE_SERVICE}?target=wasm` : ANALYSE_SERVICE);
+
+        onTargets({ capable: wasmCapable, supported, target: effective });
     }
 
     // A program known to run on wasm starts out on wasm, and one that is not

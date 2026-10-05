@@ -165,6 +165,16 @@ export class GhulLanguageClient {
         this.connect();
     }
 
+    // Moves the session to another address - the same service asked for an
+    // analyser of another target - dropping the current one, whose answers
+    // describe what the program means on the target it was opened for.
+    setUrl(url) {
+        if (url === this.url) return;
+
+        this.url = url;
+        this.reconnect();
+    }
+
     connect() {
         if (this.disposed) return;
 
