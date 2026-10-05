@@ -8,5 +8,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=deploy
+Environment=PRECOMPILE_TARGETS=dotnet,wasm
 Nice=10
 ExecStart=/opt/ghul-playground/deploy/precompile.sh
