@@ -53,6 +53,16 @@ fetch() {
 }
 
 mkdir -p "$work"
+
+# One run at a time: a second, from the timer firing while a deploy's run is
+# under way, would re-clone the checkouts the first is reading from.
+exec 9> "$work.lock"
+
+if ! flock -n 9; then
+    echo "another pre-compile run is under way" >&2
+    exit 0
+fi
+
 fetch ghul-rosetta-code
 fetch ghul-examples
 fetch ghul-dev
