@@ -105,7 +105,14 @@ export function runWasm({ module, loader, args = [], onOutput = () => { }, onInp
 
     return {
         done,
-        send: line => answer(`${line}\n`),
+        // What was typed is echoed into the transcript, where a terminal
+        // would have shown it, as the .NET runner does.
+        send: line => {
+            if (!waiting) return;
+
+            append(`${line}\n`);
+            answer(`${line}\n`);
+        },
         end: () => answer(null),
         stop: () => finish({ code: null, stopped: true }),
         get waiting() { return waiting; }
