@@ -79,15 +79,21 @@ services:
       MAX_CHAIN_BYTES: "262144"
       CELL_CACHE_DIR: "/cells"
       CELL_CACHE_BYTES: "67108864"
+      # Compiled results, kept in /tmp below. The tmpfs is sized for this much
+      # cache plus room for the compiles themselves, which write there too: a
+      # cache allowed to fill the tmpfs leaves no compile anywhere to write.
+      RESULT_CACHE_BYTES: "134217728"
 
     # Bound to loopback: these sit behind a reverse proxy that terminates TLS,
     # rather than facing the internet themselves.
     ports:
       - "127.0.0.1:5090:5090"
 
-    # The compiler writes its output next to the source it was given.
+    # The compiler writes its output next to the source it was given, and the
+    # result cache lives here too: 128 MB of cache, and 64 MB for the compiles
+    # in flight.
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
+      - /tmp:rw,noexec,nosuid,size=192m
 
     volumes:
       - cells:/cells
