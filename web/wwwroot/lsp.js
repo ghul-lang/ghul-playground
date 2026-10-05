@@ -104,6 +104,10 @@ export class GhulLanguageClient {
         this.retryTimer = null;
         this.hiddenTimer = null;
 
+        // Set when the page is shown again before the close that gave its
+        // session back has arrived.
+        this.wakeOnClose = false;
+
         // Set while a connect is waiting for the page to have a reader.
         this.waitingForReader = false;
 
@@ -117,7 +121,32 @@ export class GhulLanguageClient {
             }
         };
 
+        // A page the reader leaves can be kept whole in the browser's
+        // back/forward cache, socket and all, so leaving gives the session
+        // back at once rather than holding it until the cache drops the
+        // page. Coming back to it reconnects.
+        this.onPageHide = () => {
+            clearTimeout(this.hiddenTimer);
+            this.release();
+        };
+
+        // The socket closed on leaving may not have reported its close by
+        // the time the page is shown again, and the close would then put a
+        // page somebody is reading to sleep. Reconnecting is left to the
+        // close in that case.
+        this.onPageShow = event => {
+            if (!event.persisted) return;
+
+            if (this.releasing) {
+                this.wakeOnClose = true;
+            } else {
+                this.wake();
+            }
+        };
+
         document.addEventListener('visibilitychange', this.onVisibility);
+        window.addEventListener('pagehide', this.onPageHide);
+        window.addEventListener('pageshow', this.onPageShow);
     }
 
     // Whether queries are worth making. Callers use this to decide between
@@ -136,6 +165,8 @@ export class GhulLanguageClient {
         clearTimeout(this.retryTimer);
         clearTimeout(this.hiddenTimer);
         document.removeEventListener('visibilitychange', this.onVisibility);
+        window.removeEventListener('pagehide', this.onPageHide);
+        window.removeEventListener('pageshow', this.onPageShow);
         this.socket?.close();
     }
 
@@ -258,6 +289,12 @@ export class GhulLanguageClient {
             // which reads as a hung client rather than an absent server.
             if (this.dormant) {
                 this.onStatus('dormant');
+
+                if (this.wakeOnClose) {
+                    this.wakeOnClose = false;
+                    this.wake();
+                }
+
                 return;
             }
 

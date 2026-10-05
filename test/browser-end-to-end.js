@@ -647,6 +647,30 @@ chrome.on('error', e => {
     }
     check('and takes one again when it is looked at', resumed === 'ready', resumed);
 
+    // A page the reader leaves can be kept whole in the back/forward cache,
+    // its socket still open, so leaving gives the session back straight
+    // away rather than after the hidden page's grace period. The events are
+    // the ones the browser sends on leaving and on coming back.
+    await ev(`window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })); true`);
+
+    let left = '';
+    for (let i = 0; i < 10; i++) {
+        left = await analyserState();
+        if (left === 'dormant') break;
+        await sleep(200);
+    }
+    check('leaving the page gives its analyser session back at once', left === 'dormant', left);
+
+    await ev(`window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); true`);
+
+    let returned = '';
+    for (let i = 0; i < 90; i++) {
+        returned = await analyserState();
+        if (returned === 'ready') break;
+        await sleep(500);
+    }
+    check('and coming back to it takes one again', returned === 'ready', returned);
+
     // A program opened by path is fetched from its collection into the editor,
     // which exercises the path fallback, the <base> the page's own assets are
     // resolved against, and the cross-origin fetch.
