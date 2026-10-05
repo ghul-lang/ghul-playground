@@ -90,7 +90,8 @@ try {
         globalThis.self = globalThis;
         globalThis.postMessage = message => parentPort.postMessage(message);
         parentPort.on('message', data => self.onmessage({ data }));
-        await import(${JSON.stringify(workerScript)});
+        const { wasmWorker } = await import(${JSON.stringify(workerScript)});
+        wasmWorker();
         parentPort.postMessage({ type: 'loaded' });
     `;
 

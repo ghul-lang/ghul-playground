@@ -5,6 +5,17 @@
 
 import { inputBuffer, supplyInput } from './wasm-input.js';
 import { unhandledException } from './wasm-support.js';
+import { wasmWorker } from './wasm-worker.js';
+
+// The worker's script, made once from the function's own source. See
+// wasm-worker.js for why it is a blob rather than the file.
+let workerUrl = null;
+
+function workerScript() {
+    workerUrl ??= URL.createObjectURL(new Blob([`(${wasmWorker.toString()})();\n`], { type: 'text/javascript' }));
+
+    return workerUrl;
+}
 
 // As much output as the .NET runner keeps, so a program that prints without
 // end is cut off at the same point on either target.
@@ -20,7 +31,7 @@ const base64Bytes = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
 // the program ends or is stopped, `send(line)` and `end()` answer a program
 // waiting for input, and `stop()` ends it.
 export function runWasm({ module, loader, args = [], onOutput = () => { }, onInput = () => { } }) {
-    const worker = new Worker(new URL('./wasm-worker.js', import.meta.url), { type: 'module' });
+    const worker = new Worker(workerScript());
     const input = inputBuffer();
 
     let text = '';
