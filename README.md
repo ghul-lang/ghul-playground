@@ -133,6 +133,7 @@ services directly when run outside it. None of these is set for local use.
 | `ALLOWED_ORIGINS` | the sites that may drive the services from a browser; unset, any |
 | `MAX_CONCURRENT_COMPILES`, `MAX_QUEUED_COMPILES`, `COMPILE_TIMEOUT_MS` | compile service caps |
 | `REPL_ENABLED`, `MAX_CELLS`, `MAX_CHAIN_BYTES`, `CELL_CACHE_DIR`, `CELL_CACHE_BYTES`, `CELL_TOOLCHAIN_SALT` | session cells: off unless `REPL_ENABLED` is 1; see docs/design.md. The analyse service reads `REPL_ENABLED`, `MAX_CELLS` and `CELL_CACHE_DIR` too, and has to be given the directory the compile service writes |
+| `GHUL_CORE_DIR`, `GHUL_CORE_VERSION`, `GHUL_RUNTIME_SOURCE_DIR`, `GHUL_RUNTIME_SOURCE_VERSION` | the ghul-core and ghul-runtime sources a `"target": "wasm"` compile builds against; unset, the compile service offers only .NET. The image sets them, at the tags `scripts/check-wasm-pins.js` checks against ghul-cli's pins |
 | `MAX_SESSIONS`, `POOL_SIZE`, `IDLE_TIMEOUT_MS`, `MAX_SESSION_MS` | analyse service caps |
 
 The reference assemblies user code can name are listed in
@@ -243,8 +244,9 @@ one either way.
 | `web/wwwroot/files.js` | opening and saving a `.ghul` file, and saving a drawing |
 | `web/wwwroot/live-output.js` | the program's output as the page shows it: image markers turned into pictures as they arrive |
 | `analyse-service/` | a WebSocket in front of one language server per editor |
-| `compile-service/` | compiles posted source, returns an assembly |
+| `compile-service/` | compiles posted source, returns an assembly, or a WebAssembly module and its loader when the request asks for `"target": "wasm"` |
 | `shared/toolchain.js` | where the toolchain is, and the reference set |
+| `shared/wasm-libraries.js` | the library sources a wasm compile builds against |
 | `runner/` | the host, in ghūl: load, run, capture the output |
 | `examples/` | small programs used to check the host by hand |
 | `deploy/` | host setup and the nginx configuration |
