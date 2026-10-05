@@ -16,7 +16,7 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 
-ARG GHUL_LANGUAGE_SERVER_VERSION=1.31.5
+ARG GHUL_LANGUAGE_SERVER_VERSION=1.31.7
 
 # Not published to npm; it ships as an asset on the extension's releases.
 RUN npm install -g --no-audit --no-fund \
