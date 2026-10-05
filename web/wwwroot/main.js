@@ -27,6 +27,11 @@ const count = (what, detail) => countEvent(`mini-ide-${what}/${HOST}${detail ? `
 countErrors(`mini-ide-error/${HOST}`, countEvent);
 
 const runButton = document.getElementById('run');
+const targetChoice = document.getElementById('target');
+
+// `?wasm` in the address offers wasm for whatever is in the editor, so a
+// program the index does not list yet can be tried on it.
+const WASM_REQUESTED = new URLSearchParams(location.search).has('wasm');
 const argumentsRow = document.getElementById('arguments-row');
 const argumentsInput = document.getElementById('arguments');
 const runLabel = document.getElementById('run-label');
@@ -64,7 +69,7 @@ const runCost = document.getElementById('run-cost');
 
 function reportCost(detail) {
     runCost.textContent = detail
-        ? `compiled in ${detail.compiled} ms \u00b7 ran in ${detail.ran} ms`
+        ? `compiled in ${detail.compiled} ms \u00b7 ran in ${detail.ran} ms${detail.target === 'wasm' ? ' on wasm' : ''}`
         : '';
 }
 
@@ -604,6 +609,17 @@ const playground = await createPlayground({
 
     onImages: showImages,
 
+    // The wasm/.NET choice is offered only for a program known to run on wasm,
+    // in a browser that can run it; everywhere else the program runs on .NET
+    // and there is nothing to choose.
+    onTargets: ({ capable, supported, target }) => {
+        targetChoice.hidden = !(capable && supported);
+
+        for (const button of targetChoice.querySelectorAll('button')) {
+            button.setAttribute('aria-pressed', String(button.dataset.target === target));
+        }
+    },
+
     onDiagnostics: list => {
         problemCount.hidden = list.length === 0;
         problemCount.textContent = String(list.length);
@@ -715,6 +731,15 @@ const playground = await createPlayground({
         analyserText.textContent = label;
     }
 });
+
+playground.setWasmCapable(WASM_REQUESTED || program?.wasm === true);
+
+for (const button of targetChoice.querySelectorAll('button')) {
+    button.addEventListener('click', () => {
+        playground.setTarget(button.dataset.target);
+        count('target', button.dataset.target);
+    });
+}
 
 // The source as the program gave it, so a swap can tell a reader who has
 // changed something from one who has only read it. Reset by every load, and by
@@ -982,6 +1007,7 @@ async function swapTo(name, { counted = null, push = true } = {}) {
     provenance = next;
 
     playground.setFiles(loaded.files);
+    playground.setWasmCapable(WASM_REQUESTED || loaded.wasm === true);
 
     // Recorded before the buffer is written, because writing it runs the
     // change handler, which has to be able to tell this from an edit.

@@ -50,6 +50,7 @@ function post(type, payload = {}) {
 }
 
 const container = document.getElementById('editor');
+const targetChoice = document.getElementById('target');
 
 let playground = null;
 let lastHeight = 0;
@@ -91,6 +92,7 @@ window.addEventListener('message', async event => {
     if (message.type === 'init') {
         if (playground) {
             playground.setSource(message.source ?? DEFAULT_SOURCE);
+            playground.setWasmCapable(message.wasm === true);
             if (message.theme) playground.setTheme(message.theme);
             reportHeight();
             return;
@@ -128,8 +130,27 @@ window.addEventListener('message', async event => {
             onImages: list => post('images', { images: list }),
             onDiagnostics: list => post('diagnostics', { diagnostics: list }),
             onStatus: (state, detail) => post('status', { state, detail: detail ?? null }),
-            onAnalyser: state => post('analyser', { state })
+            onAnalyser: state => post('analyser', { state }),
+
+            // The wasm/.NET choice, offered only for a program the page says
+            // runs on wasm, in a browser that can run it. The page is told
+            // too, in case it would rather offer the choice itself.
+            onTargets: ({ capable, supported, target }) => {
+                targetChoice.hidden = !(capable && supported);
+
+                for (const button of targetChoice.querySelectorAll('button')) {
+                    button.setAttribute('aria-pressed', String(button.dataset.target === target));
+                }
+
+                post('targets', { capable, supported, target });
+            }
         });
+
+        for (const button of targetChoice.querySelectorAll('button')) {
+            button.addEventListener('click', () => playground.setTarget(button.dataset.target));
+        }
+
+        playground.setWasmCapable(message.wasm === true);
 
         playground.editor.onDidContentSizeChange(reportHeight);
 
@@ -168,6 +189,7 @@ window.addEventListener('message', async event => {
 
     if (message.type === 'source') {
         playground.setSource(message.source ?? '');
+        if ('wasm' in message) playground.setWasmCapable(message.wasm === true);
         reportHeight();
         return;
     }

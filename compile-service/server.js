@@ -448,6 +448,23 @@ http.createServer((request, response) => {
         return;
     }
 
+    // The targets a compile can ask for, answered on the very path the page
+    // compiles through, which every proxy in front of this service already
+    // forwards: the page's own /health is the analyse service's, which cannot
+    // say what this service builds.
+    const route = request.url.split('?')[0];
+
+    if (request.method === 'GET' && route === '/compile') {
+        getToolchain().then(({ wasm }) => {
+            response.writeHead(200, { 'content-type': 'application/json' });
+            response.end(JSON.stringify({ targets: wasm ? ['dotnet', 'wasm'] : ['dotnet'] }));
+        }, () => {
+            response.writeHead(200, { 'content-type': 'application/json' });
+            response.end(JSON.stringify({ targets: [] }));
+        });
+        return;
+    }
+
     const isCell = request.method === 'POST' && request.url.startsWith('/compile/cell');
 
     // Off unless enabled, and off means absent rather than refused.

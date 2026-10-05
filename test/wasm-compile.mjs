@@ -76,6 +76,11 @@ try {
     check('health lists the wasm target', health.targets?.includes('wasm'),
         JSON.stringify(health.targets));
 
+    // What the page asks, on the path it compiles through.
+    const offered = await (await fetch(`http://127.0.0.1:${PORT}/compile`)).json();
+    check('a GET of the compile path lists the wasm target', offered.targets?.includes('wasm'),
+        JSON.stringify(offered));
+
     const wasm = await post({ source: HELLO, target: 'wasm' });
     const module = Buffer.from(wasm.result.module ?? '', 'base64');
 

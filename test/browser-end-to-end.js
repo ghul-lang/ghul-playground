@@ -1927,6 +1927,136 @@ chrome.on('error', e => {
         }
     }
 
+    // The wasm target. `?wasm` offers it for whatever is in the editor, which
+    // is what a program flagged in the corpus index gets. A browser without
+    // the features a wasm build needs is offered nothing and runs on .NET, so
+    // there the checks are skipped rather than failed.
+    await cmd('Page.navigate', { url: untracked(new URL('?wasm', BASE)) });
+
+    for (let i = 0; i < 120; i++) {
+        if (await ev(`document.getElementById('compiler')?.dataset.state === 'ready'`)) break;
+        await sleep(500);
+    }
+
+    const wasmSupported = await ev(`(async () => (await import('./playground.js')).wasmAvailable())()`);
+    const choiceShowing = () => ev(`(() => { const t = document.getElementById('target');
+                 return Boolean(t) && t.offsetParent !== null; })()`);
+
+    if (!wasmSupported) {
+        log('skip  wasm: this browser or compile service cannot run a wasm build');
+        check('no wasm/.NET choice where wasm cannot run', !(await choiceShowing()));
+    } else {
+        check('the wasm/.NET choice is offered', await choiceShowing());
+        check('wasm is chosen by default',
+            await ev(`document.querySelector('#target [data-target="wasm"]').getAttribute('aria-pressed') === 'true'`));
+
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(reading)}); true`);
+        await sleep(1000);
+        await ev(`document.getElementById('run').click(); true`);
+
+        let wasmAsked = false;
+        for (let i = 0; i < 180; i++) {
+            wasmAsked = await boxShowing();
+            if (wasmAsked) break;
+            await sleep(500);
+        }
+        check('a wasm program that reads asks for a line', wasmAsked);
+
+        await ev(`(() => {
+            document.getElementById('stdin').value = 'world';
+            document.getElementById('input-row')
+                .dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+            return true;
+        })()`);
+
+        let wasmAnswered = '';
+        for (let i = 0; i < 120; i++) {
+            wasmAnswered = await ev(`document.getElementById('output').innerText`);
+            if (wasmAnswered.includes('hello, world')) break;
+            await sleep(500);
+        }
+        check('a wasm program reads the typed line', wasmAnswered.includes('hello, world'),
+            JSON.stringify(wasmAnswered.trim()));
+        check('and echoes it into the transcript', /^world$/m.test(wasmAnswered));
+
+        let cost = '';
+        for (let i = 0; i < 40; i++) {
+            cost = await ev(`document.getElementById('run-cost').textContent`);
+            if (cost) break;
+            await sleep(250);
+        }
+        check('the run says it ran on wasm', cost.includes('on wasm'), JSON.stringify(cost));
+
+        // A program that never ends. Stopping a .NET one means reloading the
+        // page; a wasm one is in a worker the page can terminate.
+        const endless = ['use IO.Std.write_line;', '', 'entry() is', '    let i mut = 0;',
+            '    while true do', '        i = i + 1;', '    od', 'si', ''].join('\n');
+
+        await ev(`window.notReloaded = true; monaco.editor.getModels()[0].setValue(${JSON.stringify(endless)}); true`);
+        await sleep(1000);
+        await ev(`document.getElementById('run').click(); true`);
+
+        for (let i = 0; i < 120; i++) {
+            if (await ev(`document.getElementById('run-label').textContent === 'Stop'`)) break;
+            await sleep(500);
+        }
+
+        await sleep(1000);
+        await ev(`document.getElementById('run').click(); true`);
+
+        let stopped = false;
+        for (let i = 0; i < 40; i++) {
+            stopped = await ev(`window.notReloaded === true && document.getElementById('run-label').textContent === 'Run'`);
+            if (stopped) break;
+            await sleep(250);
+        }
+        check('Stop ends a busy wasm program without reloading the page', stopped);
+
+        // Something the wasm target cannot compile runs on .NET instead.
+        const usesDecimal = ['use IO.Std.write_line;', '', 'entry() is',
+            '    write_line("{1.5m + 2.25m}");', 'si', ''].join('\n');
+
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(usesDecimal)}); true`);
+        await sleep(1000);
+        await ev(`document.getElementById('run').click(); true`);
+
+        let fellBack = '';
+        for (let i = 0; i < 180; i++) {
+            fellBack = await ev(`document.getElementById('output').innerText`);
+            if (fellBack.includes('3.75')) break;
+            await sleep(500);
+        }
+        check('a program wasm cannot compile runs on .NET, with a note',
+            fellBack.includes('3.75') && fellBack.includes('ran on .NET'), JSON.stringify(fellBack.trim()));
+
+        // Chosen .NET, a program that would run on wasm runs on .NET.
+        await ev(`document.querySelector('#target [data-target="dotnet"]').click(); true`);
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(reading)}); true`);
+        await sleep(1000);
+        await ev(`document.getElementById('run').click(); true`);
+
+        for (let i = 0; i < 180; i++) {
+            if (await boxShowing()) break;
+            await sleep(500);
+        }
+
+        await ev(`(() => {
+            document.getElementById('stdin').value = 'world';
+            document.getElementById('input-row')
+                .dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+            return true;
+        })()`);
+
+        let dotnetCost = '';
+        for (let i = 0; i < 120; i++) {
+            dotnetCost = await ev(`document.getElementById('run-cost').textContent`);
+            if (dotnetCost && (await ev(`document.getElementById('output').innerText`)).includes('hello, world')) break;
+            await sleep(500);
+        }
+        check('choosing .NET runs on .NET', dotnetCost && !dotnetCost.includes('on wasm'),
+            JSON.stringify(dotnetCost));
+    }
+
     log(failures ? `${failures} failure(s)` : 'all checks passed');
     process.exit(failures ? 1 : 0);
 })();

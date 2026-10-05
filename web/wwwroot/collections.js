@@ -14,6 +14,10 @@ import { argumentsFromFile } from './arguments.js'
 export const ROSETTA_CODE_ROOT = 'https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/main/';
 const ROSETTA_CODE = `${ROSETTA_CODE_ROOT}tasks`;
 
+// The corpus's index, regenerated on every change to it. Each program's entry
+// says, among other things, whether it runs on the wasm target.
+const ROSETTA_CODE_INDEX = 'https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/index/index.json';
+
 // Where ghul.dev describes a task, alongside the other solutions.
 const ROSETTA_EXPLORER = 'https://ghul.dev/rosetta';
 
@@ -46,6 +50,10 @@ const COLLECTIONS = {
                 files: `${directory}/playground-files`,
                 arguments: `${directory}/run.args`,
                 root: ROSETTA_CODE_ROOT,
+                // Where to ask whether this program runs on wasm, and under
+                // what id the index knows it.
+                index: ROSETTA_CODE_INDEX,
+                id: part ? `${slug}/${part}` : slug,
                 about: `${ROSETTA_CODE}/${slug}/task.json`,
                 page: `${ROSETTA_EXPLORER}/${slug}`
             };
@@ -139,8 +147,13 @@ export async function loadProgram(request, fetchImpl = fetch) {
     let manifest;
     let about;
     let runArgs;
+    let wasmIndex = Promise.resolve(null);
 
     try {
+        // Asked alongside the program's own files rather than after them, so
+        // the index costs a run no time of its own.
+        wasmIndex = indexFor(request, get);
+
         [source, unsupported, manifest, about, runArgs] = await Promise.all([
             get(request.source),
             get(request.unsupported),
@@ -205,8 +218,45 @@ export async function loadProgram(request, fetchImpl = fetch) {
         arguments: runArgs.ok ? argumentsFromFile(await runArgs.text()) : [],
         firstOutputMs: timing('first_output_ms'),
         runMs: timing('run_ms'),
+        // A program that reads files has none on the wasm target, so it stays
+        // on .NET whatever the index says.
+        wasm: files.length === 0 && wasmFlag(await wasmIndex, request.id),
         ...(error ? { error } : {})
     };
+}
+
+const indexes = new Map();
+
+// The collection's index, which says which programs run on the wasm target.
+// Read once per page and shared by every program loaded from it; one that
+// cannot be read answers null, which runs everything on .NET.
+function indexFor(request, get) {
+    if (!request.index) return Promise.resolve(null);
+
+    if (!indexes.has(request.index)) {
+        indexes.set(request.index, (async () => {
+            try {
+                const response = await get(request.index);
+
+                return response.ok ? await response.json() : null;
+            } catch {
+                return null;
+            }
+        })());
+    }
+
+    return indexes.get(request.index);
+}
+
+// The flag for one program in an index: its part's `wasm`, found by id.
+export function wasmFlag(index, id) {
+    for (const task of index?.tasks ?? []) {
+        for (const part of task.parts ?? []) {
+            if (part.id === id) return part.wasm === true;
+        }
+    }
+
+    return false;
 }
 
 // Where each file a manifest names is fetched from, and the name the program

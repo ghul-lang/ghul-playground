@@ -29,7 +29,7 @@ RUN useradd --create-home --shell /usr/sbin/nologin playground
 USER playground
 WORKDIR /home/playground
 
-ARG GHUL_COMPILER_VERSION=64.29.0
+ARG GHUL_COMPILER_VERSION=65.1.0
 ARG GHUL_RUNTIME_VERSION=25.1.0
 ARG GHUL_RASTER_VERSION=0.11.0
 
@@ -43,7 +43,7 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # The library sources a --target wasm compile builds against, at the tags
 # ghul-cli pins for this compiler (scripts/check-wasm-pins.js holds the two in
 # step). The runtime's sources are the tag of the runtime package above.
-ARG GHUL_CORE_VERSION=0.27.0
+ARG GHUL_CORE_VERSION=0.35.0
 
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz

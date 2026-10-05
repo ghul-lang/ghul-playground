@@ -51,11 +51,43 @@
       width: 100%;
       height: 100%;
     }
+
+    /* Which target the next run uses, offered only for a program known to run
+       on wasm in a browser that can run it. Floats in the corner opposite the
+       page's own controls. */
+    .target {
+      position: fixed;
+      right: 0.6rem;
+      bottom: 0.4rem;
+      z-index: 10;
+      display: inline-flex;
+      border: 1px solid rgba(128, 128, 128, 0.4);
+      border-radius: 6px;
+      overflow: hidden;
+      font: 0.75rem system-ui, sans-serif;
+    }
+
+    .target[hidden] { display: none; }
+
+    .target button {
+      border: none;
+      padding: 0.15rem 0.5rem;
+      background: transparent;
+      color: #8a8a8a;
+      opacity: 0.75;
+      cursor: pointer;
+    }
+
+    .target button[aria-pressed="true"] { opacity: 1; background: rgba(128, 128, 128, 0.2); }
   </style>
 </head>
 
 <body>
   <div id="editor"></div>
+  <span id="target" class="target" role="group" aria-label="Run on" hidden>
+    <button data-target="wasm" title="Run in the browser's WebAssembly engine">wasm</button>
+    <button data-target="dotnet" title="Run on .NET">.NET</button>
+  </span>
 </body>
 
 </html>
