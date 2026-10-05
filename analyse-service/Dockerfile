@@ -27,6 +27,11 @@ RUN useradd --create-home --shell /usr/sbin/nologin playground
 USER playground
 WORKDIR /home/playground
 
+# Mount point for the compile service's cell cache, which this service reads.
+# A new volume takes the ownership of the directory it is first mounted over,
+# and either service may be the first to mount it.
+RUN mkdir -p /home/playground/cells
+
 ARG GHUL_COMPILER_VERSION=65.1.0
 ARG GHUL_RUNTIME_VERSION=25.1.0
 ARG GHUL_RASTER_VERSION=0.11.0
