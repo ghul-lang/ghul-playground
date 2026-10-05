@@ -44,7 +44,7 @@
        targets, and importing those into a C# project makes it try to compile
        this project with the ghūl compiler. -->
   <ItemGroup>
-    <PackageReference Include="ghul.runtime" Version="25.1.0" ExcludeAssets="build;buildTransitive" />
+    <PackageReference Include="ghul.runtime" Version="25.4.0" ExcludeAssets="build;buildTransitive" />
   </ItemGroup>
 
   <!-- Drawing, which the compile service also compiles against. It is here so
@@ -53,7 +53,7 @@
        load. Nothing in this project names it, so the reference exists only to
        put it in the published output. -->
   <ItemGroup>
-    <PackageReference Include="ghul.raster" Version="0.11.0" ExcludeAssets="build;buildTransitive" />
+    <PackageReference Include="ghul.raster" Version="0.12.0" ExcludeAssets="build;buildTransitive" />
   </ItemGroup>
 
   <!-- The runner, in ghūl. Everything the host does beyond satisfying the

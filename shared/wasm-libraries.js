@@ -9,6 +9,11 @@
 //
 // The image checks both out at the tags ghul-cli pins for its compiler (see
 // scripts/check-wasm-pins.js), so a program behaves here as it does locally.
+//
+// ghul-raster is a third, for a program that draws: its sources at the tag of
+// the ghul.raster package the .NET build references, every .ghul file under
+// its src/ as its ghul-project.json lists them. It roughly doubles what a
+// compile reads, so it is only added for a program that names it.
 
 const { readdir, readFile } = require('fs/promises');
 const { existsSync } = require('fs');
@@ -52,9 +57,19 @@ function libraryArguments(libraries) {
     return args;
 }
 
+// Whether a program uses ghul.raster. Its namespace has to be named to reach
+// anything in it, so a program that does not name it cannot need it.
+function usesRaster(source) {
+    return /\bRaster\b/.test(source);
+}
+
 // The core library's sources are its manifest's `src/**/*.ghul`; the runtime
 // lists the subset that builds for wasm in `wasm-sources.rsp`. Answers null
 // where the image carries no libraries, which leaves the wasm target off.
+//
+// Answers the libraries and their compiler arguments, and `withRaster`, the
+// same with ghul-raster after them, or null where the image carries no raster
+// sources.
 async function resolveWasmLibraries(environment = process.env) {
     const coreRoot = environment.GHUL_CORE_DIR;
     const runtimeRoot = environment.GHUL_RUNTIME_SOURCE_DIR;
@@ -92,7 +107,28 @@ async function resolveWasmLibraries(environment = process.env) {
         throw new Error(`wasm library sources not found: ${missing.join(', ')}`);
     }
 
-    return { libraries, args: libraryArguments(libraries) };
+    const rasterRoot = environment.GHUL_RASTER_SOURCE_DIR;
+
+    let withRaster = null;
+
+    if (rasterRoot) {
+        const rasterSources = path.join(rasterRoot, 'src');
+
+        if (!existsSync(rasterSources)) {
+            throw new Error(`wasm library sources not found: ${rasterSources}`);
+        }
+
+        const all = [...libraries, {
+            name: 'ghul-raster',
+            version: environment.GHUL_RASTER_SOURCE_VERSION,
+            root: rasterRoot,
+            files: await ghulFilesUnder(rasterSources)
+        }];
+
+        withRaster = { libraries: all, args: libraryArguments(all) };
+    }
+
+    return { libraries, args: libraryArguments(libraries), withRaster };
 }
 
-module.exports = { ghulFilesUnder, listedFiles, libraryArguments, resolveWasmLibraries };
+module.exports = { ghulFilesUnder, listedFiles, libraryArguments, resolveWasmLibraries, usesRaster };

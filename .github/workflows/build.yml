@@ -184,13 +184,18 @@ jobs:
 
           core=$(arg GHUL_CORE_VERSION)
           runtime=$(arg GHUL_RUNTIME_VERSION)
+          raster=$(arg GHUL_RASTER_VERSION)
           libraries="$RUNNER_TEMP/wasm-libraries"
 
-          mkdir -p "$libraries/ghul-core" "$libraries/ghul-runtime"
+          mkdir -p "$libraries/ghul-core" "$libraries/ghul-runtime" "$libraries/ghul-raster"
           curl -sfL "https://github.com/ghul-lang/ghul-core/archive/refs/tags/v$core.tar.gz" \
             | tar -xz --strip-components=1 -C "$libraries/ghul-core"
           curl -sfL "https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v$runtime.tar.gz" \
             | tar -xz --strip-components=1 -C "$libraries/ghul-runtime"
+          curl -sfL "https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v$raster.tar.gz" \
+            | tar -xz --strip-components=1 -C "$libraries/ghul-raster"
+
+          export GHUL_RASTER_SOURCE_DIR="$libraries/ghul-raster" GHUL_RASTER_SOURCE_VERSION="$raster"
 
           GHUL_CORE_DIR="$libraries/ghul-core" GHUL_CORE_VERSION="$core" \
           GHUL_RUNTIME_SOURCE_DIR="$libraries/ghul-runtime" GHUL_RUNTIME_SOURCE_VERSION="$runtime" \
@@ -526,12 +531,16 @@ jobs:
           export GHUL_RUNTIME_SOURCE_VERSION=$(arg GHUL_RUNTIME_VERSION)
           export GHUL_CORE_DIR="$RUNNER_TEMP/wasm-libraries/ghul-core"
           export GHUL_RUNTIME_SOURCE_DIR="$RUNNER_TEMP/wasm-libraries/ghul-runtime"
+          export GHUL_RASTER_SOURCE_VERSION=$(arg GHUL_RASTER_VERSION)
+          export GHUL_RASTER_SOURCE_DIR="$RUNNER_TEMP/wasm-libraries/ghul-raster"
 
-          mkdir -p "$GHUL_CORE_DIR" "$GHUL_RUNTIME_SOURCE_DIR"
+          mkdir -p "$GHUL_CORE_DIR" "$GHUL_RUNTIME_SOURCE_DIR" "$GHUL_RASTER_SOURCE_DIR"
           curl -sfL "https://github.com/ghul-lang/ghul-core/archive/refs/tags/v$GHUL_CORE_VERSION.tar.gz" \
             | tar -xz --strip-components=1 -C "$GHUL_CORE_DIR"
           curl -sfL "https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v$GHUL_RUNTIME_SOURCE_VERSION.tar.gz" \
             | tar -xz --strip-components=1 -C "$GHUL_RUNTIME_SOURCE_DIR"
+          curl -sfL "https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v$GHUL_RASTER_SOURCE_VERSION.tar.gz" \
+            | tar -xz --strip-components=1 -C "$GHUL_RASTER_SOURCE_DIR"
 
           node compile-service/server.js > /tmp/compile.log 2>&1 &
           node analyse-service/server.js > /tmp/analyse.log 2>&1 &

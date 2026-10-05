@@ -545,7 +545,9 @@ function isWasm(request) {
 // named on its command line in place of reference assemblies, exactly as the
 // compile service compiles for wasm. Started for the client rather than taken
 // from the pool, like a REPL session's: about two seconds to a first answer.
-const wasmFlags = () => ['--target', 'wasm', ...wasm.args];
+// The session outlives any one version of the program, so it carries raster
+// whether or not the program uses it yet.
+const wasmFlags = () => ['--target', 'wasm', ...(wasm.withRaster ?? wasm).args];
 
 // A browser cannot set headers on a WebSocket, so the token arrives as a
 // subprotocol rather than a query parameter, which keeps it out of access logs.

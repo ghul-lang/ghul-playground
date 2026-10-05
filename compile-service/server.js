@@ -22,7 +22,7 @@ const { tmpdir } = require('os');
 const path = require('path');
 
 const { resolveCompiler, resolveReferencePaths } = require('../shared/toolchain');
-const { resolveWasmLibraries } = require('../shared/wasm-libraries');
+const { resolveWasmLibraries, usesRaster } = require('../shared/wasm-libraries');
 const { MAX_SOURCE_BYTES } = require('../shared/limits');
 const origins = require('../shared/origins');
 const tokens = require('../shared/tokens');
@@ -82,7 +82,7 @@ async function getToolchain() {
         console.log(`compiler:   ${compiler}`);
         console.log(`references: ${references.length}`);
         console.log(wasm
-            ? `wasm:       ${wasm.libraries.map(l => `${l.name}@${l.version}, ${l.files.length} files`).join('; ')}`
+            ? `wasm:       ${(wasm.withRaster ?? wasm).libraries.map(l => `${l.name}@${l.version}, ${l.files.length} files`).join('; ')}`
             : 'wasm:       off, no library sources configured');
     }
 
@@ -223,7 +223,8 @@ let resultState = null;
 // made once on the first compile; requests arriving together share the one
 // promise, as the cells cache does. A wasm build reads the library sources
 // rather than the reference assemblies, so its identity hashes those, and the
-// two targets never share a key.
+// two targets never share a key. Whether raster is among them is decided by
+// the source, which is the rest of the key, so one identity covers both.
 function getResultState() {
     resultState ??= (async () => {
         const { compiler, references, wasm } = await getToolchain();
@@ -236,8 +237,8 @@ function getResultState() {
                 wasm: wasm
                     ? await cells.toolchainIdentity({
                         compiler,
-                        references: wasm.libraries.flatMap(l => l.files),
-                        flags: ['--target', 'wasm', ...wasm.libraries.map(l => `${l.name}@${l.version}`)],
+                        references: (wasm.withRaster ?? wasm).libraries.flatMap(l => l.files),
+                        flags: ['--target', 'wasm', ...(wasm.withRaster ?? wasm).libraries.map(l => `${l.name}@${l.version}`)],
                         salt
                     })
                     : null
@@ -258,12 +259,14 @@ async function compile(source, target = 'dotnet') {
         () => compileUncached(source, target));
 }
 
-// The compiler's arguments for one source file in `directory`.
-function compilerArguments({ compiler, references, wasm }, directory, target) {
+// The compiler's arguments for `source`, written to main.ghul in `directory`.
+function compilerArguments({ compiler, references, wasm }, directory, target, source) {
     const args = [compiler];
 
     if (target === 'wasm') {
-        args.push('--target', 'wasm', ...wasm.args,
+        const libraries = wasm.withRaster && usesRaster(source) ? wasm.withRaster : wasm;
+
+        args.push('--target', 'wasm', ...libraries.args,
             '-o', path.join(directory, 'main.wasm'));
     } else {
         for (const reference of references) {
@@ -304,7 +307,7 @@ async function compileUncached(source, target = 'dotnet') {
     try {
         await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
 
-        const args = compilerArguments(toolchain, directory, target);
+        const args = compilerArguments(toolchain, directory, target, source);
 
         const { error, stdout, stderr } = await runCompiler(args, directory);
         const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
