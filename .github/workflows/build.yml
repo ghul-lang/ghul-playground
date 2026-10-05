@@ -132,6 +132,12 @@ jobs:
       - name: Check what a compiled result is keyed on and when it is kept
         run: node test/result-cache.mjs
 
+      # A wasm compile builds against library sources at the tags the image
+      # names; ghul-cli pins tags to compiler versions, and the two have to
+      # agree or a program behaves differently here and under `ghul run`.
+      - name: Check the wasm library tags match ghul-cli's pins
+        run: node scripts/check-wasm-pins.js
+
       - name: Check which analyser events a session's changes produce
         run: node test/analyser-outcomes.mjs
 
@@ -165,6 +171,30 @@ jobs:
           GHUL_RUNTIME_DLL: ${{ steps.toolchain.outputs.runtime }}
           GHUL_RASTER_DLL: ${{ steps.toolchain.outputs.raster }}
         run: node test/cell-cache.js
+
+      # The --target wasm path, with the library sources at the tags the image
+      # takes. A module needs no browser to run, so this runs it under Node.
+      - name: Test the compile service's wasm target
+        env:
+          GHUL_COMPILER_DLL: ${{ steps.toolchain.outputs.compiler }}
+          GHUL_RUNTIME_DLL: ${{ steps.toolchain.outputs.runtime }}
+          GHUL_RASTER_DLL: ${{ steps.toolchain.outputs.raster }}
+        run: |
+          arg() { sed -n "s/^ARG $1=//p" compile-service/Dockerfile; }
+
+          core=$(arg GHUL_CORE_VERSION)
+          runtime=$(arg GHUL_RUNTIME_VERSION)
+          libraries="$RUNNER_TEMP/wasm-libraries"
+
+          mkdir -p "$libraries/ghul-core" "$libraries/ghul-runtime"
+          curl -sfL "https://github.com/ghul-lang/ghul-core/archive/refs/tags/v$core.tar.gz" \
+            | tar -xz --strip-components=1 -C "$libraries/ghul-core"
+          curl -sfL "https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v$runtime.tar.gz" \
+            | tar -xz --strip-components=1 -C "$libraries/ghul-runtime"
+
+          GHUL_CORE_DIR="$libraries/ghul-core" GHUL_CORE_VERSION="$core" \
+          GHUL_RUNTIME_SOURCE_DIR="$libraries/ghul-runtime" GHUL_RUNTIME_SOURCE_VERSION="$runtime" \
+            node test/wasm-compile.mjs
 
       # End to end in the sense that matters here: the compile service turns
       # source into an assembly, and rejects source it should reject. Running

@@ -40,11 +40,31 @@ RUN dotnet tool install --tool-path /home/playground/tools \
  && dotnet add /tmp/runtime-probe package ghul.raster --version "${GHUL_RASTER_VERSION}" \
  && rm -rf /tmp/runtime-probe
 
+# The library sources a --target wasm compile builds against, at the tags
+# ghul-cli pins for this compiler (scripts/check-wasm-pins.js holds the two in
+# step). The runtime's sources are the tag of the runtime package above.
+ARG GHUL_CORE_VERSION=0.27.0
+
+ADD --chown=playground:playground \
+    https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
+ADD --chown=playground:playground \
+    https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v${GHUL_RUNTIME_VERSION}.tar.gz /tmp/ghul-runtime.tar.gz
+
+RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghul-runtime \
+ && tar -xzf /tmp/ghul-core.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-core \
+ && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \
+ && rm /tmp/ghul-core.tar.gz /tmp/ghul-runtime.tar.gz \
+ && test -f /home/playground/libraries/ghul-runtime/wasm-sources.rsp
+
 # Resolved once here rather than discovered per request, so a missing piece
 # fails the build rather than the first user request.
 ENV GHUL_COMPILER_DLL=/home/playground/tools/.store/ghul.compiler/${GHUL_COMPILER_VERSION}/ghul.compiler/${GHUL_COMPILER_VERSION}/tools/net10.0/any/ghul.dll \
     GHUL_RUNTIME_DLL=/home/playground/.nuget/packages/ghul.runtime/${GHUL_RUNTIME_VERSION}/lib/net10.0/ghul-runtime.dll \
-    GHUL_RASTER_DLL=/home/playground/.nuget/packages/ghul.raster/${GHUL_RASTER_VERSION}/lib/net10.0/ghul-raster.dll
+    GHUL_RASTER_DLL=/home/playground/.nuget/packages/ghul.raster/${GHUL_RASTER_VERSION}/lib/net10.0/ghul-raster.dll \
+    GHUL_CORE_DIR=/home/playground/libraries/ghul-core \
+    GHUL_RUNTIME_SOURCE_DIR=/home/playground/libraries/ghul-runtime \
+    GHUL_RUNTIME_SOURCE_VERSION=${GHUL_RUNTIME_VERSION} \
+    GHUL_CORE_VERSION=${GHUL_CORE_VERSION}
 
 COPY --chown=playground:playground shared /home/playground/service/shared
 COPY --chown=playground:playground compile-service/server.js compile-service/cells.js compile-service/results.js /home/playground/service/compile-service/

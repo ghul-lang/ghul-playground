@@ -5,11 +5,15 @@
 // cap on how many compile at once - bound what one request costs, not what the
 // compiler can reach. The container is what does that.
 //
-//   POST /compile  {"source": "..."}
+//   POST /compile  {"source": "...", "target": "dotnet"|"wasm"}
 //     -> {"ok": bool, "diagnostics": [...], "assembly": "<base64>"|null}
 //
-// The assembly is returned to the browser, which runs it. The service never
-// executes what it compiles.
+//   with "target": "wasm"
+//     -> {"ok": bool, "diagnostics": [...], "module": "<base64>"|null,
+//         "loader": "<the loader's JavaScript>"|null}
+//
+// `target` defaults to "dotnet". The assembly or module is returned to the
+// browser, which runs it. The service never executes what it compiles.
 
 const http = require('http');
 const { execFile } = require('child_process');
@@ -18,6 +22,7 @@ const { tmpdir } = require('os');
 const path = require('path');
 
 const { resolveCompiler, resolveReferencePaths } = require('../shared/toolchain');
+const { resolveWasmLibraries } = require('../shared/wasm-libraries');
 const { MAX_SOURCE_BYTES } = require('../shared/limits');
 const origins = require('../shared/origins');
 const tokens = require('../shared/tokens');
@@ -68,17 +73,37 @@ let toolchain = null;
 
 async function getToolchain() {
     if (!toolchain) {
-        const [compiler, references] = await Promise.all([
-            resolveCompiler(), resolveReferencePaths()
+        const [compiler, references, wasm] = await Promise.all([
+            resolveCompiler(), resolveReferencePaths(), resolveWasmLibraries()
         ]);
 
-        toolchain = { compiler, references };
+        toolchain = { compiler, references, wasm };
 
         console.log(`compiler:   ${compiler}`);
         console.log(`references: ${references.length}`);
+        console.log(wasm
+            ? `wasm:       ${wasm.libraries.map(l => `${l.name}@${l.version}, ${l.files.length} files`).join('; ')}`
+            : 'wasm:       off, no library sources configured');
     }
 
     return toolchain;
+}
+
+// The target a request names, checked before it waits for a slot.
+async function requestedTarget(target) {
+    if (target === undefined || target === null || target === 'dotnet') {
+        return 'dotnet';
+    }
+
+    if (target !== 'wasm') {
+        throw new cells.BadRequest(400, `unknown target ${JSON.stringify(target)}`);
+    }
+
+    if (!(await getToolchain()).wasm) {
+        throw new cells.BadRequest(400, 'the wasm target is not available here');
+    }
+
+    return 'wasm';
 }
 
 function parseDiagnostics(text) {
@@ -194,19 +219,29 @@ async function compileCell(request) {
 
 let resultState = null;
 
-// The result cache and the toolchain identity it is keyed on, made once on the
-// first compile; requests arriving together share the one promise, as the
-// cells cache does.
+// The result cache and the toolchain identity of each target it is keyed on,
+// made once on the first compile; requests arriving together share the one
+// promise, as the cells cache does. A wasm build reads the library sources
+// rather than the reference assemblies, so its identity hashes those, and the
+// two targets never share a key.
 function getResultState() {
     resultState ??= (async () => {
-        const { compiler, references } = await getToolchain();
+        const { compiler, references, wasm } = await getToolchain();
+        const salt = process.env.RESULT_TOOLCHAIN_SALT;
 
         return {
             cache: await new results.ResultCache(RESULT_CACHE_DIR, RESULT_CACHE_BYTES).init(),
-            toolchainId: await cells.toolchainIdentity({
-                compiler, references, flags: [],
-                salt: process.env.RESULT_TOOLCHAIN_SALT
-            })
+            toolchainIds: {
+                dotnet: await cells.toolchainIdentity({ compiler, references, flags: [], salt }),
+                wasm: wasm
+                    ? await cells.toolchainIdentity({
+                        compiler,
+                        references: wasm.libraries.flatMap(l => l.files),
+                        flags: ['--target', 'wasm', ...wasm.libraries.map(l => `${l.name}@${l.version}`)],
+                        salt
+                    })
+                    : null
+            }
         };
     })();
 
@@ -214,28 +249,62 @@ function getResultState() {
 }
 
 // What the source compiles to, from the cache where it has been compiled
-// before. A compile is a function of the source and the toolchain, so the
-// answer does not depend on who asked or when.
-async function compile(source) {
-    const { cache, toolchainId } = await getResultState();
+// before. A compile is a function of the source, the target and the
+// toolchain, so the answer does not depend on who asked or when.
+async function compile(source, target = 'dotnet') {
+    const { cache, toolchainIds } = await getResultState();
 
-    return cache.answer(results.resultKey(toolchainId, source), () => compileUncached(source));
+    return cache.answer(results.resultKey(toolchainIds[target], source),
+        () => compileUncached(source, target));
 }
 
-async function compileUncached(source) {
-    const { compiler, references } = await getToolchain();
+// The compiler's arguments for one source file in `directory`.
+function compilerArguments({ compiler, references, wasm }, directory, target) {
+    const args = [compiler];
+
+    if (target === 'wasm') {
+        args.push('--target', 'wasm', ...wasm.args,
+            '-o', path.join(directory, 'main.wasm'));
+    } else {
+        for (const reference of references) {
+            args.push('-a', reference);
+        }
+    }
+
+    args.push(path.join(directory, 'main.ghul'));
+
+    return args;
+}
+
+// The built program: the assembly, or the module and the loader the compiler
+// writes beside it, which is how a page runs that module.
+async function readOutput(directory, target) {
+    if (target === 'wasm') {
+        const [module, loader] = await Promise.all([
+            readFile(path.join(directory, 'main.wasm')),
+            readFile(path.join(directory, 'main.mjs'), 'utf8')
+        ]);
+
+        return { module: module.toString('base64'), loader };
+    }
+
+    return { assembly: (await readFile(path.join(directory, 'main.exe'))).toString('base64') };
+}
+
+// What a failed compile carries in place of the program.
+function noOutput(target) {
+    return target === 'wasm' ? { module: null, loader: null } : { assembly: null };
+}
+
+async function compileUncached(source, target = 'dotnet') {
+    const toolchain = await getToolchain();
     const directory = await mkdtemp(path.join(tmpdir(), 'ghul-playground-'));
+    const none = noOutput(target);
 
     try {
         await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
 
-        const args = [compiler];
-
-        for (const reference of references) {
-            args.push('-a', reference);
-        }
-
-        args.push(path.join(directory, 'main.ghul'));
+        const args = compilerArguments(toolchain, directory, target);
 
         const { error, stdout, stderr } = await runCompiler(args, directory);
         const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
@@ -246,14 +315,14 @@ async function compileUncached(source) {
             // whole answer about the source, so this is flagged either way
             // and nothing keeps it.
             if (error.killed && diagnostics.length) {
-                return { ok: false, diagnostics, assembly: null, timedOut: true };
+                return { ok: false, diagnostics, ...none, timedOut: true };
             }
 
             // The compiler reported nothing and did not run to completion: it
             // failed to start, or was killed by something other than the
             // timeout. That says nothing about the source either.
             if (!error.killed && !diagnostics.length) {
-                return { ok: false, diagnostics, assembly: null, failed: true };
+                return { ok: false, diagnostics, ...none, failed: true };
             }
 
             // A timeout kills the compiler without it reporting anything, so
@@ -268,15 +337,13 @@ async function compileUncached(source) {
                 // Said in a field as well as in the diagnostic, so a caller can
                 // tell a timeout from a program that does not compile without
                 // matching on the wording of a message meant for a reader.
-                return { ok: false, diagnostics, assembly: null, timedOut: true };
+                return { ok: false, diagnostics, ...none, timedOut: true };
             }
 
-            return { ok: false, diagnostics, assembly: null };
+            return { ok: false, diagnostics, ...none };
         }
 
-        const assembly = (await readFile(path.join(directory, 'main.exe'))).toString('base64');
-
-        return { ok: true, diagnostics, assembly };
+        return { ok: true, diagnostics, ...await readOutput(directory, target) };
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
@@ -356,6 +423,9 @@ http.createServer((request, response) => {
                 error: state.error ?? undefined,
                 tokensRequired: tokens.required,
                 maxSourceBytes: MAX_SOURCE_BYTES,
+                // What a page may ask a compile for. Known once the health
+                // check's own compile has resolved the toolchain.
+                targets: toolchain ? (toolchain.wasm ? ['dotnet', 'wasm'] : ['dotnet']) : undefined,
                 repl: REPL_ENABLED
                     ? { maxCells: MAX_CELLS, maxChainBytes: MAX_CHAIN_BYTES }
                     : undefined
@@ -444,6 +514,7 @@ http.createServer((request, response) => {
 
         try {
             let work;
+            let target;
 
             if (isCell) {
                 // Checked in full before it waits for a slot, so a request
@@ -454,9 +525,11 @@ http.createServer((request, response) => {
 
                 work = () => compileCell(request);
             } else {
-                const source = JSON.parse(body).source ?? '';
+                const parsed = JSON.parse(body);
+                const source = parsed.source ?? '';
+                target = await requestedTarget(parsed.target);
 
-                work = () => compile(source);
+                work = () => compile(source, target);
             }
 
             const result = await withSlot(() => {
@@ -484,7 +557,7 @@ http.createServer((request, response) => {
                     : result.ok ? 'ok'
                         : result.timedOut ? 'timeout'
                             : 'compile-error',
-                { diagnostics: errorCount(result.diagnostics) });
+                { diagnostics: errorCount(result.diagnostics), target });
         } catch (e) {
             if (e instanceof cells.BadRequest) {
                 response.writeHead(e.status, { 'content-type': 'application/json' });
