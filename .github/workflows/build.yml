@@ -514,10 +514,6 @@ jobs:
           LOG_SERVER_STDERR: 1
           # The browser test runs the cells of an interactive session too.
           REPL_ENABLED: 1
-          # The browser test holds a session in its page and another in the
-          # REPL page it opened earlier, and choosing wasm asks for a third, so
-          # the default of two would leave the wasm analyser nowhere to start.
-          MAX_SESSIONS: 4
           # Written by the compile service and read by the analyse service, as
           # the shared volume is in production.
           CELL_CACHE_DIR: /tmp/ghul-cells
