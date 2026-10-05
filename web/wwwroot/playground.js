@@ -59,7 +59,7 @@ let compileTargets = null;
 // Whether the compile service builds for the wasm target. Asked once; a
 // service that cannot be asked builds for .NET only, as every one did before.
 const wasmCompiled = () => {
-    compileTargets ??= fetch(`${COMPILE_SERVICE}/targets`)
+    compileTargets ??= fetch(COMPILE_SERVICE)
         .then(response => response.ok ? response.json() : { targets: [] })
         .then(answer => Array.isArray(answer.targets) && answer.targets.includes('wasm'))
         .catch(() => false);
