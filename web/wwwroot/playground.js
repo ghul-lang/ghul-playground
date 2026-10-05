@@ -717,34 +717,56 @@ export async function createPlayground({
     }
 
     // Runs a module the compile service built for the wasm target, in a
-    // worker of its own. What it prints, and whether it is waiting for a line,
-    // reach the page the same way a .NET run's do.
+    // worker of its own. What it prints, the pictures it shows, and whether it
+    // is waiting for a line reach the page the same way a .NET run's do. The
+    // program's files are kept by the run rather than in a filesystem, and
+    // each arrives before the output that names it, so a marker is read the
+    // moment it is printed.
     async function runInWasm(result, args, { compiled, note }) {
         onStatus('running');
 
         const ran = performance.now();
 
-        wasmRun = runWasm({
+        let live = null;
+        let fed = 0;
+
+        const run = runWasm({
             module: result.module,
             loader: result.loader,
             args: args ?? [],
-            onOutput: text => onOutput(note + text),
+            onOutput: text => {
+                live.feed(text.slice(fed));
+                fed = text.length;
+                onOutput(note + live.text);
+
+                if (live.takeChanged()) onImages(live.images);
+            },
             onInput: on => {
                 waiting = on;
                 onInput(on);
             }
         });
 
-        try {
-            const produced = await wasmRun.done;
+        live = new LiveOutput({ readFile: run.readFile });
+        wasmRun = run;
 
-            let text = produced.text;
+        try {
+            const produced = await run.done;
+
+            // Decided again from the start, as a .NET run's output is.
+            const final = new LiveOutput({ readFile: run.readFile });
+
+            final.feed(produced.text);
+            final.finish();
+
+            let text = final.text;
 
             if (produced.truncated) {
                 text += '\n[output stopped here: this program printed more than the playground shows]';
             }
 
             onOutput(note + text);
+            onImages(final.images);
 
             onStatus('done', {
                 compiled,

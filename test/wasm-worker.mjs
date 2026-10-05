@@ -1,7 +1,8 @@
 // The browser side of the wasm target, as far as Node can run it: the worker
 // script with the loader the compiler writes, standard input through the
-// shared buffer, an unhandled exception shown as the .NET runner shows one,
-// and the helpers the page decides with.
+// shared buffer, a file the program writes shown as a picture, an unhandled
+// exception shown as the .NET runner shows one, and the helpers the page
+// decides with.
 //
 // The worker script is run in a Node worker thread with the few browser
 // globals it uses supplied, so it is the page's own code that is tested rather
@@ -22,6 +23,7 @@ const { resolveCompiler } = await import('../shared/toolchain.js');
 const { resolveWasmLibraries } = await import('../shared/wasm-libraries.js');
 const { unhandledException, needsDotnet, wasmSupported } = await import('../web/wwwroot/wasm-support.js');
 const { inputBuffer, supplyInput } = await import('../web/wwwroot/wasm-input.js');
+const { LiveOutput } = await import('../web/wwwroot/live-output.js');
 const { wasmFlag } = await import('../web/wwwroot/collections.js').catch(() => ({}));
 
 let failures = 0;
@@ -69,35 +71,61 @@ entry() is
 si
 `;
 
+// A program that writes a picture and names it, as ghul.raster's `show`
+// does. The host import is declared here, as the core library declares it,
+// so the test does not wait on a core library that writes files itself.
+const PICTURE = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+const PICTURE_SOURCE = `use IO.Std.write_line
+
+@intrinsic("host.file_written")
+written(path: string, content: string)
+
+entry() is
+    write_line("drawing")
+    written("dot.png", "${PICTURE}")
+    write_line("<<image ./dot.png>>")
+    write_line("done")
+si
+`;
+
 const work = mkdtempSync(path.join(tmpdir(), 'wasm-worker-test-'));
 
-try {
+const workerScript = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)),
+    '../web/wwwroot/wasm-worker.js')).href;
+
+// The browser globals the worker script uses, then the script itself.
+const shim = `
+    const { parentPort } = await import('worker_threads');
+    globalThis.self = globalThis;
+    globalThis.postMessage = message => parentPort.postMessage(message);
+    parentPort.on('message', data => self.onmessage({ data }));
+    const { wasmWorker } = await import(${JSON.stringify(workerScript)});
+    wasmWorker();
+    parentPort.postMessage({ type: 'loaded' });
+`;
+
+// Compiles `source` for the wasm target and runs it in the worker script,
+// answering each request for input with the next of `lines`. Answers what it
+// printed, the files it wrote, how often it asked for input, and its exit
+// status. Answers null, without running it, where the loader the compiler
+// wrote has no `needs` among its host functions.
+async function compileAndRun(name, source, lines = [], needs = null) {
     const [compiler, wasm] = await Promise.all([resolveCompiler(), resolveWasmLibraries()]);
 
     if (!wasm) throw new Error('set GHUL_CORE_DIR and GHUL_RUNTIME_SOURCE_DIR');
 
-    writeFileSync(path.join(work, 'main.ghul'), SOURCE);
+    writeFileSync(path.join(work, `${name}.ghul`), source);
 
     execFileSync('dotnet', [compiler, '--target', 'wasm', ...wasm.args,
-        '-o', path.join(work, 'main.wasm'), path.join(work, 'main.ghul')], { stdio: 'inherit' });
+        '-o', path.join(work, `${name}.wasm`), path.join(work, `${name}.ghul`)], { stdio: 'inherit' });
 
-    const workerScript = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)),
-        '../web/wwwroot/wasm-worker.js')).href;
+    const loader = readFileSync(path.join(work, `${name}.mjs`), 'utf8');
 
-    // The browser globals the worker script uses, then the script itself.
-    const shim = `
-        const { parentPort } = await import('worker_threads');
-        globalThis.self = globalThis;
-        globalThis.postMessage = message => parentPort.postMessage(message);
-        parentPort.on('message', data => self.onmessage({ data }));
-        const { wasmWorker } = await import(${JSON.stringify(workerScript)});
-        wasmWorker();
-        parentPort.postMessage({ type: 'loaded' });
-    `;
-
+    if (needs && !loader.includes(needs)) return null;
     const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(shim)}`));
     const input = inputBuffer();
-    const lines = ['alpha', 'beta'];
+    const files = new Map();
 
     let output = '';
     let asked = 0;
@@ -108,8 +136,8 @@ try {
             switch (message.type) {
                 case 'loaded':
                     worker.postMessage({
-                        module: readFileSync(path.join(work, 'main.wasm')),
-                        loader: readFileSync(path.join(work, 'main.mjs'), 'utf8'),
+                        module: readFileSync(path.join(work, `${name}.wasm`)),
+                        loader,
                         args: [],
                         input
                     });
@@ -119,6 +147,12 @@ try {
                     output += message.stream === 'stderr'
                         ? (unhandledException(message.text) ?? message.text)
                         : message.text;
+                    break;
+
+                case 'file':
+                    // Recorded with what had been printed by then, to show
+                    // the file arrives ahead of the marker naming it.
+                    files.set(message.path, { bytes: message.bytes, before: output });
                     break;
 
                 case 'input':
@@ -139,12 +173,44 @@ try {
 
     await worker.terminate();
 
+    return { output, files, asked, code };
+}
+
+try {
+    const { output, asked, code } = await compileAndRun('main', SOURCE, ['alpha', 'beta']);
+
     check('the program read its input a line at a time', asked >= 3, `asked ${asked} times`);
     check('what it printed reached the page', output.startsWith('got alpha and beta\nthen the end\n'),
         JSON.stringify(output));
     check('its unhandled exception is shown as .NET shows one',
         output.includes('[unhandled: InvalidOperationException: boom]'), JSON.stringify(output));
     check('it ended with .NET\'s status for an unhandled exception', code === 134, String(code));
+
+    // A loader that predates the host import cannot instantiate a module
+    // that declares it, so there is nothing to run until the compiler the
+    // playground pins writes one that has it.
+    const drawn = await compileAndRun('picture', PICTURE_SOURCE, [], 'file_written');
+
+    if (!drawn) {
+        console.log('skip  pictures: this compiler\'s loader does not hand written files to the page');
+    } else {
+        const file = drawn.files.get('dot.png');
+
+        check('the file the program wrote reached the page', file !== undefined, [...drawn.files.keys()].join(', '));
+        check('it arrived before the marker naming it', file?.before === 'drawing\n', JSON.stringify(file?.before));
+        check('its bytes are the ones the program wrote',
+            Buffer.from(file?.bytes ?? []).toString('base64') === PICTURE);
+
+        // What the page does with the run: the marker shown as the picture.
+        const live = new LiveOutput({ readFile: p => drawn.files.get(p.replace(/^(\.\/)+/, ''))?.bytes ?? null });
+
+        live.feed(drawn.output);
+        live.finish();
+
+        check('the marker is shown as the picture', live.images.length === 1 && live.images[0].name === 'dot.png'
+            && live.images[0].url === `data:image/png;base64,${PICTURE}`, JSON.stringify(live.images.map(i => i.name)));
+        check('and is taken out of the text', live.text === 'drawing\ndone\n', JSON.stringify(live.text));
+    }
 } finally {
     rmSync(work, { recursive: true, force: true });
 }

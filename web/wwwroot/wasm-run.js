@@ -23,16 +23,23 @@ export const OUTPUT_CHARS = 512 * 1024;
 
 const base64Bytes = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
 
+// A file is kept under the path the program named, less any leading `./`,
+// so a marker naming `./fern.png` finds the file written as `fern.png`.
+const filePath = path => path.replace(/^(\.\/)+/, '');
+
 // Starts the program. `onOutput` is called with everything printed so far each
 // time more arrives, and `onInput` with true when the program waits for a line
 // and false once it has one.
 //
 // Answers the run: `done` settles with { text, error, truncated, code } when
 // the program ends or is stopped, `send(line)` and `end()` answer a program
-// waiting for input, and `stop()` ends it.
+// waiting for input, `stop()` ends it, and `readFile(path)` answers the
+// bytes the program last wrote to a file, or null when it wrote none there.
 export function runWasm({ module, loader, args = [], onOutput = () => { }, onInput = () => { } }) {
     const worker = new Worker(workerScript());
     const input = inputBuffer();
+
+    const files = new Map();
 
     let text = '';
     let truncated = false;
@@ -81,6 +88,10 @@ export function runWasm({ module, loader, args = [], onOutput = () => { }, onInp
                 break;
             }
 
+            case 'file':
+                files.set(filePath(data.path), data.bytes);
+                break;
+
             case 'input':
                 waiting = true;
                 onInput(true);
@@ -126,6 +137,7 @@ export function runWasm({ module, loader, args = [], onOutput = () => { }, onInp
         },
         end: () => answer(null),
         stop: () => finish({ code: null, stopped: true }),
+        readFile: path => files.get(filePath(path)) ?? null,
         get waiting() { return waiting; }
     };
 }
