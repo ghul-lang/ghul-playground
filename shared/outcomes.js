@@ -13,6 +13,7 @@ const FIELDS = [
     'result',       // how it ended, from a small closed set
     'status',       // the HTTP status or WebSocket close code answered
     'diagnostics',  // how many errors the compiler reported
+    'target',       // dotnet or wasm, for a compile
     'ms',           // how long the work took
     'warm',         // whether a session was given an analyser already running
     'seconds',      // how long a session lasted
