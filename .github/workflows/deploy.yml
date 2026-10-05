@@ -104,6 +104,14 @@ jobs:
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$HOST" \
             'cd /opt/ghul-playground && docker compose up -d --remove-orphans'
 
+      # The new compile container starts with an empty result cache. The job
+      # that refills it compiles on the host, not here, and takes several
+      # minutes, so it is started detached and the deploy does not wait for it.
+      - name: Refill the compile cache
+        run: |
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$HOST" \
+            'setsid nohup /opt/ghul-playground/deploy/precompile.sh > ~/precompile.log 2>&1 < /dev/null &'
+
       # The runtime is published under fingerprinted names, and a page loads it
       # only when it first compiles something, by the names of the publish the
       # page came from. A page open across a deploy would find those files gone,

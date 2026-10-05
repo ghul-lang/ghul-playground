@@ -669,6 +669,34 @@ ssh -i <deploy-key> deploy@HOST \
 `/opt/ghul-playground` is a single-branch clone, so a branch other than main
 needs naming explicitly: `git fetch origin BRANCH && git checkout FETCH_HEAD`.
 
+## the compile cache, filled ahead of readers
+
+The compile service keeps a result cache keyed on the toolchain and the exact
+source text, so a program compiled once is answered without compiling again.
+`deploy/precompile.sh` fills it with every program a ghul.dev page offers to
+run: each Rosetta task and ghul-examples program the playground runs, as
+raw.githubusercontent.com serves it, and each ghul.dev example's `fullSource`.
+Those are the bytes a page posts unedited, so the reader who first presses Run
+on one gets a cached answer. An edited program misses and compiles as before.
+
+The cache is a tmpfs inside the compile container, so a container restart
+empties it. The deploy workflow starts the script detached after it swaps the
+services (log in `~deploy/precompile.log`), and
+`deploy/systemd/playground-precompile.timer`, which host-setup.sh installs,
+runs it ten minutes after boot and daily. A full run is about 1,800 programs
+at two compiles at a time, through the same queue and caps as readers.
+
+Run it by hand as the deploy user, or list what it would compile:
+
+```sh
+/opt/ghul-playground/deploy/precompile.sh
+/opt/ghul-playground/deploy/precompile.sh --list
+PRECOMPILE_LIMIT=10 /opt/ghul-playground/deploy/precompile.sh
+```
+
+`PRECOMPILE_TARGETS=dotnet,wasm` compiles for the wasm target as well, once a
+page runs programs that way.
+
 ## moving to a new compiler or runtime
 
 Renovate proposes these, so the usual answer is to let it. It knows all five
