@@ -3,8 +3,10 @@
 //
 // The page sends one message: the module, the loader the compiler wrote for
 // it, the program's arguments, and a shared buffer standard input arrives
-// through. The worker answers with each piece the program writes, a request
-// whenever the program waits for input, and the exit status once it ends.
+// through. The worker answers with each piece the program writes, each file
+// it writes, a request whenever the program waits for input, and the exit
+// status once it ends. Messages arrive in the order they were sent, so a
+// file always reaches the page before the output that names it.
 //
 // Standard input is synchronous from the program's side - the loader pulls
 // the next piece when the program reads - so the worker blocks on the shared
@@ -66,7 +68,8 @@ export function wasmWorker() {
                 env: {},
                 stdin,
                 stdout: piece => postMessage({ type: 'output', stream: 'stdout', text: piece }),
-                stderr: piece => postMessage({ type: 'output', stream: 'stderr', text: piece })
+                stderr: piece => postMessage({ type: 'output', stream: 'stderr', text: piece }),
+                onfile: (path, bytes) => postMessage({ type: 'file', path, bytes })
             });
 
             postMessage({ type: 'exit', code });
