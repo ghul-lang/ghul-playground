@@ -117,6 +117,23 @@
 
     #images-toggle[hidden] { display: none; }
 
+    /* Which target the next run uses, offered only for a program known to run
+       on wasm in a browser that can run it. */
+    .target[hidden] { display: none; }
+
+    .target { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+
+    .target button {
+      border: none;
+      border-radius: 0;
+      padding: 0.25rem 0.6rem;
+      font-size: 0.8rem;
+      background: none;
+      color: var(--fg-muted);
+    }
+
+    .target button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--fg); }
+
     /* Floats over the editor's top-right corner, where the ghul.dev examples
        put theirs, so the two surfaces agree about where copying lives. */
     #editor-frame { position: relative; flex: 1; min-height: 0; display: flex; }
@@ -613,6 +630,11 @@
       <svg class="stop" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" /></svg>
       <span id="run-label">Run</span>
     </button>
+
+    <span id="target" class="target" role="group" aria-label="Run on" hidden>
+      <button data-target="wasm" title="Run in the browser's WebAssembly engine">wasm</button>
+      <button data-target="dotnet" title="Run on .NET">.NET</button>
+    </span>
 
     <span class="spacer"></span>
 

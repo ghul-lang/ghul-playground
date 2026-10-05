@@ -196,6 +196,10 @@ jobs:
           GHUL_RUNTIME_SOURCE_DIR="$libraries/ghul-runtime" GHUL_RUNTIME_SOURCE_VERSION="$runtime" \
             node test/wasm-compile.mjs
 
+          GHUL_CORE_DIR="$libraries/ghul-core" GHUL_CORE_VERSION="$core" \
+          GHUL_RUNTIME_SOURCE_DIR="$libraries/ghul-runtime" GHUL_RUNTIME_SOURCE_VERSION="$runtime" \
+            node test/wasm-worker.mjs
+
       # End to end in the sense that matters here: the compile service turns
       # source into an assembly, and rejects source it should reject. Running
       # the assembly needs a browser, so it is not covered.

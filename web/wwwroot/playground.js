@@ -9,6 +9,8 @@ import { GhulLanguageClient } from './lsp.js'
 import { getToken, setToken, askForToken } from './token.js'
 import { defineThemes, themeName } from './theme.js'
 import { LiveOutput } from './live-output.js'
+import { runWasm } from './wasm-run.js'
+import { wasmSupported, needsDotnet } from './wasm-support.js'
 import {
     OUTPUT_WRITTEN, OUTPUT_TRUNCATED, INPUT_TURN, INPUT_READY, INPUT_LENGTH, INPUT_CAPACITY,
     channelViews, readOutput
@@ -176,7 +178,11 @@ export async function createPlayground({
     onDiagnostics = () => { },
     onStatus = () => { },
     onAnalyser = () => { },
-    onAnalyserOutcome = () => { }
+    onAnalyserOutcome = () => { },
+    // Called with { capable, supported, target } whenever the choice of target
+    // changes: whether the program is known to run on wasm, whether this
+    // browser can run wasm, and the target the next run uses.
+    onTargets = () => { }
 }) {
     await loadMonaco();
 
@@ -407,12 +413,58 @@ export async function createPlayground({
         reportDiagnostics();
     }
 
+    // The target the page has chosen for this program: 'wasm' runs it in the
+    // browser's own WebAssembly engine where that engine can, and 'dotnet' on
+    // the .NET runtime. The page offers the choice only for a program known to
+    // run on wasm; anything else stays on .NET.
+    let target = 'dotnet';
+
+    // Whether the program in the editor is known to run on wasm.
+    let wasmCapable = false;
+
+    async function reportTargets() {
+        const supported = await wasmSupported();
+
+        onTargets({
+            capable: wasmCapable,
+            supported,
+            target: wasmCapable && supported ? target : 'dotnet'
+        });
+    }
+
+    // A program known to run on wasm starts out on wasm, and one that is not
+    // runs on .NET, where the reader is offered no choice.
+    function setWasmCapable(capable) {
+        wasmCapable = capable === true;
+        target = wasmCapable ? 'wasm' : 'dotnet';
+        reportTargets();
+    }
+
+    function setTarget(next) {
+        target = next === 'wasm' && wasmCapable ? 'wasm' : 'dotnet';
+        reportTargets();
+    }
+
+    // The wasm program running now, if one is.
+    let wasmRun = null;
+
+    // The target a run uses: wasm only where it is chosen and the browser can
+    // run it, .NET otherwise.
+    async function effectiveTarget() {
+        return target === 'wasm' && await wasmSupported() ? 'wasm' : 'dotnet';
+    }
+
     // `args` is what the program receives as its command line. It is handed
     // in per run rather than held here, because it is the page's field and the
     // reader can have changed it since the last one.
-    async function run(args = []) {
-        onOutput('');
+    //
+    // `note` is a line shown above the program's output, which is how a run
+    // that had to fall back from wasm to .NET says so.
+    async function run(args = [], { forceDotnet = false, note = '' } = {}) {
+        onOutput(note);
         onImages([]);
+
+        const runTarget = forceDotnet ? 'dotnet' : await effectiveTarget();
 
         // Refused here rather than by the service, so a reader is told what the
         // limit is instead of watching a request fail.
@@ -444,7 +496,7 @@ export async function createPlayground({
                     'content-type': 'application/json',
                     ...(token ? { authorization: `Bearer ${token}` } : {})
                 },
-                body: JSON.stringify({ source: editor.getValue() })
+                body: JSON.stringify({ source: editor.getValue(), target: runTarget })
             });
 
             // A rejected token is worth saying plainly and worth asking about,
@@ -460,7 +512,7 @@ export async function createPlayground({
 
                 if (entered) {
                     client.reconnect();
-                    return run();
+                    return run(args, { forceDotnet, note });
                 }
 
                 return;
@@ -483,6 +535,15 @@ export async function createPlayground({
 
             const result = await response.json();
 
+            // A program that uses something the wasm target lacks still runs,
+            // on .NET, and the reader is told why it ran there.
+            if (runTarget === 'wasm' && !result.ok && !result.timedOut && needsDotnet(result.diagnostics)) {
+                return run(args, {
+                    forceDotnet: true,
+                    note: '[this program uses something WebAssembly does not support yet, so it ran on .NET]\n'
+                });
+            }
+
             showCompileDiagnostics(result.diagnostics ?? []);
 
             if (!result.ok) {
@@ -495,6 +556,11 @@ export async function createPlayground({
             }
 
             const compiled = Math.round(performance.now() - started);
+
+            if (runTarget === 'wasm') {
+                await runInWasm(result, args, { compiled, note });
+                return;
+            }
 
             onStatus('starting runtime');
 
@@ -543,7 +609,7 @@ export async function createPlayground({
                 if (written > shown) {
                     live.feed(readOutput(output, shown, written));
                     shown = written;
-                    onOutput(live.text);
+                    onOutput(note + live.text);
                 } else {
                     live.feed();
                 }
@@ -601,7 +667,7 @@ export async function createPlayground({
                 text += '\n[output stopped here: this program printed more than the playground shows]';
             }
 
-            onOutput(text);
+            onOutput(note + text);
             onImages(final.images);
 
             // The filesystem lives as long as the tab, so what one run wrote
@@ -632,6 +698,49 @@ export async function createPlayground({
         }
     }
 
+    // Runs a module the compile service built for the wasm target, in a
+    // worker of its own. What it prints, and whether it is waiting for a line,
+    // reach the page the same way a .NET run's do.
+    async function runInWasm(result, args, { compiled, note }) {
+        onStatus('running');
+
+        const ran = performance.now();
+
+        wasmRun = runWasm({
+            module: result.module,
+            loader: result.loader,
+            args: args ?? [],
+            onOutput: text => onOutput(note + text),
+            onInput: on => {
+                waiting = on;
+                onInput(on);
+            }
+        });
+
+        try {
+            const produced = await wasmRun.done;
+
+            let text = produced.text;
+
+            if (produced.truncated) {
+                text += '\n[output stopped here: this program printed more than the playground shows]';
+            }
+
+            onOutput(note + text);
+
+            onStatus('done', {
+                compiled,
+                ran: Math.round(performance.now() - ran),
+                threw: Boolean(produced.error),
+                stopped: produced.stopped === true,
+                target: 'wasm'
+            });
+        } finally {
+            wasmRun = null;
+            waiting = false;
+        }
+    }
+
     // Whether the program is waiting for a line right now, which decides what
     // stopping it can do.
     let waiting = false;
@@ -640,6 +749,12 @@ export async function createPlayground({
     // before the flag is what makes the handshake safe: the program only ever
     // sees a length that is already there.
     function sendInput(text) {
+        if (wasmRun) {
+            wasmRun.send(text);
+            waiting = false;
+            return;
+        }
+
         const { control, input } = currentViews();
 
         if (!control) return;
@@ -659,6 +774,12 @@ export async function createPlayground({
     // End of input rather than a line, which is what a program reading until
     // the stream runs out is waiting for.
     function endInput() {
+        if (wasmRun) {
+            wasmRun.end();
+            waiting = false;
+            return;
+        }
+
         const { control } = currentViews();
 
         if (!control) return;
@@ -681,7 +802,15 @@ export async function createPlayground({
     // from here at all: it is managed code on another thread, and nothing in
     // the browser can interrupt that. Answering false says so, and leaves what
     // to do about it to the page.
+    //
+    // A wasm program runs in a worker of its own, which can be terminated
+    // whatever the program is doing, so stopping one always succeeds.
     function stop() {
+        if (wasmRun) {
+            wasmRun.stop();
+            return true;
+        }
+
         if (!waiting) return false;
 
         endInput();
@@ -709,6 +838,9 @@ export async function createPlayground({
         // healthy or deliberately-backed-off session.
         wakeAnalyser: () => client.wake(),
         setSource: text => editor.setValue(text),
+        setWasmCapable,
+        setTarget,
+        getTarget: () => target,
         getSource: () => editor.getValue(),
         // The data files the next run writes into the runtime's working
         // directory. Files an earlier run wrote are left where they are: the
