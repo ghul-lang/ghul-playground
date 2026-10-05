@@ -25,7 +25,9 @@
 #   PRECOMPILE_SERVICE   the compile endpoint (http://127.0.0.1:5090/compile)
 #   PRECOMPILE_DIR       where the content repositories are checked out
 #                        (~/.cache/playground-precompile)
-#   PRECOMPILE_TARGETS   comma-separated targets to compile for (dotnet)
+#   PRECOMPILE_TARGETS   comma-separated targets to compile for (dotnet); wasm
+#                        compiles only the programs the Rosetta index and
+#                        the ghul.dev example data flag as running on wasm
 #   PRECOMPILE_PARALLEL  compiles of this job's in flight at once (2)
 #   PRECOMPILE_LIMIT     compile only the first this many programs, for a trial
 
@@ -35,6 +37,9 @@ service="${PRECOMPILE_SERVICE:-http://127.0.0.1:5090/compile}"
 work="${PRECOMPILE_DIR:-$HOME/.cache/playground-precompile}"
 targets="${PRECOMPILE_TARGETS:-dotnet}"
 parallel="${PRECOMPILE_PARALLEL:-2}"
+
+# The corpus index, which says which Rosetta programs run on wasm.
+ROSETTA_INDEX="https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/index/index.json"
 list_only=false
 
 case "${1:-}" in
@@ -108,19 +113,34 @@ for data in "$work/ghul-dev/src/.vitepress/example-data"/*.json; do
     if jq -e '.snippet != true and (.fullSource | type) == "string"' "$data" > /dev/null; then
         jq -j '.fullSource' "$data" > "$examples/$(basename "$data" .json).ghul"
         echo "$examples/$(basename "$data" .json).ghul" >> "$sources/files.txt"
+
+        jq -e '.wasm == true' "$data" > /dev/null \
+            && echo "$examples/$(basename "$data" .json).ghul" >> "$sources/wasm.txt"
     fi
 done
 
-if [ -n "${PRECOMPILE_LIMIT:-}" ]; then
-    head -n "$PRECOMPILE_LIMIT" "$sources/files.txt" > "$sources/limited.txt"
-    mv "$sources/limited.txt" "$sources/files.txt"
-fi
+# The programs a page runs on wasm: those the Rosetta index and the ghul.dev
+# example data flag. Nothing else is posted for the wasm target, since nothing
+# else is run there unedited.
+curl -sf -m 60 "$ROSETTA_INDEX" \
+    | jq -r '.tasks[].parts[] | select(.wasm == true) | .id' \
+    | while read -r id; do
+        file="$work/ghul-rosetta-code/tasks/$id/$(basename "$id").ghul"
+        [ -f "$file" ] && echo "$file"
+    done >> "$sources/wasm.txt" || true
 
-count=$(wc -l < "$sources/files.txt")
+touch "$sources/wasm.txt"
+
+if [ -n "${PRECOMPILE_LIMIT:-}" ]; then
+    for list in files wasm; do
+        head -n "$PRECOMPILE_LIMIT" "$sources/$list.txt" > "$sources/limited.txt"
+        mv "$sources/limited.txt" "$sources/$list.txt"
+    done
+fi
 
 if $list_only; then
     cat "$sources/files.txt"
-    echo "$count programs" >&2
+    echo "$(wc -l < "$sources/files.txt") programs, $(wc -l < "$sources/wasm.txt") of them flagged for wasm" >&2
     exit 0
 fi
 
@@ -158,11 +178,14 @@ curl -sf -o /dev/null -m 30 "$health" || { echo "the compile service is not heal
 started=$(date +%s)
 
 for target in ${targets//,/ }; do
-    tally=$(xargs -a "$sources/files.txt" -d '\n' -P "$parallel" -I{} \
+    list="$sources/files.txt"
+    [ "$target" = wasm ] && list="$sources/wasm.txt"
+
+    tally=$(xargs -a "$list" -d '\n' -r -P "$parallel" -I{} \
             bash -c 'compile_one "$1" "$2"' _ {} "$target" \
         | sort | uniq -c | awk '{ printf "%s%s x %s", sep, $2, $1; sep = ", " }')
 
-    echo "$target: $count programs, status $tally"
+    echo "$target: $(wc -l < "$list") programs, status ${tally:-none}"
 done
 
 echo "done in $(( $(date +%s) - started )) s"

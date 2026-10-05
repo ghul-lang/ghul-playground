@@ -694,8 +694,11 @@ Run it by hand as the deploy user, or list what it would compile:
 PRECOMPILE_LIMIT=10 /opt/ghul-playground/deploy/precompile.sh
 ```
 
-`PRECOMPILE_TARGETS=dotnet,wasm` compiles for the wasm target as well, once a
-page runs programs that way.
+The deploy and the timer both run it with `PRECOMPILE_TARGETS=dotnet,wasm`.
+Every program is compiled for .NET; only the programs a page runs on wasm by
+default are compiled for wasm as well - the Rosetta parts the corpus index
+flags with `wasm` and the ghul.dev examples whose data does - about 780 of
+the 1,800, which keeps the two targets' results inside the cache together.
 
 ## moving to a new compiler or runtime
 
