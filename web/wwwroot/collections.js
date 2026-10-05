@@ -147,8 +147,13 @@ export async function loadProgram(request, fetchImpl = fetch) {
     let manifest;
     let about;
     let runArgs;
+    let wasmIndex = Promise.resolve(null);
 
     try {
+        // Asked alongside the program's own files rather than after them, so
+        // the index costs a run no time of its own.
+        wasmIndex = indexFor(request, get);
+
         [source, unsupported, manifest, about, runArgs] = await Promise.all([
             get(request.source),
             get(request.unsupported),
@@ -215,18 +220,18 @@ export async function loadProgram(request, fetchImpl = fetch) {
         runMs: timing('run_ms'),
         // A program that reads files has none on the wasm target, so it stays
         // on .NET whatever the index says.
-        wasm: files.length === 0 && await runsOnWasm(request, get),
+        wasm: files.length === 0 && wasmFlag(await wasmIndex, request.id),
         ...(error ? { error } : {})
     };
 }
 
 const indexes = new Map();
 
-// Whether the collection's index says this program runs on the wasm target.
-// The index is read once per page and shared by every program loaded from it;
-// one that cannot be read answers false, which runs everything on .NET.
-async function runsOnWasm(request, get) {
-    if (!request.index || !request.id) return false;
+// The collection's index, which says which programs run on the wasm target.
+// Read once per page and shared by every program loaded from it; one that
+// cannot be read answers null, which runs everything on .NET.
+function indexFor(request, get) {
+    if (!request.index) return Promise.resolve(null);
 
     if (!indexes.has(request.index)) {
         indexes.set(request.index, (async () => {
@@ -240,9 +245,7 @@ async function runsOnWasm(request, get) {
         })());
     }
 
-    const index = await indexes.get(request.index);
-
-    return wasmFlag(index, request.id);
+    return indexes.get(request.index);
 }
 
 // The flag for one program in an index: its part's `wasm`, found by id.

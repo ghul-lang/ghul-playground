@@ -54,6 +54,23 @@ export const replOffered = () => serviceState().then(state => state.repl === tru
 
 const tokenRequired = () => serviceState().then(state => state.tokensRequired !== false);
 
+let compileTargets = null;
+
+// Whether the compile service builds for the wasm target. Asked once; a
+// service that cannot be asked builds for .NET only, as every one did before.
+const wasmCompiled = () => {
+    compileTargets ??= fetch(`${COMPILE_SERVICE}/targets`)
+        .then(response => response.ok ? response.json() : { targets: [] })
+        .then(answer => Array.isArray(answer.targets) && answer.targets.includes('wasm'))
+        .catch(() => false);
+
+    return compileTargets;
+};
+
+// Whether a program can run on wasm here: the browser has to be able to run
+// the module, and the compile service has to be able to build it.
+export const wasmAvailable = async () => (await wasmSupported()) && (await wasmCompiled());
+
 // The services cap how large a program they will take. The editor enforces the
 // same number so a reader is told before they run rather than after, and reads
 // it from the service so the two cannot drift apart. The fallback matters only
@@ -423,7 +440,7 @@ export async function createPlayground({
     let wasmCapable = false;
 
     async function reportTargets() {
-        const supported = await wasmSupported();
+        const supported = await wasmAvailable();
 
         onTargets({
             capable: wasmCapable,
@@ -451,7 +468,7 @@ export async function createPlayground({
     // The target a run uses: wasm only where it is chosen and the browser can
     // run it, .NET otherwise.
     async function effectiveTarget() {
-        return target === 'wasm' && await wasmSupported() ? 'wasm' : 'dotnet';
+        return target === 'wasm' && await wasmAvailable() ? 'wasm' : 'dotnet';
     }
 
     // `args` is what the program receives as its command line. It is handed

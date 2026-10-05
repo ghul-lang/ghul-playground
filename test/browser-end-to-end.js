@@ -1938,12 +1938,12 @@ chrome.on('error', e => {
         await sleep(500);
     }
 
-    const wasmSupported = await ev(`(async () => (await import('./wasm-support.js')).wasmSupported())()`);
+    const wasmSupported = await ev(`(async () => (await import('./playground.js')).wasmAvailable())()`);
     const choiceShowing = () => ev(`(() => { const t = document.getElementById('target');
                  return Boolean(t) && t.offsetParent !== null; })()`);
 
     if (!wasmSupported) {
-        log('skip  wasm: this browser cannot run a wasm build');
+        log('skip  wasm: this browser or compile service cannot run a wasm build');
         check('no wasm/.NET choice where wasm cannot run', !(await choiceShowing()));
     } else {
         check('the wasm/.NET choice is offered', await choiceShowing());

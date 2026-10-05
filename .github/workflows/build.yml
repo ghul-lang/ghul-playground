@@ -518,6 +518,21 @@ jobs:
           # the shared volume is in production.
           CELL_CACHE_DIR: /tmp/ghul-cells
         run: |
+          # The wasm target's library sources, at the tags the compile image
+          # takes, so the browser test runs programs on wasm too.
+          arg() { sed -n "s/^ARG $1=//p" compile-service/Dockerfile; }
+
+          export GHUL_CORE_VERSION=$(arg GHUL_CORE_VERSION)
+          export GHUL_RUNTIME_SOURCE_VERSION=$(arg GHUL_RUNTIME_VERSION)
+          export GHUL_CORE_DIR="$RUNNER_TEMP/wasm-libraries/ghul-core"
+          export GHUL_RUNTIME_SOURCE_DIR="$RUNNER_TEMP/wasm-libraries/ghul-runtime"
+
+          mkdir -p "$GHUL_CORE_DIR" "$GHUL_RUNTIME_SOURCE_DIR"
+          curl -sfL "https://github.com/ghul-lang/ghul-core/archive/refs/tags/v$GHUL_CORE_VERSION.tar.gz" \
+            | tar -xz --strip-components=1 -C "$GHUL_CORE_DIR"
+          curl -sfL "https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v$GHUL_RUNTIME_SOURCE_VERSION.tar.gz" \
+            | tar -xz --strip-components=1 -C "$GHUL_RUNTIME_SOURCE_DIR"
+
           node compile-service/server.js > /tmp/compile.log 2>&1 &
           node analyse-service/server.js > /tmp/analyse.log 2>&1 &
 

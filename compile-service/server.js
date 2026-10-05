@@ -448,6 +448,20 @@ http.createServer((request, response) => {
         return;
     }
 
+    // The targets a compile can ask for, from the path the page compiles
+    // through: the page's own /health is the analyse service's, which cannot
+    // say what this service builds.
+    if (request.method === 'GET' && request.url.startsWith('/compile/targets')) {
+        getToolchain().then(({ wasm }) => {
+            response.writeHead(200, { 'content-type': 'application/json' });
+            response.end(JSON.stringify({ targets: wasm ? ['dotnet', 'wasm'] : ['dotnet'] }));
+        }, () => {
+            response.writeHead(200, { 'content-type': 'application/json' });
+            response.end(JSON.stringify({ targets: [] }));
+        });
+        return;
+    }
+
     const isCell = request.method === 'POST' && request.url.startsWith('/compile/cell');
 
     // Off unless enabled, and off means absent rather than refused.
