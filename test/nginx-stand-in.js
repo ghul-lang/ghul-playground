@@ -109,6 +109,11 @@ function startNginxStandIn({ prefix = '/', port = 0 } = {}) {
             socket.pipe(upstream);
         });
 
+        // A page navigating away can drop its socket without a closing
+        // handshake, and the service only gives the session back when its own
+        // end closes, so a close on either side closes the other.
+        upstream.on('close', () => socket.destroy());
+        socket.on('close', () => upstream.destroy());
         upstream.on('error', () => socket.destroy());
         socket.on('error', () => upstream.destroy());
     });
