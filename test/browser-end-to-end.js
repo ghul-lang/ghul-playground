@@ -1947,6 +1947,35 @@ chrome.on('error', e => {
         check('no wasm/.NET choice where wasm cannot run', !(await choiceShowing()));
     } else {
         check('the wasm/.NET choice is offered', await choiceShowing());
+
+        // The analyser follows the target: a .NET API the wasm target lacks is
+        // reported as the program is typed, and not once .NET is chosen.
+        const dotnetOnly = ['use IO.Std.write_line;', '', 'entry() is',
+            '    write_line(System.Environment.machine_name);', 'si', ''].join('\n');
+        const markerText = () => ev(`JSON.stringify(monaco.editor.getModelMarkers({}).map(m => m.message))`);
+
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(dotnetOnly)}); true`);
+
+        let wasmMarkers = '[]';
+        for (let i = 0; i < 120; i++) {
+            wasmMarkers = await markerText();
+            if (wasmMarkers.includes('Environment')) break;
+            await sleep(500);
+        }
+        check('on wasm, the editor reports a .NET API wasm lacks', wasmMarkers.includes('Environment'), wasmMarkers);
+
+        await ev(`document.querySelector('#target [data-target="dotnet"]').click(); true`);
+
+        let dotnetMarkers = wasmMarkers;
+        for (let i = 0; i < 120; i++) {
+            dotnetMarkers = await markerText();
+            if (!dotnetMarkers.includes('Environment')) break;
+            await sleep(500);
+        }
+        check('on .NET, the same program is clean', !dotnetMarkers.includes('Environment'), dotnetMarkers);
+
+        await ev(`document.querySelector('#target [data-target="wasm"]').click(); true`);
+        await sleep(1000);
         check('wasm is chosen by default',
             await ev(`document.querySelector('#target [data-target="wasm"]').getAttribute('aria-pressed') === 'true'`));
 

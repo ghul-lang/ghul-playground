@@ -41,9 +41,29 @@ RUN dotnet tool install --tool-path /home/playground/tools \
  && dotnet add /tmp/runtime-probe package ghul.raster --version "${GHUL_RASTER_VERSION}" \
  && rm -rf /tmp/runtime-probe
 
+# The library sources an analyser for the wasm target reads in place of the
+# reference assemblies: the same tags the compile service builds wasm against
+# (scripts/check-wasm-pins.js checks the two images agree).
+ARG GHUL_CORE_VERSION=0.35.0
+
+ADD --chown=playground:playground \
+    https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
+ADD --chown=playground:playground \
+    https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v${GHUL_RUNTIME_VERSION}.tar.gz /tmp/ghul-runtime.tar.gz
+
+RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghul-runtime \
+ && tar -xzf /tmp/ghul-core.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-core \
+ && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \
+ && rm /tmp/ghul-core.tar.gz /tmp/ghul-runtime.tar.gz \
+ && test -f /home/playground/libraries/ghul-runtime/wasm-sources.rsp
+
 ENV GHUL_COMPILER_DLL=/home/playground/tools/.store/ghul.compiler/${GHUL_COMPILER_VERSION}/ghul.compiler/${GHUL_COMPILER_VERSION}/tools/net10.0/any/ghul.dll \
     GHUL_RUNTIME_DLL=/home/playground/.nuget/packages/ghul.runtime/${GHUL_RUNTIME_VERSION}/lib/net10.0/ghul-runtime.dll \
-    GHUL_RASTER_DLL=/home/playground/.nuget/packages/ghul.raster/${GHUL_RASTER_VERSION}/lib/net10.0/ghul-raster.dll
+    GHUL_RASTER_DLL=/home/playground/.nuget/packages/ghul.raster/${GHUL_RASTER_VERSION}/lib/net10.0/ghul-raster.dll \
+    GHUL_CORE_DIR=/home/playground/libraries/ghul-core \
+    GHUL_RUNTIME_SOURCE_DIR=/home/playground/libraries/ghul-runtime \
+    GHUL_RUNTIME_SOURCE_VERSION=${GHUL_RUNTIME_VERSION} \
+    GHUL_CORE_VERSION=${GHUL_CORE_VERSION}
 
 COPY --chown=playground:playground shared /home/playground/service/shared
 COPY --chown=playground:playground analyse-service/*.js /home/playground/service/analyse-service/

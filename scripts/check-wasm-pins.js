@@ -57,7 +57,7 @@ function dockerArg(text, name) {
     const match = text.match(new RegExp(`^ARG ${name}=(.+)$`, 'm'));
 
     if (!match) {
-        throw new Error(`compile-service/Dockerfile: no ${name}`);
+        throw new Error(`Dockerfile: no ${name}`);
     }
 
     return match[1].trim();
@@ -88,6 +88,21 @@ async function main() {
 
         console.error(`${library}: the image takes ${actual}, but ghul-cli pins ${wanted ?? 'none'} ` +
             `for compiler ${compiler}; set ${arg} in compile-service/Dockerfile to match`);
+    }
+
+    // The analyse service reads the same library sources for a wasm session,
+    // so what the editor reports is what the wasm compile says. check-versions
+    // already holds the compiler and runtime versions of the two images equal.
+    const analyse = fs.readFileSync(path.join(root, 'analyse-service/Dockerfile'), 'utf8');
+    const compileCore = dockerArg(dockerfile, 'GHUL_CORE_VERSION');
+    const analyseCore = dockerArg(analyse, 'GHUL_CORE_VERSION');
+
+    if (analyseCore === compileCore) {
+        console.log(`ghul-core: v${analyseCore} in the analyse image too`);
+    } else {
+        failed = true;
+        console.error(`ghul-core: the analyse image takes v${analyseCore} and the compile image v${compileCore}; ` +
+            'set GHUL_CORE_VERSION in analyse-service/Dockerfile to match');
     }
 
     process.exit(failed ? 1 : 0);
