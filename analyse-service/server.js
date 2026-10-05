@@ -626,6 +626,13 @@ wss.on('connection', async (socket, request) => {
         return;
     }
 
+    // A client speaks as soon as the socket opens, and an analyser started
+    // cold takes seconds to arrive, so what it says meanwhile is kept for the
+    // session rather than dropped.
+    const early = [];
+    const keep = data => early.push(data);
+    socket.on('message', keep);
+
     // Hold the slot while acquiring, so two connections arriving together
     // cannot both pass the checks above. It counts against the address and is
     // never evicted, since nobody has used it yet.
@@ -660,10 +667,13 @@ wss.on('connection', async (socket, request) => {
     session.log(`${repl ? 'REPL: ' : ''}took analyser ${analyser.id} (${analyser.warm ? 'warm' : 'cold'}), ` +
         `pool now ${JSON.stringify(poolState())}`);
 
+    socket.off('message', keep);
     socket.on('message', data => {
         session.touch();
         session.fromClient(data.toString());
     });
+
+    for (const data of early) session.fromClient(data.toString());
 
     socket.on('close', () => session.close('client disconnected'));
     socket.on('error', () => session.close('socket error'));
