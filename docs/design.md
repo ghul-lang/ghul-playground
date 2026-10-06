@@ -71,6 +71,23 @@ A program that reads and is never answered waits indefinitely. That is visible
 rather than fatal - the page stays responsive, and Ctrl+D in the input box ends
 the stream - where before the same program froze the tab.
 
+## the compiled code
+
+The IL tab shows what the program compiles to, and nothing builds it until the
+tab is opened. A Run compiles exactly as it would without the tab: no debug
+information and no listing, under the cache key it always had. Opening the tab
+sends `POST /compile/view`, a compile of its own with `--debug`, after which
+`ilspycmd` disassembles the assembly with the source position of each statement
+taken from the PDB. The answer is cached by the source and the target like any
+compiled result, so a second look costs nothing. Editing the program while the
+tab is open marks the listing as out of date rather than compiling on each
+keystroke.
+
+The compiler folds a file's path into the namespace of a program that declares
+none, and the service compiles in a temporary directory, so it takes that
+directory out of the listing before answering: type names read `main.`, and
+the positions name a line rather than a path.
+
 ## sessions
 
 Each editor gets one WebSocket, one private workspace directory, and one

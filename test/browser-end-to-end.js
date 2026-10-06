@@ -1951,6 +1951,43 @@ chrome.on('error', e => {
         }
     }
 
+    // The compiled code, built only when its tab is opened: a Run never asks
+    // for it, and the listing comes from a request of its own.
+    await cmd('Page.navigate', { url: untracked(BASE) });
+
+    for (let i = 0; i < 120; i++) {
+        if (await ev(`document.getElementById('compiler')?.dataset.state === 'ready'`)) break;
+        await sleep(500);
+    }
+
+    {
+        const program = ['use IO.Std.write_line;', '', 'entry() is', '    write_line("{6 * 7}");', 'si', ''].join('\n');
+        const listing = () => ev(`monaco.editor.getModels().map(m => m.getValue()).find(v => v.includes('.method')) ?? ''`);
+
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program)}); true`);
+
+        check('the compiled-code tab is labelled for .NET',
+            (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'IL');
+
+        await ev(`document.getElementById('tab-view').click(); true`);
+
+        let text = '';
+        for (let i = 0; i < 120 && !text; i++) {
+            text = await listing();
+            if (!text) await sleep(500);
+        }
+
+        check('opening the tab shows the compiled IL', text.includes('ldc.i4') || text.includes('ldstr'), text.slice(0, 200));
+        check('the listing marks source positions', /\/\/ line \d+/.test(text));
+        check('the listing carries no temporary directory', !/ghul_playground/.test(text));
+
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program.replace('6 * 7', '6 * 9'))}); true`);
+        await sleep(500);
+
+        check('an edit says the listing is out of date',
+            await ev(`document.querySelector('#view .view-status')?.textContent.includes('changed')`));
+    }
+
     // The wasm target. `?wasm` offers it for whatever is in the editor, which
     // is what a program flagged in the corpus index gets. A browser without
     // the features a wasm build needs is offered nothing and runs on .NET, so
