@@ -8,6 +8,14 @@
 //   POST /compile  {"source": "...", "target": "dotnet"|"wasm"}
 //     -> {"ok": bool, "diagnostics": [...], "assembly": "<base64>"|null}
 //
+//   POST /compile/view  {"source": "...", "target": "dotnet", "scope": "program"|"all"}
+//     -> {"ok": true, "target", "language": "il", "text": "...", "lines": [...],
+//         "truncated": bool, "omitted": 0, "cached": bool}
+//     or {"ok": false, "target", "diagnostics": [...], "cached": bool}
+//
+//   The compiled code as text, built by a compile of its own only when asked
+//   for, so a POST /compile never pays for it. See view.js.
+//
 //   with "target": "wasm"
 //     -> {"ok": bool, "diagnostics": [...], "module": "<base64>"|null,
 //         "loader": "<the loader's JavaScript>"|null}
@@ -29,6 +37,7 @@ const tokens = require('../shared/tokens');
 const { recordOutcome } = require('../shared/outcomes');
 const cells = require('./cells');
 const results = require('./results');
+const view = require('./view');
 
 const PORT = Number(process.env.PORT ?? 5090);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -61,6 +70,10 @@ const CELL_CACHE_BYTES = Number(process.env.CELL_CACHE_BYTES ?? 64 * 1024 * 1024
 // corpus it is mostly answering for is a few hundred programs.
 const RESULT_CACHE_DIR = process.env.RESULT_CACHE_DIR ?? path.join(tmpdir(), 'ghul-results');
 const RESULT_CACHE_BYTES = Number(process.env.RESULT_CACHE_BYTES ?? 128 * 1024 * 1024);
+
+// The disassembler the assembly view runs, installed beside the compiler in
+// the image.
+const ILSPYCMD = process.env.ILSPYCMD ?? 'ilspycmd';
 
 // The request body as JSON can be up to six times its source when every
 // character needs escaping, plus the names and punctuation around each cell.
@@ -352,6 +365,52 @@ async function compileUncached(source, target = 'dotnet') {
     }
 }
 
+// The compiled code of `source` as text, from the cache where it has been
+// viewed before. Keyed apart from the compile a Run asks for, which it never
+// replaces: the view is a separate build, with debug information on.
+async function compileView(source, target, scope) {
+    const { cache, toolchainIds } = await getResultState();
+    const key = `${toolchainIds[target]}:view${scope === 'all' ? ':all' : ''}`;
+
+    return cache.answer(results.resultKey(key, source), () => compileViewUncached(source, target));
+}
+
+async function compileViewUncached(source, target) {
+    if (target !== 'dotnet') {
+        throw new cells.BadRequest(400, `there is no assembly view for the ${target} target here yet`);
+    }
+
+    const toolchain = await getToolchain();
+    const directory = await mkdtemp(path.join(tmpdir(), 'ghul-playground-view-'));
+
+    try {
+        await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
+
+        const args = [...compilerArguments(toolchain, directory, target, source)];
+        args.splice(1, 0, '--debug');
+
+        const { error, stdout, stderr } = await runCompiler(args, directory);
+        const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
+
+        if (error) {
+            const timedOut = !!error.killed;
+            const failed = !error.killed && !diagnostics.length;
+
+            return { ok: false, target, diagnostics, ...(timedOut ? { timedOut } : {}), ...(failed ? { failed } : {}) };
+        }
+
+        const listing = await view.disassemble(ILSPYCMD, path.join(directory, 'main.exe'), COMPILE_TIMEOUT_MS);
+
+        return {
+            ok: true, target, language: 'il',
+            ...view.shapeListing(listing, path.basename(directory)),
+            omitted: 0
+        };
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+}
+
 // How many errors a compile reported: the diagnostics themselves are the
 // reader's program talking, so only their number is recorded.
 function errorCount(diagnostics) {
@@ -469,6 +528,7 @@ http.createServer((request, response) => {
     }
 
     const isCell = request.method === 'POST' && request.url.startsWith('/compile/cell');
+    const isView = request.method === 'POST' && route === '/compile/view';
 
     // Off unless enabled, and off means absent rather than refused.
     if ((isCell && !REPL_ENABLED) || request.method !== 'POST' || !request.url.startsWith('/compile')) {
@@ -481,7 +541,7 @@ http.createServer((request, response) => {
     const startedAt = Date.now();
 
     const outcome = (status, result, fields = {}) => recordOutcome({
-        service: 'compile', kind: isCell ? 'cell' : 'program', event: 'request',
+        service: 'compile', kind: isCell ? 'cell' : isView ? 'view' : 'program', event: 'request',
         status, result, ms: Date.now() - startedAt, ...fields
     });
 
@@ -549,7 +609,17 @@ http.createServer((request, response) => {
                 const source = parsed.source ?? '';
                 target = await requestedTarget(parsed.target);
 
-                work = () => compile(source, target);
+                if (isView) {
+                    const scope = parsed.scope ?? 'program';
+
+                    if (scope !== 'program' && scope !== 'all') {
+                        throw new cells.BadRequest(400, `unknown scope ${JSON.stringify(scope)}`);
+                    }
+
+                    work = () => compileView(source, target, scope);
+                } else {
+                    work = () => compile(source, target);
+                }
             }
 
             const result = await withSlot(() => {

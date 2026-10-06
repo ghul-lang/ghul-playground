@@ -13,6 +13,7 @@ import * as files from './files.js'
 import { countEvent, countPageview, band, countTimeOnPage } from './events.js'
 import { isAheadOfWiki, loadIndex, suggestions as suggest, taskFor } from './rosetta-index.js'
 import { whenReader } from './engagement.js'
+import { createAssemblyView } from './assembly-view.js'
 
 // Where this mini-IDE is: its own page, or framed on an example page or a
 // Rosetta task page, which the framing page says in the address. Every event
@@ -96,6 +97,7 @@ const ANALYSER_STATE = {
 
 const pane = document.getElementById('pane');
 const paneToggle = document.getElementById('pane-toggle');
+const paneMaximise = document.getElementById('pane-maximise');
 
 // The height to come back to. The pane's own height is cleared while
 // collapsed, so without this an expand would forget a drag made before it.
@@ -105,6 +107,7 @@ function setPaneCollapsed(collapsed) {
     if (collapsed === (pane.dataset.collapsed !== undefined)) return;
 
     if (collapsed) {
+        setPaneMaximised(false);
         paneHeight = pane.style.height;
         pane.style.height = '';
         pane.dataset.collapsed = '';
@@ -120,11 +123,39 @@ function setPaneCollapsed(collapsed) {
     paneToggle.title = label;
 }
 
+// Expanding the pane over the editor, for a long listing or a lot of output.
+// The editor keeps its contents and its place, and comes back as it was.
+function setPaneMaximised(maximised) {
+    if (maximised === (pane.dataset.maximised !== undefined)) return;
+
+    if (maximised) {
+        setPaneCollapsed(false);
+        pane.dataset.maximised = '';
+    } else {
+        delete pane.dataset.maximised;
+    }
+
+    const label = maximised ? 'Restore the editor' : 'Expand the pane over the editor';
+
+    paneMaximise.setAttribute('aria-pressed', String(maximised));
+    paneMaximise.setAttribute('aria-label', label);
+    paneMaximise.title = label;
+}
+
 paneToggle.addEventListener('click', () => setPaneCollapsed(pane.dataset.collapsed === undefined));
+paneMaximise.addEventListener('click', () => setPaneMaximised(pane.dataset.maximised === undefined));
+
+// The compiled code, shown only when its tab is opened. Created once the
+// playground is, since it asks the playground for its listing.
+const viewPane = document.getElementById('view');
+const viewTab = document.getElementById('tab-view');
+let assemblyView = null;
 
 const tabs = [
     { button: document.getElementById('tab-problems'), panel: diagnosticsPane },
     { button: document.getElementById('tab-output'), panel: outputPane }
+,
+    { button: viewTab, panel: viewPane }
 ];
 
 // Every caller is putting something in front of the reader, so a collapsed
@@ -139,6 +170,8 @@ function showTab(panel) {
     }
 
     showTaskLabels();
+
+    if (panel === viewPane) assemblyView?.show();
 }
 
 // The page as a panel inside another: ghul.dev frames it on a task's own page,
@@ -173,6 +206,7 @@ const splitter = document.getElementById('splitter');
 splitter.addEventListener('pointerdown', event => {
     splitter.setPointerCapture(event.pointerId);
     setPaneCollapsed(false);
+    setPaneMaximised(false);
     splitter.dataset.dragging = '';
 
     const move = e => {
@@ -563,6 +597,9 @@ const hideSpinner = () => {
 
 const initialSource = program?.source ?? savedSource;
 
+// The target a run uses now, as the playground last reported it.
+let runTarget = 'dotnet';
+
 const playground = await createPlayground({
     container: document.getElementById('editor'),
     theme: isDark() ? 'vs-dark' : 'vs',
@@ -613,6 +650,10 @@ const playground = await createPlayground({
     // in a browser that can run it; everywhere else the program runs on .NET
     // and there is nothing to choose.
     onTargets: ({ capable, supported, target }) => {
+        runTarget = target;
+
+        if (!viewPane.hidden) assemblyView?.changed();
+
         targetChoice.hidden = !(capable && supported);
 
         for (const button of targetChoice.querySelectorAll('button')) {
@@ -730,6 +771,14 @@ const playground = await createPlayground({
         analyser.title = tooltip;
         analyserText.textContent = label;
     }
+});
+
+assemblyView = createAssemblyView({
+    panel: viewPane,
+    fetchView: scope => playground.viewCompiled(scope),
+    getSource: () => playground.getSource(),
+    getTarget: () => runTarget,
+    onLabel: label => { viewTab.textContent = label; }
 });
 
 playground.setWasmCapable(WASM_REQUESTED || program?.wasm === true);
@@ -1218,6 +1267,8 @@ let saveDebounce = null;
 let sourceLength = playground.getSource().length;
 
 playground.editor.onDidChangeModelContent(event => {
+    if (!viewPane.hidden) assemblyView?.changed();
+
     const source = playground.getSource();
 
     // One edit spanning the whole buffer is a paste over it or a select-all

@@ -466,6 +466,30 @@ export async function createPlayground({
     // The wasm program running now, if one is.
     let wasmRun = null;
 
+    // The compiled code of what the editor holds, for the assembly view: a
+    // request of its own, so a run never builds it. Answers the status and
+    // the parsed body, or throws when the service cannot be reached.
+    async function viewCompiled(scope = 'program') {
+        const token = getToken();
+
+        const response = await fetch(`${COMPILE_SERVICE}/view`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                ...(token ? { authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ source: editor.getValue(), target: await effectiveTarget(), scope })
+        });
+
+        let result = null;
+
+        try {
+            result = await response.json();
+        } catch { }
+
+        return { status: response.status, result };
+    }
+
     // The target a run uses: wasm only where it is chosen and the browser can
     // run it, .NET otherwise.
     async function effectiveTarget() {
@@ -882,6 +906,7 @@ export async function createPlayground({
         setTarget,
         getTarget: () => target,
         getSource: () => editor.getValue(),
+        viewCompiled,
         // The data files the next run writes into the runtime's working
         // directory. Files an earlier run wrote are left where they are: the
         // filesystem lives as long as the tab, and a program only ever opens

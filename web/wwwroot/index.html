@@ -244,6 +244,16 @@
     #output .spin { color: var(--fg-muted); margin-left: 1ch; }
     #output:has(> .spin:only-child) .spin { margin-left: 0; }
 
+    /* The compiled code: a status line over a read-only editor, which takes
+       the rest of the pane. */
+    #view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    #view[hidden] { display: none; }
+    .view-status { padding: 0.5rem 1rem; color: var(--fg-muted); font-size: 0.82rem; display: flex; gap: 1ch; align-items: center; }
+    .view-status[hidden] { display: none; }
+    .view-action { font-size: 0.8125rem; }
+    .view-listing { flex: 1; min-height: 0; }
+    .view-listing[hidden] { display: none; }
+
     #arguments-row[hidden] { display: none; }
 
     #arguments-row {
@@ -422,6 +432,19 @@
     #pane[data-collapsed] { height: auto; }
     #pane[data-collapsed] > pre,
     #pane[data-collapsed] > form { display: none; }
+
+    /* Expanded over the editor: the pane takes the whole of the space below
+       the toolbar, for a long listing or a lot of output, and the editor and
+       the splitter are hidden until it is restored. */
+    main:has(> #pane[data-maximised]) > #editor-frame,
+    main:has(> #pane[data-maximised]) > #splitter { display: none; }
+    #pane[data-maximised] { flex: 1; height: auto !important; }
+    #pane[data-collapsed] > #view { display: none; }
+
+    #pane-maximise { min-width: 1.5rem; padding: 0 0.35rem; color: var(--fg-muted); }
+    #pane-maximise:hover { color: var(--fg); }
+    #pane-maximise svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.5; display: block; }
+    #pane[data-maximised] #pane-maximise svg { transform: rotate(180deg); }
 
     #pane-toggle { min-width: 1.5rem; padding: 0 0.35rem; color: var(--fg-muted); }
     #pane-toggle:hover { color: var(--fg); }
@@ -696,6 +719,8 @@
         <button class="tab" id="tab-output" role="tab" aria-selected="false" aria-controls="output">
           Output
         </button>
+        <button class="tab" id="tab-view" role="tab" aria-selected="false" aria-controls="view"
+                title="The compiled code, built when this is opened">IL</button>
 
         <!-- Which task the pane is showing: the title, and for a task solved
              more than one way the part and the way to the next. Here rather
@@ -704,6 +729,11 @@
         <p id="task-identity" hidden></p>
 
         <span id="run-cost"></span>
+
+        <button id="pane-maximise" title="Expand the pane over the editor"
+                aria-label="Expand the pane over the editor" aria-pressed="false" aria-controls="pane">
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5l4-4 4 4M1 9l4-4 4 4" /></svg>
+        </button>
 
         <button id="pane-toggle" title="Collapse the pane" aria-label="Collapse the pane"
                 aria-expanded="true" aria-controls="pane">
@@ -727,6 +757,7 @@
 
       <pre id="diagnostics" role="tabpanel"><span class="empty">No problems.</span></pre>
       <pre id="output" role="tabpanel" hidden><span class="empty">Run the program to see its output here.</span></pre>
+      <div id="view" role="tabpanel" hidden></div>
 
       <!-- Shown only while a program is actually blocked reading a line, which
            it asks for itself: a box that were always there would invite typing

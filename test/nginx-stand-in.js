@@ -28,7 +28,7 @@ function route(url, prefix) {
     // also send a page file such as analyser-outcomes.js to a service.
     const bare = path.split('?')[0];
 
-    if (bare === '/compile' || bare === '/compile/cell') return { port: COMPILE, path };
+    if (bare === '/compile' || bare === '/compile/cell' || bare === '/compile/view') return { port: COMPILE, path };
     if (bare === '/analyse' || bare === '/health') return { port: ANALYSE, path };
 
     return { port: WEB, path };

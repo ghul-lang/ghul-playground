@@ -45,6 +45,13 @@ RUN dotnet tool install --tool-path /home/playground/tools \
  && dotnet add /tmp/runtime-probe package ghul.raster --version "${GHUL_RASTER_VERSION}" \
  && rm -rf /tmp/runtime-probe
 
+# The disassembler the assembly view runs over a compiled program, pinned like
+# the compiler: a new version can change the listing a reader is shown.
+ARG ILSPYCMD_VERSION=11.0.0.9375
+
+RUN dotnet tool install --tool-path /home/playground/tools \
+        ilspycmd --version "${ILSPYCMD_VERSION}"
+
 # The library sources a --target wasm compile builds against, at the tags
 # ghul-cli pins for this compiler (scripts/check-wasm-pins.js holds the two in
 # step). The runtime's sources are the tag of the runtime package above.
@@ -69,6 +76,8 @@ RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghu
 
 # Resolved once here rather than discovered per request, so a missing piece
 # fails the build rather than the first user request.
+ENV ILSPYCMD=/home/playground/tools/ilspycmd
+
 ENV GHUL_COMPILER_DLL=/home/playground/tools/.store/ghul.compiler/${GHUL_COMPILER_VERSION}/ghul.compiler/${GHUL_COMPILER_VERSION}/tools/net10.0/any/ghul.dll \
     GHUL_RUNTIME_DLL=/home/playground/.nuget/packages/ghul.runtime/${GHUL_RUNTIME_VERSION}/lib/net10.0/ghul-runtime.dll \
     GHUL_RASTER_DLL=/home/playground/.nuget/packages/ghul.raster/${GHUL_RASTER_VERSION}/lib/net10.0/ghul-raster.dll \

@@ -132,6 +132,9 @@ jobs:
       - name: Check what a compiled result is keyed on and when it is kept
         run: node test/result-cache.mjs
 
+      - name: Check how a disassembly is shaped for the assembly view
+        run: node test/assembly-view.mjs
+
       # A wasm compile builds against library sources at the tags the image
       # names; ghul-cli pins tags to compiler versions, and the two have to
       # agree or a program behaves differently here and under `ghul run`.
@@ -508,8 +511,18 @@ jobs:
           echo "command=$server" >> "$GITHUB_OUTPUT"
           echo "$version at $server"
 
+      # The disassembler the assembly view runs, at the version the compile
+      # image pins.
+      - name: Install the disassembler
+        id: disassembler
+        run: |
+          version=$(grep -oP '^ARG ILSPYCMD_VERSION=\K.+' compile-service/Dockerfile)
+          dotnet tool install --tool-path "$RUNNER_TEMP/ilspycmd" ilspycmd --version "$version"
+          echo "command=$RUNNER_TEMP/ilspycmd/ilspycmd" >> "$GITHUB_OUTPUT"
+
       - name: Start the services and the web app
         env:
+          ILSPYCMD: ${{ steps.disassembler.outputs.command }}
           GHUL_COMPILER_DLL: ${{ steps.toolchain.outputs.compiler }}
           GHUL_RUNTIME_DLL: ${{ steps.toolchain.outputs.runtime }}
           GHUL_RASTER_DLL: ${{ steps.toolchain.outputs.raster }}
