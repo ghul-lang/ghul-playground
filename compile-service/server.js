@@ -8,9 +8,11 @@
 //   POST /compile  {"source": "...", "target": "dotnet"|"wasm"}
 //     -> {"ok": bool, "diagnostics": [...], "assembly": "<base64>"|null}
 //
-//   POST /compile/view  {"source": "...", "target": "dotnet", "scope": "program"|"all"}
-//     -> {"ok": true, "target", "language": "il", "text": "...", "lines": [...],
-//         "truncated": bool, "omitted": 0, "cached": bool}
+//   POST /compile/view  {"source": "...", "target": "dotnet"|"wasm", "scope": "program"|"all"}
+//     -> {"ok": true, "target", "language": "il"|"wat", "text": "...", "lines": [...],
+//         "truncated": bool, "omitted": n, "cached": bool}
+//     ("omitted" counts the library functions a wasm view of scope "program"
+//     leaves out; IL has none to leave out)
 //     or {"ok": false, "target", "diagnostics": [...], "cached": bool}
 //
 //   The compiled code as text, built by a compile of its own only when asked
@@ -372,12 +374,12 @@ async function compileView(source, target, scope) {
     const { cache, toolchainIds } = await getResultState();
     const key = `${toolchainIds[target]}:view${scope === 'all' ? ':all' : ''}`;
 
-    return cache.answer(results.resultKey(key, source), () => compileViewUncached(source, target));
+    return cache.answer(results.resultKey(key, source), () => compileViewUncached(source, target, scope));
 }
 
-async function compileViewUncached(source, target) {
-    if (target !== 'dotnet') {
-        throw new cells.BadRequest(400, `there is no assembly view for the ${target} target here yet`);
+async function compileViewUncached(source, target, scope = 'program') {
+    if (target === 'wasm') {
+        return compileWatView(source, scope);
     }
 
     const toolchain = await getToolchain();
@@ -406,6 +408,41 @@ async function compileViewUncached(source, target) {
             ...view.shapeListing(listing, path.basename(directory)),
             omitted: 0
         };
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+}
+
+// The WAT the compiler prints for `source`, with each statement's source line
+// marked. Compiled from the bare name main.ghul in its directory, so the
+// positions name that rather than a temporary path. The program's own
+// functions only, unless `scope` asks for the whole module.
+async function compileWatView(source, scope) {
+    const { compiler, wasm } = await getToolchain();
+    const directory = await mkdtemp(path.join(tmpdir(), 'ghul-playground-view-'));
+
+    try {
+        await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
+
+        const libraries = wasm.withRaster && usesRaster(source) ? wasm.withRaster : wasm;
+        const args = [compiler, '--target', 'wasm', ...libraries.args,
+            '--wat', 'main.wat', '--wat-lines',
+            ...(scope === 'all' ? [] : ['--wat-program-only']),
+            '-o', 'main.wasm', 'main.ghul'];
+
+        const { error, stdout, stderr } = await runCompiler(args, directory);
+        const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
+
+        if (error) {
+            const timedOut = !!error.killed;
+            const failed = !error.killed && !diagnostics.length;
+
+            return { ok: false, target: 'wasm', diagnostics, ...(timedOut ? { timedOut } : {}), ...(failed ? { failed } : {}) };
+        }
+
+        const wat = await readFile(path.join(directory, 'main.wat'), 'utf8');
+
+        return { ok: true, target: 'wasm', language: 'wat', ...view.shapeWat(wat, 'main.ghul') };
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
