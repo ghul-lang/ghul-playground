@@ -670,12 +670,30 @@ jobs:
           docker build -f compile-service/Dockerfile -t playground-compile .
           docker build -f analyse-service/Dockerfile -t playground-analyse .
 
+      # Behind the rules production's host puts in front of its containers:
+      # names still resolve, and a connection to anything outside the network
+      # is dropped rather than refused, so a tool that phones home hangs here
+      # as it does there. The test runs inside the compile container, which
+      # the rules leave able to reach the analyse one.
       - name: Start them and use them
         run: |
-          docker run -d --name compile -e HOST=0.0.0.0 -p 127.0.0.1:5190:5090 playground-compile
-          docker run -d --name analyse -e HOST=0.0.0.0 -p 127.0.0.1:5191:5091 playground-analyse
+          docker network create --subnet 172.31.240.0/24 playground
+          sudo iptables -I DOCKER-USER -s 172.31.240.0/24 -j DROP
+          sudo iptables -I DOCKER-USER -s 172.31.240.0/24 -d 172.31.240.0/24 -j RETURN
+          sudo iptables -I DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
 
-          node test/image-smoke.mjs
+          docker run -d --name compile --network playground -e HOST=0.0.0.0 playground-compile
+          docker run -d --name analyse --network playground -e HOST=0.0.0.0 playground-analyse
+
+          if docker exec compile node -e 'fetch("https://api.nuget.org", { signal: AbortSignal.timeout(5000) }).then(() => process.exit(1), () => process.exit(0))'; then
+            echo "the containers cannot reach the internet"
+          else
+            echo "the containers can reach the internet, so this check would prove nothing"
+            exit 1
+          fi
+
+          docker cp test/image-smoke.mjs compile:/tmp/image-smoke.mjs
+          docker exec -e ANALYSE_URL=http://analyse:5091 compile node /tmp/image-smoke.mjs
 
       - name: Service logs
         if: failure()

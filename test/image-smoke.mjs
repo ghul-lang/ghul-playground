@@ -3,13 +3,17 @@
 // against, passes every test run from the checkout and fails on its first
 // request in production.
 //
-// Run against the compile and analyse containers, each started from its
-// image with its port published:
+// Run from inside the compile container, with both containers on a network
+// that reaches nothing outside it, as production's do not: a tool that
+// reaches out to the internet works on a runner and hangs in production.
 //
-//   COMPILE_URL=http://127.0.0.1:5190 ANALYSE_URL=http://127.0.0.1:5191 node test/image-smoke.mjs
+//   docker exec -e ANALYSE_URL=http://analyse:5091 compile node /tmp/image-smoke.mjs
 
-const COMPILE = process.env.COMPILE_URL ?? 'http://127.0.0.1:5190';
-const ANALYSE = process.env.ANALYSE_URL ?? 'http://127.0.0.1:5191';
+const COMPILE = process.env.COMPILE_URL ?? 'http://127.0.0.1:5090';
+const ANALYSE = process.env.ANALYSE_URL ?? 'http://127.0.0.1:5091';
+
+// Longer than any compile, so a request that runs past it is one that hung.
+const REQUEST_MS = 90000;
 
 let failures = 0;
 const check = (what, ok, detail = '') => {
@@ -20,7 +24,8 @@ const check = (what, ok, detail = '') => {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function json(url, body) {
-    const response = await fetch(url, body === undefined ? {} : {
+    const response = await fetch(url, body === undefined ? { signal: AbortSignal.timeout(REQUEST_MS) } : {
+        signal: AbortSignal.timeout(REQUEST_MS),
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body)
