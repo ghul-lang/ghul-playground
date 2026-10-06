@@ -648,3 +648,37 @@ jobs:
             echo "=== $log ==="
             tail -50 "/tmp/$log.log" || true
           done
+
+  # The images as deploy builds them. Every other job runs the services from
+  # the checkout, so an image that leaves out a module the service loads, or a
+  # library source it compiles against, passes them all and fails on its first
+  # request in production.
+  images:
+    name: Check the built service images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Build the compile and analyse images
+        run: |
+          docker build -f compile-service/Dockerfile -t playground-compile .
+          docker build -f analyse-service/Dockerfile -t playground-analyse .
+
+      - name: Start them and use them
+        run: |
+          docker run -d --name compile -e HOST=0.0.0.0 -p 127.0.0.1:5190:5090 playground-compile
+          docker run -d --name analyse -e HOST=0.0.0.0 -p 127.0.0.1:5191:5091 playground-analyse
+
+          node test/image-smoke.mjs
+
+      - name: Service logs
+        if: failure()
+        run: |
+          docker logs compile 2>&1 | tail -50 || true
+          docker logs analyse 2>&1 | tail -50 || true
