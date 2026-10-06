@@ -23,7 +23,9 @@ const METHOD_END = /^\s*\} \/\/ end of method /;
 /// - timeout: milliseconds before the disassembler is killed
 function disassemble(command, assembly, timeout) {
     return new Promise((resolve, reject) => {
-        execFile(command, ['--il-sequence-points', '--use-varnames-from-pdb', assembly],
+        // The update check reaches out to the network, which the compile
+        // container cannot, and waits for a connection that never comes.
+        execFile(command, ['--disable-updatecheck', '--il-sequence-points', '--use-varnames-from-pdb', assembly],
             { timeout, maxBuffer: 16 << 20 },
             (error, stdout, stderr) => error
                 ? reject(new Error(`disassembly failed: ${(stderr || error.message).trim().split('\n')[0]}`))
