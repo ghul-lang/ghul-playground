@@ -4,7 +4,9 @@
 // with debug information on, so a Run never pays for it. On .NET the compiler
 // writes a binary assembly and a portable PDB; ilspycmd disassembles the
 // assembly and marks each statement's IL with the source position the PDB
-// gives it.
+// gives it. On wasm the compiler prints the module as WAT itself, marking
+// each statement with the source line it came from, and can leave out the
+// library functions the program does not define.
 
 const { execFile } = require('child_process');
 
@@ -96,4 +98,61 @@ function shapeListing(listing, marker) {
     return { text: out.join('\n'), lines, truncated };
 }
 
-module.exports = { disassemble, shapeListing, MAX_VIEW_BYTES };
+const WAT_POSITION = /^\s*;; (.+):(\d+)$/;
+const WAT_FUNCTION = /^\s*\(func\b/;
+const WAT_OMITTED = /^\s*;; (\d+) more functions? not shown$/;
+
+/// Turns the compiler's WAT into what the page shows, with the source line
+/// each listing line belongs to.
+///
+/// - wat: the text `--wat` wrote, with `--wat-lines`
+/// - file: the path the program was compiled from, as the compiler was given
+///   it; a position in any other file is a library's, and maps to no line
+///
+/// Returns `{text, lines, truncated, omitted}`, where `omitted` is how many
+/// functions `--wat-program-only` left out.
+function shapeWat(wat, file) {
+    const out = [];
+    const lines = [];
+    let current = null;
+    let omitted = 0;
+    let bytes = 0;
+    let truncated = false;
+
+    for (const line of wat.replace(/\r/g, '').split('\n')) {
+        const position = WAT_POSITION.exec(line);
+        const left = WAT_OMITTED.exec(line);
+
+        if (left) {
+            omitted = Number(left[1]);
+        } else if (position) {
+            current = position[1] === file ? Number(position[2]) : null;
+        } else if (WAT_FUNCTION.test(line)) {
+            current = null;
+        }
+
+        bytes += Buffer.byteLength(line) + 1;
+
+        if (bytes > MAX_VIEW_BYTES) {
+            truncated = true;
+            break;
+        }
+
+        out.push(line);
+        lines.push(position || left ? null : current);
+    }
+
+    while (out.length > 0 && out[out.length - 1].trim() === '') {
+        out.pop();
+        lines.pop();
+    }
+
+    if (truncated) {
+        out.push(`;; ... the listing is cut here, at ${Math.floor(MAX_VIEW_BYTES / 1024)} KB`);
+        lines.push(null);
+    }
+
+    return { text: out.join('\n'), lines, truncated, omitted };
+}
+
+module.exports = { disassemble, shapeListing, shapeWat, MAX_VIEW_BYTES };

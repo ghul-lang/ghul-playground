@@ -40,6 +40,43 @@ function registerIl() {
     });
 }
 
+// Enough of WAT for the listing to read: comments, the source-line markers
+// among them, keywords and instructions, names, numbers and strings.
+let watRegistered = false;
+
+function registerWat() {
+    if (watRegistered || monaco.languages.getLanguages().some(l => l.id === 'wat')) {
+        watRegistered = true;
+        return;
+    }
+
+    watRegistered = true;
+
+    monaco.languages.register({ id: 'wat' });
+    monaco.languages.setMonarchTokensProvider('wat', {
+        tokenizer: {
+            root: [
+                [/;;.*$/, 'comment'],
+                [/\(;/, 'comment', '@block'],
+                [/"([^"\\]|\\.)*"/, 'string'],
+                [/\$[^\s()]+/, 'variable'],
+                [/\b(module|func|param|result|local|type|import|export|global|table|memory|elem|data|start|mut|rec|sub|final|struct|array|field|ref|null|tag)\b/, 'keyword'],
+                [/\b[a-z][a-z0-9]*\.[a-z0-9_.]+\b/, 'type'],
+                [/\b(block|loop|if|then|else|end|br|br_if|br_table|return|call|call_ref|call_indirect|drop|select|unreachable|nop|throw|try_table|catch)\b/, 'keyword'],
+                [/-?\b(0x[0-9a-fA-F_]+|\d[\d_]*(\.\d+)?([eE][-+]?\d+)?)\b/, 'number']
+            ],
+            block: [
+                [/;\)/, 'comment', '@pop'],
+                [/./, 'comment']
+            ]
+        }
+    });
+    monaco.languages.setLanguageConfiguration('wat', {
+        comments: { lineComment: ';;', blockComment: ['(;', ';)'] },
+        brackets: [['(', ')']]
+    });
+}
+
 /// The tab's label for a target, before an answer names the language itself.
 export const viewLabel = target => target === 'wasm' ? 'WAT' : 'IL';
 
@@ -56,6 +93,10 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
     let shown = null;
     let request = 0;
 
+    // Whether a wasm listing shows the program's own functions or the whole
+    // module. IL has nothing to leave out, so it is always the whole listing.
+    let scope = 'program';
+
     const status = document.createElement('div');
     status.className = 'view-status';
 
@@ -67,8 +108,8 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
 
     // The source and target a listing was made from, so a look at an
     // unchanged program asks for nothing at all.
-    const current = () => ({ source: getSource(), target: getTarget() });
-    const same = (a, b) => a && b && a.source === b.source && a.target === b.target;
+    const current = () => ({ source: getSource(), target: getTarget(), scope });
+    const same = (a, b) => a && b && a.source === b.source && a.target === b.target && a.scope === b.scope;
 
     function say(text, { spinning = false, action = null } = {}) {
         status.replaceChildren();
@@ -102,6 +143,7 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
 
     function listing(text, language) {
         if (language === 'il') registerIl();
+        if (language === 'wat') registerWat();
 
         host.hidden = false;
 
@@ -145,7 +187,7 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
         let answer;
 
         try {
-            answer = await fetchView('program');
+            answer = await fetchView(wanted.scope);
         } catch {
             answer = null;
         }
@@ -178,9 +220,18 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
         listing(result.text, result.language ?? 'plaintext');
         shown = wanted;
 
-        // Where T353 adds the "N library functions hidden · show all" line
-        // and a refetch with scope 'all', driven by result.omitted.
-        say(result.truncated ? 'The listing is long, so only its start is shown.' : '');
+        const cut = result.truncated ? ' The listing is long, so only its start is shown.' : '';
+        const hidden = result.omitted ?? 0;
+
+        if (hidden > 0) {
+            say(`The program's own functions. ${hidden} library function${hidden === 1 ? '' : 's'} hidden.${cut}`,
+                { action: { label: 'Show all', run: () => { scope = 'all'; refresh(); } } });
+        } else if (wanted.scope === 'all' && result.language === 'wat') {
+            say(`The whole module.${cut}`,
+                { action: { label: 'Program only', run: () => { scope = 'program'; refresh(); } } });
+        } else {
+            say(cut.trim());
+        }
     }
 
     return {

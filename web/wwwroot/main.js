@@ -13,7 +13,7 @@ import * as files from './files.js'
 import { countEvent, countPageview, band, countTimeOnPage } from './events.js'
 import { isAheadOfWiki, loadIndex, suggestions as suggest, taskFor } from './rosetta-index.js'
 import { whenReader } from './engagement.js'
-import { createAssemblyView } from './assembly-view.js'
+import { createAssemblyView, viewLabel } from './assembly-view.js'
 
 // Where this mini-IDE is: its own page, or framed on an example page or a
 // Rosetta task page, which the framing page says in the address. Every event
@@ -651,6 +651,10 @@ const playground = await createPlayground({
     // and there is nothing to choose.
     onTargets: ({ capable, supported, target }) => {
         runTarget = target;
+
+        // The tab says which listing it would show, IL or WAT, whether or not
+        // it is open.
+        viewTab.textContent = viewLabel(target);
 
         if (!viewPane.hidden) assemblyView?.changed();
 
