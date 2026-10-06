@@ -2,21 +2,23 @@
 // a module and the loader beside it, and the module runs under Node and prints
 // what it should; source that does not compile reports its errors; a target
 // the service does not know is refused; a .NET compile of the same source is
-// still an assembly; and a repeat is answered from the cache.
+// still an assembly; a repeat is answered from the cache; and a program that
+// draws with ghul.raster writes its picture.
 //
 // Needs the compiler (GHUL_COMPILER_DLL, or the newest in the NuGet cache) and
 // the library sources: GHUL_CORE_DIR, GHUL_CORE_VERSION, GHUL_RUNTIME_SOURCE_DIR
-// and GHUL_RUNTIME_SOURCE_VERSION.
+// and GHUL_RUNTIME_SOURCE_VERSION. The drawing is checked where
+// GHUL_RASTER_SOURCE_DIR and GHUL_RASTER_SOURCE_VERSION name raster's sources.
 //
 //   node test/wasm-compile.mjs
 
 const { spawn, execFileSync } = await import('child_process');
-const { mkdtempSync, writeFileSync, rmSync, existsSync } = await import('fs');
+const { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } = await import('fs');
 const { tmpdir } = await import('os');
 const path = await import('path');
 const { fileURLToPath } = await import('url');
 
-const { libraryArguments, listedFiles } = await import('../shared/wasm-libraries.js');
+const { libraryArguments, listedFiles, usesRaster } = await import('../shared/wasm-libraries.js');
 
 let failures = 0;
 const check = (what, ok, detail = '') => {
@@ -37,6 +39,10 @@ check('library arguments put each library\'s files after its declaration',
 check('a source list skips blank lines and comments',
     JSON.stringify(listedFiles('/r', 'src/a.ghul\n\n# note\n  src/b.ghul  \n'))
         === JSON.stringify(['/r/src/a.ghul', '/r/src/b.ghul']));
+
+check('a program naming Raster uses it', usesRaster('use Raster.IMAGE\n') && usesRaster('let i = Raster.IMAGE(1, 1)'));
+check('a program that does not name it does not',
+    !usesRaster('use IO.Std.write_line\n') && !usesRaster('let rasterise = 1\nlet Rasters = 2'));
 
 const PORT = 5096;
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -60,6 +66,9 @@ async function post(body) {
 
 const HELLO = 'use IO.Std.write_line\n\nentry() is\n    write_line("hello {6 * 7}")\nsi\n';
 const BROKEN = 'use IO.Std.write_line\n\nentry() is\n    write_line(no_such_thing)\nsi\n';
+const DRAWING = 'use Raster.IMAGE\n\nentry() is\n    let image = IMAGE(40, 30)\n\n' +
+    '    image.colour(200ub, 40ub, 40ub)\n    image.stroke(3.0D)\n    image.line(0.0D, 0.0D, 40.0D, 30.0D)\n\n' +
+    '    image.write("dot.png")\n    image.show("dot.png")\nsi\n';
 
 try {
     for (let i = 0; ; i++) {
@@ -117,6 +126,31 @@ try {
     check('source that does not compile reports its errors',
         !broken.result.ok && broken.result.module === null &&
         broken.result.diagnostics.some(d => d.severity === 'error'));
+
+    if (process.env.GHUL_RASTER_SOURCE_DIR) {
+        const drawn = await post({ source: DRAWING, target: 'wasm' });
+
+        check('a program that draws compiles for wasm', drawn.status === 200 && drawn.result.ok,
+            JSON.stringify(drawn.result.diagnostics));
+
+        if (drawn.result.ok) {
+            const run = mkdtempSync(path.join(tmpdir(), 'wasm-compile-run-'));
+
+            try {
+                writeFileSync(path.join(run, 'main.wasm'), Buffer.from(drawn.result.module, 'base64'));
+                writeFileSync(path.join(run, 'main.mjs'), drawn.result.loader);
+
+                const output = execFileSync('node', ['main.mjs'], { cwd: run, encoding: 'utf8' });
+                const picture = path.join(run, 'dot.png');
+
+                check('it names its picture', output === '<<image dot.png>>\n', JSON.stringify(output));
+                check('and writes it as a PNG', existsSync(picture)
+                    && readFileSync(picture).subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])));
+            } finally {
+                rmSync(run, { recursive: true, force: true });
+            }
+        }
+    }
 
     const unknown = await post({ source: HELLO, target: 'jvm' });
     check('an unknown target is refused', unknown.status === 400, String(unknown.status));

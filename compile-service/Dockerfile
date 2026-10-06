@@ -34,9 +34,9 @@ WORKDIR /home/playground
 # owned by this user, before the volume does.
 RUN mkdir -p /home/playground/results /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=65.1.0
-ARG GHUL_RUNTIME_VERSION=25.1.0
-ARG GHUL_RASTER_VERSION=0.11.0
+ARG GHUL_COMPILER_VERSION=65.3.2
+ARG GHUL_RUNTIME_VERSION=25.4.0
+ARG GHUL_RASTER_VERSION=0.12.0
 
 RUN dotnet tool install --tool-path /home/playground/tools \
         ghul.compiler --version "${GHUL_COMPILER_VERSION}" \
@@ -48,18 +48,24 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # The library sources a --target wasm compile builds against, at the tags
 # ghul-cli pins for this compiler (scripts/check-wasm-pins.js holds the two in
 # step). The runtime's sources are the tag of the runtime package above.
-ARG GHUL_CORE_VERSION=0.35.0
+ARG GHUL_CORE_VERSION=0.37.0
 
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v${GHUL_RUNTIME_VERSION}.tar.gz /tmp/ghul-runtime.tar.gz
+# ghul.raster's sources at the tag of the package above, for a wasm program
+# that draws.
+ADD --chown=playground:playground \
+    https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v${GHUL_RASTER_VERSION}.tar.gz /tmp/ghul-raster.tar.gz
 
-RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghul-runtime \
+RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghul-runtime /home/playground/libraries/ghul-raster \
  && tar -xzf /tmp/ghul-core.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-core \
  && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \
- && rm /tmp/ghul-core.tar.gz /tmp/ghul-runtime.tar.gz \
- && test -f /home/playground/libraries/ghul-runtime/wasm-sources.rsp
+ && tar -xzf /tmp/ghul-raster.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-raster \
+ && rm /tmp/ghul-core.tar.gz /tmp/ghul-runtime.tar.gz /tmp/ghul-raster.tar.gz \
+ && test -f /home/playground/libraries/ghul-runtime/wasm-sources.rsp \
+ && test -d /home/playground/libraries/ghul-raster/src
 
 # Resolved once here rather than discovered per request, so a missing piece
 # fails the build rather than the first user request.
@@ -69,6 +75,8 @@ ENV GHUL_COMPILER_DLL=/home/playground/tools/.store/ghul.compiler/${GHUL_COMPILE
     GHUL_CORE_DIR=/home/playground/libraries/ghul-core \
     GHUL_RUNTIME_SOURCE_DIR=/home/playground/libraries/ghul-runtime \
     GHUL_RUNTIME_SOURCE_VERSION=${GHUL_RUNTIME_VERSION} \
+    GHUL_RASTER_SOURCE_DIR=/home/playground/libraries/ghul-raster \
+    GHUL_RASTER_SOURCE_VERSION=${GHUL_RASTER_VERSION} \
     GHUL_CORE_VERSION=${GHUL_CORE_VERSION}
 
 COPY --chown=playground:playground shared /home/playground/service/shared
