@@ -2,8 +2,9 @@
 // a module and the loader beside it, and the module runs under Node and prints
 // what it should; source that does not compile reports its errors; a target
 // the service does not know is refused; a .NET compile of the same source is
-// still an assembly; a repeat is answered from the cache; and a program that
-// draws with ghul.raster writes its picture.
+// still an assembly; a repeat is answered from the cache; a program that
+// draws with ghul.raster writes its picture; and the assembly view of a wasm
+// build is the program's WAT, marked with its source lines.
 //
 // Needs the compiler (GHUL_COMPILER_DLL, or the newest in the NuGet cache) and
 // the library sources: GHUL_CORE_DIR, GHUL_CORE_VERSION, GHUL_RUNTIME_SOURCE_DIR
@@ -54,8 +55,8 @@ const service = spawn('node', ['compile-service/server.js'], {
     stdio: ['ignore', 'inherit', 'inherit']
 });
 
-async function post(body) {
-    const response = await fetch(`http://127.0.0.1:${PORT}/compile`, {
+async function post(body, route = '/compile') {
+    const response = await fetch(`http://127.0.0.1:${PORT}${route}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body)
@@ -151,6 +152,21 @@ try {
             }
         }
     }
+
+    const viewed = await post({ source: HELLO, target: 'wasm' }, '/compile/view');
+
+    check('the view of a wasm build is WAT', viewed.status === 200 && viewed.result.ok
+        && viewed.result.language === 'wat' && viewed.result.text.startsWith('(module'),
+        JSON.stringify({ status: viewed.status, ...viewed.result, text: viewed.result.text?.slice(0, 80) }));
+    check('it is the program\'s own functions, with the rest counted',
+        viewed.result.omitted > 0 && viewed.result.text.includes('$entry'), String(viewed.result.omitted));
+    check('its instructions carry the line they came from',
+        viewed.result.lines?.includes(4) && viewed.result.text.includes(';; main.ghul:4'), JSON.stringify(viewed.result.lines));
+
+    const whole = await post({ source: HELLO, target: 'wasm', scope: 'all' }, '/compile/view');
+
+    check('the whole module is there when asked for', whole.result.ok && whole.result.omitted === 0
+        && whole.result.text.length > viewed.result.text.length, String(whole.result.text?.length));
 
     const unknown = await post({ source: HELLO, target: 'jvm' });
     check('an unknown target is refused', unknown.status === 400, String(unknown.status));

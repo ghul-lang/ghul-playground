@@ -2040,6 +2040,45 @@ chrome.on('error', e => {
         check('wasm is chosen by default',
             await ev(`document.querySelector('#target [data-target="wasm"]').getAttribute('aria-pressed') === 'true'`));
 
+        // The compiled-code tab follows the target: on wasm it is the module's
+        // WAT, the program's own functions first, with the rest a click away.
+        {
+            const program = ['use IO.Std.write_line;', '', 'entry() is', '    write_line("{6 * 7}");', 'si', ''].join('\n');
+            const wat = () => ev(`monaco.editor.getModels().map(m => m.getValue()).find(v => v.startsWith('(module')) ?? ''`);
+            const viewStatus = () => ev(`document.querySelector('#view .view-status')?.textContent ?? ''`);
+
+            await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program)}); true`);
+
+            check('the compiled-code tab is labelled for wasm',
+                (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'WAT');
+
+            await ev(`document.getElementById('tab-view').click(); true`);
+
+            let text = '';
+            for (let i = 0; i < 120 && !text; i++) {
+                text = await wat();
+                if (!text) await sleep(500);
+            }
+
+            check('opening the tab shows the program\'s WAT', text.includes('$entry'), text.slice(0, 200));
+            check('the WAT marks source lines', text.includes(';; main.ghul:4'), text.slice(0, 300));
+
+            const said = await viewStatus();
+            check('the library functions left out are counted', /\d+ library functions? hidden/.test(said), said);
+
+            await ev(`document.querySelector('#view .view-action')?.click(); true`);
+
+            let whole = text;
+            for (let i = 0; i < 120 && whole.length <= text.length; i++) {
+                await sleep(500);
+                whole = await wat();
+            }
+
+            check('show all brings in the whole module', whole.length > text.length, `${text.length} -> ${whole.length}`);
+
+            await ev(`document.getElementById('tab-output').click(); true`);
+        }
+
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(reading)}); true`);
         await sleep(1000);
         await ev(`document.getElementById('run').click(); true`);
