@@ -32,7 +32,7 @@ WORKDIR /home/playground
 # and either service may be the first to mount it.
 RUN mkdir -p /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=65.4.0
+ARG GHUL_COMPILER_VERSION=65.4.2
 ARG GHUL_RUNTIME_VERSION=25.4.0
 ARG GHUL_RASTER_VERSION=0.12.0
 
@@ -49,7 +49,7 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # The library sources an analyser for the wasm target reads in place of the
 # reference assemblies: the same tags the compile service builds wasm against
 # (scripts/check-wasm-pins.js checks the two images agree).
-ARG GHUL_CORE_VERSION=0.37.0
+ARG GHUL_CORE_VERSION=0.37.2
 
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
