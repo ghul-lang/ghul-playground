@@ -27,15 +27,16 @@ const base64Bytes = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
 // so a marker naming `./fern.png` finds the file written as `fern.png`.
 const filePath = path => path.replace(/^(\.\/)+/, '');
 
-// Starts the program. `onOutput` is called with everything printed so far each
-// time more arrives, and `onInput` with true when the program waits for a line
-// and false once it has one.
+// Starts the program. `files` are the files it starts with, each a name and
+// its bytes, which it opens by that name. `onOutput` is called with everything
+// printed so far each time more arrives, and `onInput` with true when the
+// program waits for a line and false once it has one.
 //
 // Answers the run: `done` settles with { text, error, truncated, code } when
 // the program ends or is stopped, `send(line)` and `end()` answer a program
 // waiting for input, `stop()` ends it, and `readFile(path)` answers the
 // bytes the program last wrote to a file, or null when it wrote none there.
-export function runWasm({ module, loader, args = [], onOutput = () => { }, onInput = () => { } }) {
+export function runWasm({ module, loader, args = [], files: inputFiles = [], onOutput = () => { }, onInput = () => { } }) {
     const worker = new Worker(workerScript());
     const input = inputBuffer();
 
@@ -115,7 +116,13 @@ export function runWasm({ module, loader, args = [], onOutput = () => { }, onInp
         finish({ code: null });
     };
 
-    worker.postMessage({ module: base64Bytes(module), loader, args, input });
+    worker.postMessage({
+        module: base64Bytes(module),
+        loader,
+        args,
+        files: Object.fromEntries(inputFiles.map(({ name, bytes }) => [name, bytes])),
+        input
+    });
 
     const answer = line => {
         if (!waiting) return;

@@ -218,9 +218,7 @@ export async function loadProgram(request, fetchImpl = fetch) {
         arguments: runArgs.ok ? argumentsFromFile(await runArgs.text()) : [],
         firstOutputMs: timing('first_output_ms'),
         runMs: timing('run_ms'),
-        // A program that reads files has none on the wasm target, so it stays
-        // on .NET whatever the index says.
-        wasm: files.length === 0 && wasmFlag(await wasmIndex, request.id),
+        wasm: wasmFlag(await wasmIndex, request.id),
         ...(error ? { error } : {})
     };
 }

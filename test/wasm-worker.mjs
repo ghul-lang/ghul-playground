@@ -89,6 +89,23 @@ entry() is
 si
 `;
 
+// A program that reads the files it starts with, one of them as bytes, and
+// writes one of its own.
+const FILES_SOURCE = `use IO.Std.write_line
+
+entry() is
+    for line in IO.File.read_all_lines("words.txt") do
+        write_line("read {line}")
+    od
+
+    write_line(IO.File.read_all_text("notes.txt"))
+    write_line("{IO.File.read_all_bytes("data.bin").count} {IO.File.exists("missing.txt")}")
+
+    IO.File.write_all_text("notes.txt", "changed")
+    write_line(IO.File.read_all_text("notes.txt"))
+si
+`;
+
 const work = mkdtempSync(path.join(tmpdir(), 'wasm-worker-test-'));
 
 const workerScript = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)),
@@ -108,9 +125,10 @@ const shim = `
 // Compiles `source` for the wasm target and runs it in the worker script,
 // answering each request for input with the next of `lines`. Answers what it
 // printed, the files it wrote, how often it asked for input, and its exit
-// status. Answers null, without running it, where the loader the compiler
-// wrote has no `needs` among its host functions.
-async function compileAndRun(name, source, lines = [], needs = null) {
+// status. `files` are the files the program starts with, as the page hands
+// them to the run. Answers null, without running it, where the loader the
+// compiler wrote has no `needs` among its host functions.
+async function compileAndRun(name, source, lines = [], needs = null, startFiles = {}) {
     const [compiler, wasm] = await Promise.all([resolveCompiler(), resolveWasmLibraries()]);
 
     if (!wasm) throw new Error('set GHUL_CORE_DIR and GHUL_RUNTIME_SOURCE_DIR');
@@ -139,6 +157,7 @@ async function compileAndRun(name, source, lines = [], needs = null) {
                         module: readFileSync(path.join(work, `${name}.wasm`)),
                         loader,
                         args: [],
+                        files: startFiles,
                         input
                     });
                     break;
@@ -210,6 +229,30 @@ try {
         check('the marker is shown as the picture', live.images.length === 1 && live.images[0].name === 'dot.png'
             && live.images[0].url === `data:image/png;base64,${PICTURE}`, JSON.stringify(live.images.map(i => i.name)));
         check('and is taken out of the text', live.text === 'drawing\ndone\n', JSON.stringify(live.text));
+    }
+
+    // A program starts with the files it is given, which it reads by name,
+    // and what it writes over one is its own. Needs a loader that hands the
+    // files to the program and a core library that takes them.
+    const core = (await resolveWasmLibraries()).libraries.find(l => l.name === 'ghul-core');
+    const coreTakesFiles = readFileSync(path.join(core.root, 'src/file_system.ghul'), 'utf8').includes('input_file_count');
+
+    const read = coreTakesFiles
+        ? await compileAndRun('files', FILES_SOURCE, [], 'input_file_count', {
+            'words.txt': 'alpha\nbeta\n',
+            'notes.txt': 'from the notes \u20ac',
+            'data.bin': new Uint8Array(256)
+        })
+        : null;
+
+    if (!read) {
+        console.log('skip  files: this compiler\'s loader or core library does not hand files to the program');
+    } else {
+        check('the program read the files it was given', read.output.startsWith('read alpha\nread beta\nfrom the notes \u20ac\n256 false\n'),
+            JSON.stringify(read.output));
+        check('what it wrote over one replaced it', read.output.endsWith('changed\n'), JSON.stringify(read.output));
+        check('and reached the page', Buffer.from(read.files.get('notes.txt')?.bytes ?? []).toString() === 'changed');
+        check('it ended normally', read.code === 0, String(read.code));
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

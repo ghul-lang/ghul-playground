@@ -2,8 +2,8 @@
 // that stopping it is terminating the worker.
 //
 // The page sends one message: the module, the loader the compiler wrote for
-// it, the program's arguments, and a shared buffer standard input arrives
-// through. The worker answers with each piece the program writes, each file
+// it, the program's arguments, the files it starts with, and a shared buffer
+// standard input arrives through. The worker answers with each piece the program writes, each file
 // it writes, a request whenever the program waits for input, and the exit
 // status once it ends. Messages arrive in the order they were sent, so a
 // file always reaches the page before the output that names it.
@@ -27,7 +27,7 @@ export function wasmWorker() {
     const INPUT_SLOTS = 4;
 
     self.onmessage = async ({ data }) => {
-        const { module, loader, args, input } = data;
+        const { module, loader, args, files, input } = data;
 
         const control = new Int32Array(input, 0, INPUT_SLOTS);
         const text = new Uint16Array(input, INPUT_SLOTS * 4);
@@ -65,6 +65,7 @@ export function wasmWorker() {
             const code = await run({
                 module,
                 args,
+                files,
                 env: {},
                 stdin,
                 stdout: piece => postMessage({ type: 'output', stream: 'stdout', text: piece }),
