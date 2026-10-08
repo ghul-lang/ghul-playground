@@ -743,9 +743,10 @@ export async function createPlayground({
     // Runs a module the compile service built for the wasm target, in a
     // worker of its own. What it prints, the pictures it shows, and whether it
     // is waiting for a line reach the page the same way a .NET run's do. The
-    // program's files are kept by the run rather than in a filesystem, and
-    // each arrives before the output that names it, so a marker is read the
-    // moment it is printed.
+    // program starts with the data files the page holds, and the files it
+    // writes are kept by the run rather than in a filesystem, each arriving
+    // before the output that names it, so a marker is read the moment it is
+    // printed.
     async function runInWasm(result, args, { compiled, note }) {
         onStatus('running');
 
@@ -758,6 +759,7 @@ export async function createPlayground({
             module: result.module,
             loader: result.loader,
             args: args ?? [],
+            files,
             onOutput: text => {
                 live.feed(text.slice(fed));
                 fed = text.length;

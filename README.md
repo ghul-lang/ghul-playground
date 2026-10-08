@@ -156,6 +156,7 @@ A solution that reads files names them in a `playground-files` file beside its
 source, one path per line relative to that directory. The page fetches each
 one and writes it into the runtime's in-memory filesystem before every run, in
 the working directory under its own name, which is where the program opens it.
+A run on the wasm target starts with the same files, again under their own names.
 
 Collections live in `web/wwwroot/collections.js`, each under its own path
 prefix. A new one needs an entry there, its name in the base script at the top
