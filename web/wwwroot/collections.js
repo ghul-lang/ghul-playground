@@ -259,10 +259,12 @@ export function wasmFlag(index, id) {
 
 // Where each file a manifest names is fetched from, and the name the program
 // opens it by. A path is relative to the manifest, so a file shared between
-// tasks can live once at the top of the repository; the program sees it under
-// its own last segment, beside it in the working directory, which is where a
-// task run from its own directory finds it. A path reaching outside the
-// collection's repository is refused rather than fetched.
+// tasks can live once at the top of the repository; the program sees that one
+// under its own last segment, beside it in the working directory, which is
+// where a task run from its own directory finds it. A file in the task's own
+// directory keeps the folders it is under there, so `maths/square.ghi` is
+// opened as `maths/square.ghi`. A path reaching outside the collection's
+// repository is refused rather than fetched.
 export function dataFilePaths(text, manifestUrl, root) {
     return text.split('\n')
         .map(line => line.trim())
@@ -272,6 +274,8 @@ export function dataFilePaths(text, manifestUrl, root) {
 
             if (!url.startsWith(root)) throw new Error(`${path} is outside the repository`);
 
-            return { name: url.slice(url.lastIndexOf('/') + 1), url };
+            const own = new URL('.', manifestUrl).toString();
+
+            return { name: url.startsWith(own) ? url.slice(own.length) : url.slice(url.lastIndexOf('/') + 1), url };
         });
 }

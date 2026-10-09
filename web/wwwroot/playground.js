@@ -175,12 +175,17 @@ function cached(readFile) {
 // Written before every run rather than once, so a program that changes one of
 // its inputs is handed the original again next time, as it would be run from
 // a fresh checkout. Each goes in the working directory, which is where a bare
-// name like unixdict.txt is looked for.
+// name like unixdict.txt is looked for, under the folders its name has.
 function writeFiles(fs, files) {
     const directory = fs.cwd().replace(/\/$/, '');
 
     for (const { name, bytes } of files) {
-        fs.writeFile(`${directory}/${name}`, bytes);
+        const path = `${directory}/${name}`;
+        const parent = path.slice(0, path.lastIndexOf('/'));
+
+        if (parent !== directory) fs.mkdirTree(parent);
+
+        fs.writeFile(path, bytes);
     }
 }
 
