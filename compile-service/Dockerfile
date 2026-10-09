@@ -34,8 +34,8 @@ WORKDIR /home/playground
 # owned by this user, before the volume does.
 RUN mkdir -p /home/playground/results /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=65.4.4
-ARG GHUL_RUNTIME_VERSION=25.5.0
+ARG GHUL_COMPILER_VERSION=65.4.5
+ARG GHUL_RUNTIME_VERSION=25.6.0
 ARG GHUL_RASTER_VERSION=0.12.0
 
 RUN dotnet tool install --tool-path /home/playground/tools \
@@ -55,7 +55,7 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # The library sources a --target wasm compile builds against, at the tags
 # ghul-cli pins for this compiler (scripts/check-wasm-pins.js holds the two in
 # step). The runtime's sources are the tag of the runtime package above.
-ARG GHUL_CORE_VERSION=0.39.0
+ARG GHUL_CORE_VERSION=0.40.0
 
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
