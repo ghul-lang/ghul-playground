@@ -24,7 +24,7 @@ const { resolveWasmLibraries } = await import('../shared/wasm-libraries.js');
 const { unhandledException, needsDotnet, wasmSupported } = await import('../web/wwwroot/wasm-support.js');
 const { inputBuffer, supplyInput } = await import('../web/wwwroot/wasm-input.js');
 const { LiveOutput } = await import('../web/wwwroot/live-output.js');
-const { wasmFlag } = await import('../web/wwwroot/collections.js').catch(() => ({}));
+const { wasmFlag, dataFilePaths } = await import('../web/wwwroot/collections.js').catch(() => ({}));
 
 let failures = 0;
 const check = (what, ok, detail = '') => {
@@ -55,6 +55,25 @@ if (wasmFlag) {
     check('a flagged program runs on wasm', wasmFlag(index, 'a') && wasmFlag(index, 'b/02-y'));
     check('an unflagged or unknown program does not',
         !wasmFlag(index, 'b/01-x') && !wasmFlag(index, 'c') && !wasmFlag(null, 'a'));
+}
+
+if (dataFilePaths) {
+    const root = 'https://example.org/repo/';
+    const named = dataFilePaths('../../data/words.txt\nnotes.txt\nmaths/square.ghi\n# a comment\n',
+        `${root}tasks/t/playground-files`, root).map(f => f.name);
+
+    check('a shared file is named by its last segment, and a task\'s own by its path there',
+        JSON.stringify(named) === JSON.stringify(['words.txt', 'notes.txt', 'maths/square.ghi']), JSON.stringify(named));
+
+    let refused = false;
+
+    try {
+        dataFilePaths('../../../elsewhere.txt', `${root}tasks/t/playground-files`, root);
+    } catch {
+        refused = true;
+    }
+
+    check('a file outside the repository is refused', refused);
 }
 
 // A program that reads two lines, echoes them, and then throws.
