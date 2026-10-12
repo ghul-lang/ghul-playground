@@ -219,6 +219,8 @@ export async function loadProgram(request, fetchImpl = fetch) {
         firstOutputMs: timing('first_output_ms'),
         runMs: timing('run_ms'),
         wasm: wasmFlag(await wasmIndex, request.id),
+        native: nativeFlag(await wasmIndex, request.id),
+        indexed: indexed(await wasmIndex, request.id),
         ...(error ? { error } : {})
     };
 }
@@ -251,6 +253,23 @@ export function wasmFlag(index, id) {
     for (const task of index?.tasks ?? []) {
         for (const part of task.parts ?? []) {
             if (part.id === id) return part.wasm === true;
+        }
+    }
+
+    return false;
+}
+
+// Whether an index knows the program at all, which is what lets a missing
+// flag mean the program does not build for that target.
+export function indexed(index, id) {
+    return (index?.tasks ?? []).some(task => (task.parts ?? []).some(part => part.id === id));
+}
+
+// The flag for one program in an index: its part's `native`, found by id.
+export function nativeFlag(index, id) {
+    for (const task of index?.tasks ?? []) {
+        for (const part of task.parts ?? []) {
+            if (part.id === id) return part.native === true;
         }
     }
 

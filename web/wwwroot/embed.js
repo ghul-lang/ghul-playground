@@ -131,10 +131,8 @@ window.addEventListener('message', async event => {
             onStatus: (state, detail) => post('status', { state, detail: detail ?? null }),
             onAnalyser: state => post('analyser', { state }),
 
-            // Where the next run goes, chosen for the reader, and where each
-            // run went, which the page shows under the output.
-            onTargets: ({ capable, supported, target }) => post('targets', { capable, supported, target }),
-            onRan: target => post('ran', { target })
+            // Where the next run goes, chosen for the reader.
+            onTargets: ({ capable, supported, target }) => post('targets', { capable, supported, target })
         });
 
         playground.setWasmCapable(message.wasm === true);

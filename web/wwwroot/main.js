@@ -13,7 +13,7 @@ import * as files from './files.js'
 import { countEvent, countPageview, band, countTimeOnPage } from './events.js'
 import { isAheadOfWiki, loadIndex, suggestions as suggest, taskFor } from './rosetta-index.js'
 import { whenReader } from './engagement.js'
-import { createAssemblyView, viewLabel } from './assembly-view.js'
+import { createAssemblyView } from './assembly-view.js'
 
 // Where this mini-IDE is: its own page, or framed on an example page or a
 // Rosetta task page, which the framing page says in the address. Every event
@@ -28,7 +28,10 @@ const count = (what, detail) => countEvent(`mini-ide-${what}/${HOST}${detail ? `
 countErrors(`mini-ide-error/${HOST}`, countEvent);
 
 const runButton = document.getElementById('run');
-const ranOn = document.getElementById('ran-on');
+// The .NET / WebAssembly choice, offered on the standalone page only: a task
+// or example page framing the mini-IDE runs each program where it is known to
+// run, and offers no choice.
+const targetChoice = document.getElementById('target');
 
 // `?wasm` in the address offers wasm for whatever is in the editor, so a
 // program the index does not list yet can be tried on it.
@@ -70,7 +73,7 @@ const runCost = document.getElementById('run-cost');
 
 function reportCost(detail) {
     runCost.textContent = detail
-        ? `compiled in ${detail.compiled} ms \u00b7 ran in ${detail.ran} ms${detail.target === 'wasm' ? ' on wasm' : ''}`
+        ? `compiled in ${detail.compiled} ms \u00b7 ran in ${detail.ran} ms on ${detail.target === 'wasm' ? 'WebAssembly' : '.NET'}`
         : '';
 }
 
@@ -171,7 +174,10 @@ function showTab(panel) {
 
     showTaskLabels();
 
-    if (panel === viewPane) assemblyView?.show();
+    if (panel === viewPane) {
+        setPaneMaximised(true);
+        assemblyView?.show();
+    }
 }
 
 // The page as a panel inside another: ghul.dev frames it on a task's own page,
@@ -600,34 +606,11 @@ const initialSource = program?.source ?? savedSource;
 // The target a run uses now, as the playground last reported it.
 let runTarget = 'dotnet';
 
-// Whether the reader could run this program on the other target: it is known
-// to run on wasm, and this browser can.
-let switchable = false;
+// What the index says the program builds for, where it knows the program:
+// the compiled-code tab greys out a listing it does not build for.
+const buildsOf = loaded => loaded?.indexed ? { wasm: loaded.wasm === true, native: loaded.native === true } : null;
 
-// Under the output, where the run happened. Where it is not a framed page the
-// line also offers the other target, for a program that can run on both, so
-// a reader wanting the fuller .NET library knows where to go. A run that fell
-// back to .NET was not a choice, and has nothing to switch.
-function showRanOn(target) {
-    ranOn.replaceChildren(target === 'wasm' ? 'ran on WebAssembly in your browser' : 'ran on .NET');
-
-    if (HOST === 'standalone' && switchable && target === runTarget) {
-        const other = target === 'wasm' ? 'dotnet' : 'wasm';
-        const link = document.createElement('button');
-
-        link.className = 'ran-on-switch';
-        link.textContent = other === 'wasm' ? 'switch to WebAssembly' : 'switch to .NET';
-        link.addEventListener('click', () => {
-            playground.setTarget(other);
-            count('target', other);
-            ranOn.hidden = true;
-        });
-
-        ranOn.append(' · ', link);
-    }
-
-    ranOn.hidden = false;
-}
+let builds = buildsOf(program);
 
 const playground = await createPlayground({
     container: document.getElementById('editor'),
@@ -679,16 +662,15 @@ const playground = await createPlayground({
     // known to run there, in a browser that can, and .NET otherwise.
     onTargets: ({ capable, supported, target }) => {
         runTarget = target;
-        switchable = capable && supported;
-
-        // The tab says which listing it would show, whether or not
-        // it is open.
-        viewTab.textContent = assemblyView?.label() ?? viewLabel(target);
 
         if (!viewPane.hidden) assemblyView?.changed();
-    },
 
-    onRan: showRanOn,
+        targetChoice.hidden = HOST !== 'standalone' || !(capable && supported);
+
+        for (const button of targetChoice.querySelectorAll('button')) {
+            button.setAttribute('aria-pressed', String(button.dataset.target === target));
+        }
+    },
 
     onDiagnostics: list => {
         problemCount.hidden = list.length === 0;
@@ -710,8 +692,6 @@ const playground = await createPlayground({
 
     onStatus: (state, detail) => {
         status.textContent = (STATUS_TEXT[state] ?? (() => state))(detail);
-
-        if (state === 'compiling') ranOn.hidden = true;
 
         compiler.dataset.state =
             BUSY.has(state) ? 'working'
@@ -810,10 +790,18 @@ assemblyView = createAssemblyView({
     getKinds: listingKinds,
     getSource: () => playground.getSource(),
     getTarget: () => runTarget,
-    onLabel: label => { viewTab.textContent = label; }
+    getBuilds: () => builds,
+    runsTitle: HOST === 'rosetta-task-page' ? 'what runs for this solution' : 'what runs for this program'
 });
 
 playground.setWasmCapable(WASM_REQUESTED || program?.wasm === true);
+
+for (const button of targetChoice.querySelectorAll('button')) {
+    button.addEventListener('click', () => {
+        playground.setTarget(button.dataset.target);
+        count('target', button.dataset.target);
+    });
+}
 
 // The source as the program gave it, so a swap can tell a reader who has
 // changed something from one who has only read it. Reset by every load, and by
@@ -1082,6 +1070,8 @@ async function swapTo(name, { counted = null, push = true } = {}) {
 
     playground.setFiles(loaded.files);
     playground.setWasmCapable(WASM_REQUESTED || loaded.wasm === true);
+    builds = buildsOf(loaded);
+    assemblyView?.reset();
 
     // Recorded before the buffer is written, because writing it runs the
     // change handler, which has to be able to tell this from an edit.

@@ -217,10 +217,7 @@ export async function createPlayground({
     // Called with { capable, supported, target } whenever the choice of target
     // changes: whether the program is known to run on wasm, whether this
     // browser can run wasm, and the target the next run uses.
-    onTargets = () => { },
-    // Called with the target a run actually ran on, `wasm` or `dotnet`, once
-    // it has compiled and starts.
-    onRan = () => { }
+    onTargets = () => { }
 }) {
     await loadMonaco();
 
@@ -626,8 +623,6 @@ export async function createPlayground({
             }
 
             const compiled = Math.round(performance.now() - started);
-
-            onRan(runTarget);
 
             if (runTarget === 'wasm') {
                 await runInWasm(result, args, { compiled, note });

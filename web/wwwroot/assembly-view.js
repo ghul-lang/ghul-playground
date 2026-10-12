@@ -150,27 +150,10 @@ const KIND_LABELS = { 'il': 'IL', 'wat': 'WAT', 'llvm-ir': 'LLVM IR', 'x86-asm':
 // The listing of what a run on `target` executes.
 const runKind = target => target === 'wasm' ? 'wat' : 'il';
 
-// Remembered for the session, so a reader looking at IR sees IR on the next
-// program too. The storage can be absent or refuse, which leaves the default.
-const KIND_KEY = 'mini-ide-listing';
+// The target a listing is the build of, as a sentence names it.
+const TARGET_NAMES = { 'wat': 'WebAssembly', 'llvm-ir': 'the native target', 'x86-asm': 'the native target' };
 
-function rememberedKind() {
-    try {
-        const kind = sessionStorage.getItem(KIND_KEY);
-        return KINDS.includes(kind) ? kind : null;
-    } catch {
-        return null;
-    }
-}
-
-function rememberKind(kind) {
-    try {
-        sessionStorage.setItem(KIND_KEY, kind);
-    } catch { }
-}
-
-/// The tab's label for the listing a run on `target` executes.
-export const viewLabel = target => KIND_LABELS[runKind(target)];
+const NATIVE = new Set(['llvm-ir', 'x86-asm']);
 
 /// The assembly view in `panel`, fed by `fetchView`.
 ///
@@ -181,15 +164,18 @@ export const viewLabel = target => KIND_LABELS[runKind(target)];
 /// - getTarget: the target a run would use now, `wasm` or `dotnet`
 /// - getKinds: `() => Promise<string[]>`, the listings the compile service
 ///   offers, in tab order
-/// - onLabel: called with the label the tab should carry
-export function createAssemblyView({ panel, fetchView, getSource, getTarget, getKinds, onLabel }) {
+/// - getBuilds: `() => {wasm, native} | null`, whether the program is known
+///   to build for each of those targets, or null where nothing says
+/// - runsTitle: the tooltip on the listing of what runs
+export function createAssemblyView({ panel, fetchView, getSource, getTarget, getKinds, getBuilds = () => null, runsTitle }) {
     let editor = null;
     let shown = null;
     let request = 0;
+    let offered = [];
 
-    // The listing the reader last chose, or null to show what a run executes,
-    // which follows the target until a choice is made.
-    let chosen = rememberedKind();
+    // The listing the reader chose for this program, or null to show what a
+    // run executes, which follows the target until a choice is made.
+    let chosen = null;
     const kind = () => chosen ?? runKind(getTarget());
 
     // Whether a listing shows the program's own functions or everything the
@@ -200,23 +186,24 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
     // one function per method with every line marked.
     let optimise = 2;
 
-    const label = () => KIND_LABELS[kind()];
+    // How many functions the shown listing leaves out, for the tooltip on
+    // the choice that leaves them out.
+    let omitted = 0;
 
-    const kinds = document.createElement('div');
-    kinds.className = 'view-kinds';
-    kinds.hidden = true;
+    // One row: which listing, and what applies to it.
+    const row = document.createElement('div');
+    row.className = 'view-kinds';
+    row.hidden = true;
 
     const choice = document.createElement('div');
     choice.className = 'target';
     choice.setAttribute('role', 'group');
     choice.setAttribute('aria-label', 'Which compiled code to show');
-    kinds.append(choice);
 
-    // What applies to the listing chosen: how much of it, and for a native one
-    // the level it was built at.
     const options = document.createElement('div');
     options.className = 'view-options';
-    options.hidden = true;
+
+    row.append(choice, options);
 
     const status = document.createElement('div');
     status.className = 'view-status';
@@ -225,18 +212,21 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
     host.className = 'view-listing';
     host.hidden = true;
 
-    // Under a native listing, where to go to build and run the program
-    // natively: the question the listing raises.
-    const caption = document.createElement('div');
-    caption.className = 'view-caption';
-    caption.hidden = true;
+    panel.replaceChildren(row, status, host);
 
-    panel.replaceChildren(kinds, options, status, host, caption);
+    // Whether the program is known not to build for the target `k` lists.
+    function unbuildable(k) {
+        const builds = getBuilds();
+
+        if (!builds) return false;
+        if (k === 'wat') return builds.wasm === false;
+        if (NATIVE.has(k)) return builds.native === false;
+
+        return false;
+    }
 
     function offer(available) {
-        const offered = KINDS.filter(k => available.includes(k));
-
-        if (chosen && !offered.includes(chosen)) chosen = null;
+        offered = KINDS.filter(k => available.includes(k));
 
         if (offered.length < 2) return;
 
@@ -245,67 +235,69 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
             button.dataset.kind = k;
             button.textContent = KIND_LABELS[k];
             button.addEventListener('click', () => {
-                if (kind() === k) return;
+                if (kind() === k || button.disabled) return;
                 chosen = k;
                 scope = 'program';
-                rememberKind(k);
                 refresh();
             });
             return button;
         }));
 
         pressed();
-        kinds.hidden = false;
+        row.hidden = false;
     }
 
-    // Which entry is chosen, and which is what a run executes: that one
-    // carries a dot.
+    // Which entry is chosen, which is what a run executes (that one carries a
+    // dot), and which the program is known not to build for.
     function pressed() {
         const runs = runKind(getTarget());
 
+        if (chosen && unbuildable(chosen)) chosen = null;
+
         for (const button of choice.querySelectorAll('button')) {
             const k = button.dataset.kind;
+            const blocked = unbuildable(k);
 
             button.setAttribute('aria-pressed', String(k === kind()));
             button.classList.toggle('runs', k === runs);
-            button.title = k === runs ? 'this is what runs in your browser' : '';
+            button.disabled = blocked;
+            button.title = blocked
+                ? `this solution uses something ${k === 'wat' ? 'the WebAssembly target' : 'the native target'} does not support yet`
+                : k === runs ? runsTitle : '';
         }
     }
 
-    function toggle(text, on, run) {
+    function toggle(text, title, on, run) {
         const button = document.createElement('button');
         button.className = 'view-option';
         button.textContent = text;
+        button.title = title;
         button.setAttribute('aria-pressed', String(on));
         button.addEventListener('click', run);
         return button;
     }
 
-    // The secondary controls for the listing chosen. IL has none.
+    // What applies to the listing chosen. IL has none.
     function controls() {
         const parts = [];
 
         if (kind() !== 'il') {
             parts.push(
-                toggle('program only', scope === 'program', () => { if (scope !== 'program') { scope = 'program'; refresh(); } }),
-                toggle('show all', scope === 'all', () => { if (scope !== 'all') { scope = 'all'; refresh(); } }));
+                toggle('program only', omitted > 0 ? `${omitted} library function${omitted === 1 ? '' : 's'} hidden` : 'the program\'s own functions',
+                    scope === 'program', () => { if (scope !== 'program') { scope = 'program'; refresh(); } }),
+                toggle('show all', 'everything the build holds',
+                    scope === 'all', () => { if (scope !== 'all') { scope = 'all'; refresh(); } }));
         }
 
-        if (kind() === 'llvm-ir' || kind() === 'x86-asm') {
-            const framing = document.createElement('span');
-            framing.className = 'view-framing';
-            framing.textContent = optimise === 2
-                ? '-O2, what ghul build produces'
-                : '-O0, one function per method, each line marked';
-
+        if (NATIVE.has(kind())) {
             parts.push(
-                toggle('-O2', optimise === 2, () => { if (optimise !== 2) { optimise = 2; refresh(); } }),
-                toggle('-O0', optimise === 0, () => { if (optimise !== 0) { optimise = 0; refresh(); } }),
-                framing);
+                toggle('-O2', 'what ghul build produces',
+                    optimise === 2, () => { if (optimise !== 2) { optimise = 2; refresh(); } }),
+                toggle('-O0', 'one function per method, each line marked',
+                    optimise === 0, () => { if (optimise !== 0) { optimise = 0; refresh(); } }));
         }
 
         options.replaceChildren(...parts);
-        options.hidden = parts.length === 0;
     }
 
     getKinds?.().then(offer, () => {});
@@ -375,31 +367,22 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
         }
     }
 
-    function native(result) {
-        const isNative = result.language === 'llvm-ir' || result.language === 'x86-asm';
+    // A native listing starts with where it came from, in the listing's own
+    // comment syntax.
+    function provenance(result, level) {
+        if (!NATIVE.has(result.language)) return result.text;
 
-        caption.hidden = !isNative;
+        const comment = result.language === 'llvm-ir' ? ';' : '#';
 
-        if (!isNative) return;
-
-        const link = document.createElement('a');
-        link.href = 'https://ghul.dev/native';
-        link.target = '_blank';
-        link.rel = 'noopener';
-        link.textContent = 'Native executables';
-
-        const built = result.toolchain ? `Built with ghul-llvm ${result.toolchain} for x86-64 Linux` : 'Built for x86-64 Linux';
-
-        caption.replaceChildren(`${built}; to build and run it yourself, see `, link, '.');
+        return `${comment} ghul-llvm ${result.toolchain ?? ''}, x86-64 linux, -O${level}\n${result.text}`;
     }
 
     // Asks for the listing of what the editor holds now, unless that is what
     // is already shown.
     async function refresh({ force = false } = {}) {
         const wanted = current();
-        const name = label();
+        const name = KIND_LABELS[wanted.kind];
 
-        onLabel(name);
         pressed();
         controls();
 
@@ -436,33 +419,39 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
         }
 
         if (!result.ok) {
+            // Errors building for a target other than the one that runs are
+            // not in the problems pane, so the first is said here.
+            const first = result.diagnostics?.find(d => d.severity === 'error')?.message;
+
             say(result.timedOut
                 ? 'The compile timed out, so there is no listing.'
-                : `Fix the problems to see the ${name}.`);
+                : wanted.kind !== runKind(getTarget()) && TARGET_NAMES[wanted.kind] && first
+                    ? `this program does not build for ${TARGET_NAMES[wanted.kind]}: ${first}`
+                    : `Fix the problems to see the ${name}.`);
             host.hidden = true;
-            caption.hidden = true;
             shown = null;
             return;
         }
 
-        listing(result.text, result.language ?? 'plaintext');
+        listing(provenance(result, wanted.optimise), result.language ?? 'plaintext');
         shown = wanted;
-        native(result);
+        omitted = result.omitted ?? 0;
+        controls();
 
-        const cut = result.truncated ? ' The listing is long, so only its start is shown.' : '';
-        const hidden = result.omitted ?? 0;
-
-        say(hidden > 0
-            ? `${hidden} library function${hidden === 1 ? '' : 's'} hidden.${cut}`
-            : cut.trim());
+        say(result.truncated ? 'The listing is long, so only its start is shown.' : '');
     }
 
     return {
-        /// The label the tab carries for the listing chosen now.
-        label,
         /// Shows the listing for what the editor holds now, asking for one
         /// only if it has changed since the last look.
         show: () => refresh(),
+        /// Called when a different program is loaded: the listing goes back
+        /// to the one of what runs.
+        reset: () => {
+            chosen = null;
+            scope = 'program';
+            pressed();
+        },
         /// Called when the source or target changes while the tab is open: the
         /// listing shown is no longer the program's, which the reader is told
         /// rather than having a compile started on every keystroke. A change of
@@ -474,8 +463,6 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
                 say('');
                 return;
             }
-
-            onLabel(label());
 
             if (shown) {
                 say('The program has changed since this listing.',
