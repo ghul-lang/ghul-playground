@@ -157,4 +157,132 @@ function shapeWat(wat, file) {
     return { text: out.join('\n'), lines, truncated, omitted };
 }
 
-module.exports = { disassemble, shapeListing, shapeWat, MAX_VIEW_BYTES };
+const LLVM_DEFINE = /^define [^@]*@("?)(.+?)\1\(/;
+
+/// The names of the functions an LLVM IR text defines, in its order.
+///
+/// - ir: the text `--llvm-output` wrote
+function llvmFunctionNames(ir) {
+    const names = [];
+
+    for (const line of ir.replace(/\r/g, '').split('\n')) {
+        const define = LLVM_DEFINE.exec(line);
+
+        if (define) names.push(define[2]);
+    }
+
+    return names;
+}
+
+/// Turns the compiler's LLVM IR into what the page shows. The IR carries no
+/// line markers a listing line can be mapped by, so no line maps to the
+/// source.
+///
+/// - ir: the text `--llvm-output` wrote
+///
+/// Returns `{text, lines, truncated}`.
+function shapeLlvm(ir) {
+    return cut(ir.replace(/\r/g, '').split('\n').map(line => [line, null]), ';');
+}
+
+const OBJDUMP_FUNCTION = /^(?:[0-9a-f]+ )?<(.+)>:$/;
+const OBJDUMP_POSITION = /^(\S+):(\d+)( \(discriminator \d+\))?$/;
+const OBJDUMP_FUNCTION_NAME = /^\S.*\(\):$/;
+
+/// Runs objdump over `executable`, disassembling it with each run of
+/// instructions marked by the source line it came from.
+///
+/// - command: the objdump executable
+/// - executable: the linked program, built with debug information
+/// - timeout: milliseconds before objdump is killed
+function objdump(command, executable, timeout) {
+    return new Promise((resolve, reject) => {
+        execFile(command, ['-d', '-l', '-S', '--no-show-raw-insn', executable],
+            { timeout, maxBuffer: 64 * 1024 * 1024 },
+            (error, stdout) => error ? reject(error) : resolve(stdout));
+    });
+}
+
+/// Turns objdump's listing into what the page shows: the functions `names`
+/// holds, or every function where `names` is null, with the source line each
+/// listing line belongs to.
+///
+/// - listing: what `objdump` wrote
+/// - names: the functions to keep, or null for all of them
+/// - file: the name the program was compiled from; a position in any other
+///   file is a library's, and maps to no line
+///
+/// Returns `{text, lines, truncated, omitted}`, where `omitted` is how many
+/// functions were left out.
+function shapeObjdump(listing, names, file) {
+    const wanted = names ? new Set(names) : null;
+    const kept = [];
+    let keeping = false;
+    let current = null;
+    let omitted = 0;
+
+    for (const line of listing.replace(/\r/g, '').split('\n')) {
+        const header = OBJDUMP_FUNCTION.exec(line);
+
+        if (header) {
+            keeping = !wanted || wanted.has(header[1]);
+            current = null;
+
+            if (!keeping) omitted++;
+            if (keeping && kept.length > 0) kept.push(['', null]);
+        }
+
+        if (!keeping) continue;
+
+        const position = OBJDUMP_POSITION.exec(line);
+
+        if (position) {
+            current = position[1] === file || position[1].endsWith(`/${file}`) ? Number(position[2]) : null;
+            continue;
+        }
+
+        // The function's own name, which objdump -l repeats under the header.
+        if (!header && OBJDUMP_FUNCTION_NAME.test(line)) continue;
+
+        kept.push([line, header ? null : current]);
+    }
+
+    return { ...cut(kept, '#'), omitted };
+}
+
+// The listing lines `pairs` holds, each with its source line, cut at
+// MAX_VIEW_BYTES with a marker written as a `comment`.
+function cut(pairs, comment) {
+    const out = [];
+    const lines = [];
+    let bytes = 0;
+    let truncated = false;
+
+    for (const [line, at] of pairs) {
+        bytes += Buffer.byteLength(line) + 1;
+
+        if (bytes > MAX_VIEW_BYTES) {
+            truncated = true;
+            break;
+        }
+
+        out.push(line);
+        lines.push(at);
+    }
+
+    while (out.length > 0 && out[out.length - 1].trim() === '') {
+        out.pop();
+        lines.pop();
+    }
+
+    if (truncated) {
+        out.push(`${comment} ... the listing is cut here, at ${Math.floor(MAX_VIEW_BYTES / 1024)} KB`);
+        lines.push(null);
+    }
+
+    return { text: out.join('\n'), lines, truncated };
+}
+
+module.exports = {
+    disassemble, shapeListing, shapeWat, llvmFunctionNames, shapeLlvm, objdump, shapeObjdump, MAX_VIEW_BYTES
+};
