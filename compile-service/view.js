@@ -158,94 +158,229 @@ function shapeWat(wat, file) {
 }
 
 const LLVM_DEFINE = /^define [^@]*@("?)(.+?)\1\(/;
+const LLVM_METADATA = /^!(\d+) = (?:distinct )?!(\w+)\((.*)\)$/;
 
-/// The names of the functions an LLVM IR text defines, in its order.
-///
-/// - ir: the text `--llvm-output` wrote
-function llvmFunctionNames(ir) {
-    const names = [];
+// The fields of a metadata node that name other nodes, as `name: !N`.
+function metadataLinks(body) {
+    const links = {};
 
-    for (const line of ir.replace(/\r/g, '').split('\n')) {
-        const define = LLVM_DEFINE.exec(line);
+    for (const [, name, id] of body.matchAll(/(\w+): !(\d+)/g)) links[name] = id;
 
-        if (define) names.push(define[2]);
+    return links;
+}
+
+// Which debug locations of an LLVM module are in `file`, or inlined into code
+// that is: a location's scope leads, through any lexical blocks, to a
+// subprogram, and the subprogram names its file.
+function locationsIn(ir, file) {
+    const nodes = new Map();
+
+    for (const line of ir.split('\n')) {
+        const node = LLVM_METADATA.exec(line);
+
+        if (node) nodes.set(node[1], { kind: node[2], body: node[3], links: metadataLinks(node[3]) });
     }
 
-    return names;
+    const files = new Set([...nodes].filter(([, n]) => n.kind === 'DIFile' && n.body.includes(`filename: "${file}"`)).map(([id]) => id));
+    const scopeFile = new Map();
+
+    const fileOf = (id, depth = 0) => {
+        if (scopeFile.has(id)) return scopeFile.get(id);
+
+        const node = nodes.get(id);
+        const result = !node || depth > 64 ? null
+            : node.links.file ?? (node.links.scope ? fileOf(node.links.scope, depth + 1) : null);
+
+        scopeFile.set(id, result);
+        return result;
+    };
+
+    const inFile = new Map();
+
+    const located = (id, depth = 0) => {
+        if (inFile.has(id)) return inFile.get(id);
+
+        const node = nodes.get(id);
+        const result = !!node && node.kind === 'DILocation' && depth <= 64 && (
+            files.has(fileOf(node.links.scope)) ||
+            (node.links.inlinedAt ? located(node.links.inlinedAt, depth + 1) : false));
+
+        inFile.set(id, result);
+        return result;
+    };
+
+    const subprograms = new Set([...nodes].filter(([, n]) => n.kind === 'DISubprogram' && files.has(n.links.file)).map(([id]) => id));
+
+    return { located, subprograms };
 }
 
-/// Turns the compiler's LLVM IR into what the page shows. The IR carries no
-/// line markers a listing line can be mapped by, so no line maps to the
-/// source.
+/// Turns LLVM IR into what the page shows. With `programOnly`, only the
+/// functions of the program in `file` are kept: those whose debug subprogram
+/// is in that file, and those holding code from it, as an optimised module
+/// does once the program's functions are inlined. The IR carries no line
+/// markers a listing line can be mapped by, so no line maps to the source.
 ///
-/// - ir: the text `--llvm-output` wrote
+/// - ir: LLVM IR with debug metadata, as the compiler or ghul-llvm writes it
+/// - programOnly: whether to keep only the program's own functions
+/// - file: the name the program was compiled from
 ///
-/// Returns `{text, lines, truncated}`.
-function shapeLlvm(ir) {
-    return cut(ir.replace(/\r/g, '').split('\n').map(line => [line, null]), ';');
+/// Returns `{text, lines, truncated, omitted}`, where `omitted` is how many
+/// functions were left out.
+function shapeLlvm(ir, programOnly = false, file = 'main.ghul') {
+    const text = ir.replace(/\r/g, '');
+
+    if (!programOnly) {
+        return { ...cut(text.split('\n').map(line => [line, null]), ';'), omitted: 0 };
+    }
+
+    const kept = [];
+    let omitted = 0;
+
+    for (const { block, program } of llvmFunctions(text, file)) {
+        if (program) {
+            if (kept.length > 0) kept.push(['', null]);
+            for (const l of block) kept.push([l, null]);
+        } else {
+            omitted++;
+        }
+    }
+
+    return { ...cut(kept, ';'), omitted };
 }
 
-const OBJDUMP_FUNCTION = /^(?:[0-9a-f]+ )?<(.+)>:$/;
-const OBJDUMP_POSITION = /^(\S+):(\d+)( \(discriminator \d+\))?$/;
-const OBJDUMP_FUNCTION_NAME = /^\S.*\(\):$/;
-
-/// Runs objdump over `executable`, disassembling it with each run of
-/// instructions marked by the source line it came from.
+/// The names of the functions an LLVM module holds the program's code in, by
+/// the rule `shapeLlvm` keeps them by.
 ///
-/// - command: the objdump executable
-/// - executable: the linked program, built with debug information
-/// - timeout: milliseconds before objdump is killed
-function objdump(command, executable, timeout) {
-    return new Promise((resolve, reject) => {
-        execFile(command, ['-d', '-l', '-S', '--no-show-raw-insn', executable],
-            { timeout, maxBuffer: 16 << 20 },
-            (error, stdout) => error ? reject(error) : resolve(stdout));
-    });
+/// - ir: LLVM IR with debug metadata
+/// - file: the name the program was compiled from
+function programFunctions(ir, file = 'main.ghul') {
+    return new Set(llvmFunctions(ir.replace(/\r/g, ''), file)
+        .filter(f => f.program)
+        .map(f => LLVM_DEFINE.exec(f.block[0])[2]));
 }
 
-/// Turns objdump's listing into what the page shows: the functions `names`
-/// holds, or every function where `names` is null, with the source line each
-/// listing line belongs to.
+// Each function an LLVM module defines, as its lines and whether it holds
+// code from `file`.
+function llvmFunctions(text, file) {
+    const { located, subprograms } = locationsIn(text, file);
+    const functions = [];
+    let block = null;
+
+    for (const line of text.split('\n')) {
+        if (!block) {
+            if (LLVM_DEFINE.test(line)) block = [line];
+            continue;
+        }
+
+        block.push(line);
+
+        if (line !== '}') continue;
+
+        const own = /!dbg !(\d+)\s*\{$/.exec(block[0]);
+        const program = (own && subprograms.has(own[1])) ||
+            block.some(l => [...l.matchAll(/!dbg !(\d+)/g)].some(([, id]) => located(id)));
+
+        functions.push({ block, program });
+        block = null;
+    }
+
+    return functions;
+}
+
+const ASM_FILE = /^\s*\.file\s+(\d+)\s+(?:"[^"]*"\s+)?"([^"]*)"/;
+const ASM_LOC = /^\s*\.loc\s+(\d+)\s+(\d+)/;
+const ASM_TYPE_FUNCTION = /^\s*\.type\s+("?)(.+?)\1,@function/;
+const ASM_LABEL = /^("?)([^\s"]+?)\1:/;
+
+/// Turns the assembly ghul-llvm writes into what the page shows: the
+/// functions and their instructions, each instruction with the source line
+/// its `.loc` places it at, and none of the assembler's other directives or
+/// its own internal labels. With `names`, only the functions named are kept:
+/// an optimised function's `.loc` lines name only the innermost file, so
+/// which functions hold the program's code is read from the IR instead.
 ///
-/// - listing: what `objdump` wrote
+/// - asm: the text `--emit=asm` wrote
 /// - names: the functions to keep, or null for all of them
 /// - file: the name the program was compiled from; a position in any other
 ///   file is a library's, and maps to no line
 ///
 /// Returns `{text, lines, truncated, omitted}`, where `omitted` is how many
 /// functions were left out.
-function shapeObjdump(listing, names, file) {
-    const wanted = names ? new Set(names) : null;
+function shapeAsm(asm, names = null, file = 'main.ghul') {
+    const lines = asm.replace(/\r/g, '').split('\n');
+    const indices = new Set();
+
+    for (const line of lines) {
+        const declared = ASM_FILE.exec(line);
+
+        if (declared && (declared[2] === file || declared[2].endsWith(`/${file}`))) indices.add(declared[1]);
+    }
+
+    const functions = new Set();
+
+    for (const line of lines) {
+        const declared = ASM_TYPE_FUNCTION.exec(line);
+
+        if (declared) functions.add(declared[2]);
+    }
+
     const kept = [];
-    let keeping = false;
-    let current = null;
     let omitted = 0;
+    let body = null;
+    let name = null;
+    let current = null;
 
-    for (const line of listing.replace(/\r/g, '').split('\n')) {
-        const header = OBJDUMP_FUNCTION.exec(line);
+    const finish = () => {
+        if (!body) return;
 
-        if (header) {
-            keeping = !wanted || wanted.has(header[1]);
-            current = null;
-
-            if (!keeping) omitted++;
-            if (keeping && kept.length > 0) kept.push(['', null]);
+        if (!names || names.has(name)) {
+            if (kept.length > 0) kept.push(['', null]);
+            kept.push(...body);
+        } else {
+            omitted++;
         }
 
-        if (!keeping) continue;
+        body = null;
+    };
 
-        const position = OBJDUMP_POSITION.exec(line);
+    for (const line of lines) {
+        const label = ASM_LABEL.exec(line);
 
-        if (position) {
-            current = position[1] === file || position[1].endsWith(`/${file}`) ? Number(position[2]) : null;
+        if (label && functions.has(label[2])) {
+            finish();
+            body = [[line, null]];
+            name = label[2];
+            current = null;
             continue;
         }
 
-        // The function's own name, which objdump -l repeats under the header.
-        if (!header && OBJDUMP_FUNCTION_NAME.test(line)) continue;
+        if (!body) continue;
 
-        kept.push([line, header ? null : current]);
+        if (/^\s*\.size\s/.test(line) || /^\s*\.section\s/.test(line) || /^\s*\.(data|bss)\b/.test(line)) {
+            finish();
+            continue;
+        }
+
+        const loc = ASM_LOC.exec(line);
+
+        if (loc) {
+            current = indices.has(loc[1]) && loc[2] !== '0' ? Number(loc[2]) : null;
+            continue;
+        }
+
+        if (label) {
+            if (!/^\.L(tmp|func_begin|func_end)/.test(label[2])) body.push([line, null]);
+            continue;
+        }
+
+        const trimmed = line.trim();
+
+        if (trimmed === '' || trimmed.startsWith('.') || trimmed.startsWith('#')) continue;
+
+        body.push([line, current]);
     }
+
+    finish();
 
     return { ...cut(kept, '#'), omitted };
 }
@@ -284,5 +419,5 @@ function cut(pairs, comment) {
 }
 
 module.exports = {
-    disassemble, shapeListing, shapeWat, llvmFunctionNames, shapeLlvm, objdump, shapeObjdump, MAX_VIEW_BYTES
+    disassemble, shapeListing, shapeWat, shapeLlvm, programFunctions, shapeAsm, MAX_VIEW_BYTES
 };

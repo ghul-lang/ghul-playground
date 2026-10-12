@@ -16,12 +16,11 @@
 //     or {"ok": false, "target", "diagnostics": [...], "cached": bool}
 //
 //   POST /compile/view  {"source": "...", "target": "llvm", "view": "llvm-ir"|"x86-asm", "scope": ..., "optimise": 0|2}
-//     -> as above, with "language": "llvm-ir"|"x86-asm". An LLVM IR view of
-//     scope "program" says so with "programOnly": true rather than a count;
-//     an x86-64 view counts the functions it leaves out in "omitted". Offered
-//     only where GHUL_LLVM names ghul-llvm and the wasm libraries are present,
-//     and nothing compiled for llvm is run. "optimise", 2 unless given, is the
-//     level the x86-64 listing is built at.
+//     -> as above, with "language": "llvm-ir"|"x86-asm", counting the functions
+//     a view of scope "program" leaves out in "omitted". "optimise", 2 unless
+//     given, is the level both are built at. Offered only where GHUL_LLVM
+//     names ghul-llvm and the wasm libraries are present, and nothing
+//     compiled for llvm is run.
 //
 //   The compiled code as text, built by a compile of its own only when asked
 //   for, so a POST /compile never pays for it. See view.js.
@@ -88,12 +87,11 @@ const RESULT_CACHE_BYTES = Number(process.env.RESULT_CACHE_BYTES ?? 128 * 1024 *
 // the image.
 const ILSPYCMD = process.env.ILSPYCMD ?? 'ilspycmd';
 
-// The tools an llvm view links and disassembles with: ghul-llvm, at the
-// release the compiler names in its requirements.json, and objdump. Without
-// GHUL_LLVM there is no llvm view.
+// What an llvm view optimises and writes assembly with: ghul-llvm, at the
+// release the compiler names in its requirements.json. Without GHUL_LLVM
+// there is no llvm view.
 const GHUL_LLVM = process.env.GHUL_LLVM ?? null;
 const GHUL_LLVM_VERSION = process.env.GHUL_LLVM_VERSION ?? 'unknown';
-const OBJDUMP = process.env.OBJDUMP ?? 'objdump';
 
 // The two listings an llvm view can be.
 const LLVM_VIEWS = new Set(['llvm-ir', 'x86-asm']);
@@ -440,7 +438,7 @@ async function compileUncached(source, target = 'dotnet') {
 // replaces: the view is a separate build, with debug information on.
 async function compileView(source, target, scope, language, optimise = 2) {
     const { cache, toolchainIds } = await getResultState();
-    const level = language === 'x86-asm' ? `:O${optimise}` : '';
+    const level = target === 'llvm' ? `:O${optimise}` : '';
     const key = `${toolchainIds[target]}:view${target === 'llvm' ? `:${language}` : ''}${level}${scope === 'all' ? ':all' : ''}`;
 
     return cache.answer(results.resultKey(key, source), () => compileViewUncached(source, target, scope, language, optimise));
@@ -521,13 +519,14 @@ async function compileWatView(source, scope) {
     }
 }
 
-// The program as LLVM IR or as x86-64 assembly. One build serves both: the
-// compiler writes the IR and links an executable with ghul-llvm at
-// `optimise`, 2 for what `ghul build` makes or 0 for one function per method
-// with every line marked, and objdump disassembles that executable. The IR is
-// written before ghul-llvm's passes, so the level changes nothing there. The
-// program's own functions are those the IR `--llvm-program-only` keeps
-// defines, unless `scope` asks for everything.
+// The program as LLVM IR or as x86-64 assembly, at `optimise`, 2 for what
+// `ghul build` makes or 0 for one function per method with every line
+// marked. The compiler writes the whole module with its debug information;
+// ghul-llvm turns that into optimised IR or into assembly, and an unoptimised
+// IR listing is the compiler's own. The compiler still links an executable
+// beside the module, which nothing uses and nothing runs. The program's own
+// functions are those holding its code, read from the IR at the same level,
+// unless `scope` asks for everything.
 async function compileLlvmView(source, scope, language, optimise = 2) {
     const { compiler, wasm } = await getToolchain();
     const directory = await mkdtemp(path.join(tmpdir(), 'ghul-playground-view-'));
@@ -536,10 +535,8 @@ async function compileLlvmView(source, scope, language, optimise = 2) {
         await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
 
         const libraries = wasm.withRaster && usesRaster(source) ? wasm.withRaster : wasm;
-        const programOnly = scope === 'all' && language === 'llvm-ir' ? [] : ['--llvm-program-only'];
-        const args = [compiler, '--target', 'llvm', '--debug', '--optimise', String(optimise), ...libraries.args,
-            '--llvm-output', 'program.ll', ...programOnly,
-            '-o', 'main', 'main.ghul'];
+        const args = [compiler, '--target', 'llvm', '--debug', ...libraries.args,
+            '--llvm-output', 'module.ll', '-o', 'main', 'main.ghul'];
 
         const { error, stdout, stderr } = await runCompiler(args, directory, { GHUL_LLVM });
         const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
@@ -551,19 +548,36 @@ async function compileLlvmView(source, scope, language, optimise = 2) {
             return { ok: false, target: 'llvm', diagnostics, ...(timedOut ? { timedOut } : {}), ...(failed ? { failed } : {}) };
         }
 
-        const ir = await readFile(path.join(directory, 'program.ll'), 'utf8');
+        const programOnly = scope !== 'all';
+        const ir = optimise === 0
+            ? await readFile(path.join(directory, 'module.ll'), 'utf8')
+            : await emit(directory, optimise, 'll');
 
         if (language === 'llvm-ir') {
-            return { ok: true, target: 'llvm', language: 'llvm-ir', toolchain: GHUL_LLVM_VERSION, ...view.shapeLlvm(ir), programOnly: programOnly.length > 0 };
+            return { ok: true, target: 'llvm', language, toolchain: GHUL_LLVM_VERSION, ...view.shapeLlvm(ir, programOnly) };
         }
 
-        const listing = await view.objdump(OBJDUMP, path.join(directory, 'main'), COMPILE_TIMEOUT_MS);
-        const names = scope === 'all' ? null : view.llvmFunctionNames(ir);
+        const asm = await emit(directory, optimise, 'asm');
+        const names = programOnly ? view.programFunctions(ir) : null;
 
-        return { ok: true, target: 'llvm', language: 'x86-asm', toolchain: GHUL_LLVM_VERSION, ...view.shapeObjdump(listing, names, 'main.ghul') };
+        return { ok: true, target: 'llvm', language, toolchain: GHUL_LLVM_VERSION, ...view.shapeAsm(asm, names) };
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
+}
+
+// What ghul-llvm makes of the compiler's module.ll at `optimise`: `ll` for
+// the optimised IR, `asm` for the assembly. Nothing is linked.
+function emit(directory, optimise, kind) {
+    const output = `module.O${optimise}.${kind === 'll' ? 'll' : 's'}`;
+
+    return new Promise((resolve, reject) => {
+        execFile(GHUL_LLVM, ['module.ll', `-O${optimise}`, `--emit=${kind}`, '-o', output],
+            { cwd: directory, timeout: COMPILE_TIMEOUT_MS },
+            error => error
+                ? reject(new Error(`ghul-llvm could not emit ${kind}: ${error.message.split('\n')[0]}`))
+                : resolve(readFile(path.join(directory, output), 'utf8')));
+    });
 }
 
 // How many errors a compile reported: the diagnostics themselves are the

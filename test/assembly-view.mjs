@@ -2,14 +2,16 @@
 // view: the temporary directory taken out of names and positions, a source
 // line for each listing line, and the size cap. And the same for the WAT the
 // compiler prints for a wasm build: the source line each statement's marker
-// names, and how many library functions were left out.
+// names, and how many library functions were left out. And for a native
+// build: the program's own functions in LLVM IR, and in the assembly ghul-llvm
+// writes, each instruction with its source line.
 //
 //   node test/assembly-view.mjs
 
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { shapeListing, shapeWat, llvmFunctionNames, shapeLlvm, shapeObjdump } = require('../compile-service/view.js');
+const { shapeListing, shapeWat, programFunctions, shapeLlvm, shapeAsm } = require('../compile-service/view.js');
 
 let failures = 0;
 
@@ -92,61 +94,90 @@ const cutWat = shapeWat(longWat, 'main.ghul');
 check('a long WAT listing is cut and says so', cutWat.truncated && cutWat.text.endsWith('KB'), cutWat.text.slice(-60));
 check('the cut WAT keeps one source line per listing line', cutWat.lines.length === cutWat.text.split('\n').length);
 
+// An optimised module: `square` is the program's own; `$ghul_entry` holds
+// the program's code inlined into it; `helper` is a library's.
 const ir = [
-    'define internal i32 @square(i32 %n) {',
+    'define internal i32 @square(i32 %n) !dbg !10 {',
     'entry:',
-    '  %0 = mul i32 %n, %n',
+    '  %0 = mul i32 %n, %n, !dbg !20',
     '  ret i32 %0',
     '}',
     '',
-    'define i32 @"Main.$globals.entry"() {',
+    'define i32 @"$ghul_entry"() {',
+    '  call void @helper(), !dbg !22',
     '  ret i32 0',
     '}',
+    '',
+    'define void @helper() !dbg !11 {',
+    '  ret void, !dbg !21',
+    '}',
+    '',
+    '!1 = !DIFile(filename: "main.ghul", directory: "/tmp/view")',
+    '!2 = !DIFile(filename: "io.ghul", directory: "/lib")',
+    '!10 = distinct !DISubprogram(name: "square", scope: !1, file: !1, line: 3)',
+    '!11 = distinct !DISubprogram(name: "helper", scope: !2, file: !2, line: 9)',
+    '!12 = distinct !DILexicalBlock(scope: !10, file: !1, line: 4)',
+    '!20 = !DILocation(line: 3, column: 1, scope: !12)',
+    '!21 = !DILocation(line: 9, column: 1, scope: !11)',
+    '!22 = !DILocation(line: 9, column: 1, scope: !11, inlinedAt: !20)',
     ''
 ].join('\n');
 
-check('the functions LLVM IR defines are named, quoted ones included',
-    JSON.stringify(llvmFunctionNames(ir)) === JSON.stringify(['square', 'Main.$globals.entry']), llvmFunctionNames(ir));
+check('the program\'s functions are its own and those holding its inlined code',
+    JSON.stringify([...programFunctions(ir)]) === JSON.stringify(['square', '$ghul_entry']), [...programFunctions(ir)]);
 
-const shapedIr = shapeLlvm(ir);
+const programIr = shapeLlvm(ir, true);
 
-check('LLVM IR is shown as written, without its trailing blank line', shapedIr.text === ir.trimEnd(), shapedIr.text);
-check('no LLVM IR line maps to the source', shapedIr.lines.every(line => line === null));
+check('program-only IR keeps the program\'s functions', programIr.text.includes('@square') && programIr.text.includes('$ghul_entry'), programIr.text);
+check('program-only IR leaves a library\'s out, and counts it', !programIr.text.includes('define void @helper') && programIr.omitted === 1, programIr.omitted);
+check('the whole IR is shown as written', shapeLlvm(ir).text === ir.trimEnd());
+check('no IR line maps to the source', programIr.lines.every(line => line === null));
 
-const dump = [
-    '',
-    'main:     file format elf64-x86-64',
-    '',
-    'Disassembly of section .text:',
-    '',
-    '0000000000401000 <square>:',
-    'square():',
-    '/tmp/view/main.ghul:3',
-    '  401000:\timul   %edi,%edi',
-    '  401003:\tmov    %edi,%eax',
-    '/tmp/view/lib/core.ghul:40',
-    '  401005:\tret',
-    '',
-    '0000000000401010 <string_concat>:',
-    'string_concat():',
-    '/tmp/view/lib/core.ghul:12',
-    '  401010:\tpush   %rbp',
+const asm = [
+    '\t.text',
+    '\t.file\t"module.ll"',
+    '\t.file\t0 "/tmp/view" "main.ghul"',
+    '\t.file\t1 "/lib" "io.ghul"',
+    '\t.globl\tsquare',
+    '\t.type\tsquare,@function',
+    'square:',
+    '.Lfunc_begin0:',
+    '\t.cfi_startproc',
+    '\t.loc\t0 3 0',
+    '\tmovl\t%edi, %eax',
+    '.Ltmp0:',
+    '\t.loc\t0 4 5 prologue_end',
+    '\timull\t%edi, %eax',
+    '.LBB0_1:',
+    '\t.loc\t1 9 0',
+    '\tretq',
+    '.Lfunc_end0:',
+    '\t.size\tsquare, .Lfunc_end0-square',
+    '\t.cfi_endproc',
+    '\t.type\thelper,@function',
+    'helper:',
+    '\t.loc\t1 9 0',
+    '\tretq',
+    '\t.size\thelper, .Lfunc_end1-helper',
+    '\t.section\t.rodata',
+    'square.table:',
+    '\t.quad\t0',
     ''
 ].join('\n');
 
-const kept = shapeObjdump(dump, ['square'], 'main.ghul');
+const kept = shapeAsm(asm, new Set(['square']));
 const keptLines = kept.text.split('\n');
 
-check('objdump keeps only the functions named', keptLines[0] === '0000000000401000 <square>:' && !kept.text.includes('string_concat'), kept.text);
-check('the functions left out are counted', kept.omitted === 1, kept.omitted);
-check('objdump position lines and repeated names are dropped',
-    !kept.text.includes('main.ghul:') && !kept.text.includes('square():'), kept.text);
-check('instructions take the line of the position before them', kept.lines[1] === 3 && kept.lines[2] === 3, kept.lines);
-check('a position in a library file maps to no line', kept.lines[3] === null, kept.lines);
-check('a function header maps to no line', kept.lines[0] === null, kept.lines);
+check('asm keeps only the functions named, and counts the rest',
+    keptLines[0] === 'square:' && !kept.text.includes('helper') && kept.omitted === 1, kept.text);
+check('directives and internal labels are dropped, block labels kept',
+    !kept.text.includes('.loc') && !kept.text.includes('.cfi') && !kept.text.includes('.Ltmp') && kept.text.includes('.LBB0_1:'), kept.text);
+check('instructions take the line of the .loc before them', kept.lines[1] === 3 && kept.lines[2] === 4, kept.lines);
+check('a position in a library file maps to no line', kept.lines[4] === null, kept.lines);
+check('data is not a function', !kept.text.includes('square.table'), kept.text);
 
-const everything = shapeObjdump(dump, null, 'main.ghul');
+const everything = shapeAsm(asm, null);
 
-check('with no names objdump keeps every function', everything.text.includes('<string_concat>:') && everything.omitted === 0, everything.text);
+check('with no names asm keeps every function', everything.text.includes('helper:') && everything.omitted === 0, everything.text);
 
 process.exit(failures ? 1 : 0);

@@ -196,8 +196,8 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
     // build holds. IL has nothing to leave out, so it is always the whole.
     let scope = 'program';
 
-    // The level the x86-64 listing is built at: 2, what `ghul build` makes, or
-    // 0, one function per method with every line marked.
+    // The level a native listing is built at: 2, what `ghul build` makes, or 0,
+    // one function per method with every line marked.
     let optimise = 2;
 
     const label = () => KIND_LABELS[kind()];
@@ -212,8 +212,8 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
     choice.setAttribute('aria-label', 'Which compiled code to show');
     kinds.append(choice);
 
-    // What applies to the listing chosen: how much of it, and for x86-64 the
-    // level it was built at.
+    // What applies to the listing chosen: how much of it, and for a native one
+    // the level it was built at.
     const options = document.createElement('div');
     options.className = 'view-options';
     options.hidden = true;
@@ -291,7 +291,7 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
                 toggle('show all', scope === 'all', () => { if (scope !== 'all') { scope = 'all'; refresh(); } }));
         }
 
-        if (kind() === 'x86-asm') {
+        if (kind() === 'llvm-ir' || kind() === 'x86-asm') {
             const framing = document.createElement('span');
             framing.className = 'view-framing';
             framing.textContent = optimise === 2
