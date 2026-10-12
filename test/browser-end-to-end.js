@@ -1221,7 +1221,7 @@ chrome.on('error', e => {
 
     check('the identity takes a row of its own on a phone',
         narrow.identityInTheTabRow && narrow.identityOnItsOwnRow, JSON.stringify(narrow));
-    check('the timing has yielded its place by then', !narrow.timingShown, JSON.stringify(narrow));
+    check('the timing stays on a phone, wrapping under the tabs', narrow.timingShown, JSON.stringify(narrow));
     check('nothing in the strip is cut short at 390px either',
         narrow.links > 0 && narrow.clippedLinks.length === 0, JSON.stringify(narrow));
     check('and the identity is not cut short', !narrow.identityClipped, JSON.stringify(narrow));
