@@ -2000,14 +2000,39 @@ chrome.on('error', e => {
     }
 
     const wasmSupported = await ev(`(async () => (await import('./playground.js')).wasmAvailable())()`);
-    const choiceShowing = () => ev(`(() => { const t = document.getElementById('target');
-                 return Boolean(t) && t.offsetParent !== null; })()`);
+
+    check('where a program runs is not a control beside Run', await ev(`document.getElementById('target') === null`));
+
+    // Under the output, after a run: where it ran, and on this page the way to
+    // the other target.
+    const ranOn = () => ev(`(() => { const r = document.getElementById('ran-on');
+                 return r && !r.hidden ? r.innerText : ''; })()`);
+
+    async function runFor(expected) {
+        await ev(`document.getElementById('run').click(); true`);
+
+        let said = '';
+        for (let i = 0; i < 180; i++) {
+            said = await ranOn();
+            if (said && (await ev(`document.getElementById('output').innerText`)).includes(expected)) break;
+            await sleep(500);
+        }
+
+        return said;
+    }
 
     if (!wasmSupported) {
         log('skip  wasm: this browser or compile service cannot run a wasm build');
-        check('no wasm/.NET choice where wasm cannot run', !(await choiceShowing()));
     } else {
-        check('the wasm/.NET choice is offered', await choiceShowing());
+        const sixBySeven = ['use IO.Std.write_line;', '', 'entry() is', '    write_line("{6 * 7}");', 'si', ''].join('\n');
+
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(sixBySeven)}); true`);
+        await sleep(1000);
+
+        const onWasm = await runFor('42');
+        check('a program that runs on wasm runs there, and says so',
+            onWasm.startsWith('ran on WebAssembly in your browser'), JSON.stringify(onWasm));
+        check('and offers .NET instead', onWasm.includes('switch to .NET'), JSON.stringify(onWasm));
 
         // The analyser follows the target: a .NET API the wasm target lacks is
         // reported as the program is typed, and not once .NET is chosen.
@@ -2015,6 +2040,25 @@ chrome.on('error', e => {
             '    write_line(System.Environment.machine_name);', 'si', ''].join('\n');
         const markerText = () => ev(`JSON.stringify(monaco.editor.getModelMarkers({}).map(m => m.message))`);
 
+        await ev(`document.querySelector('#ran-on .ran-on-switch').click(); true`);
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(dotnetOnly)}); true`);
+
+        let dotnetMarkers = '[]';
+        await sleep(2000);
+        for (let i = 0; i < 120; i++) {
+            dotnetMarkers = await markerText();
+            if (!dotnetMarkers.includes('Environment')) break;
+            await sleep(500);
+        }
+        check('on .NET, a program using a .NET API wasm lacks is clean', !dotnetMarkers.includes('Environment'), dotnetMarkers);
+
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(sixBySeven)}); true`);
+        await sleep(1000);
+
+        const onDotnet = await runFor('42');
+        check('switched, it runs on .NET and says so', onDotnet.startsWith('ran on .NET'), JSON.stringify(onDotnet));
+
+        await ev(`document.querySelector('#ran-on .ran-on-switch').click(); true`);
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(dotnetOnly)}); true`);
 
         let wasmMarkers = '[]';
@@ -2023,22 +2067,7 @@ chrome.on('error', e => {
             if (wasmMarkers.includes('Environment')) break;
             await sleep(500);
         }
-        check('on wasm, the editor reports a .NET API wasm lacks', wasmMarkers.includes('Environment'), wasmMarkers);
-
-        await ev(`document.querySelector('#target [data-target="dotnet"]').click(); true`);
-
-        let dotnetMarkers = wasmMarkers;
-        for (let i = 0; i < 120; i++) {
-            dotnetMarkers = await markerText();
-            if (!dotnetMarkers.includes('Environment')) break;
-            await sleep(500);
-        }
-        check('on .NET, the same program is clean', !dotnetMarkers.includes('Environment'), dotnetMarkers);
-
-        await ev(`document.querySelector('#target [data-target="wasm"]').click(); true`);
-        await sleep(1000);
-        check('wasm is chosen by default',
-            await ev(`document.querySelector('#target [data-target="wasm"]').getAttribute('aria-pressed') === 'true'`));
+        check('switched back, the editor reports the API wasm lacks', wasmMarkers.includes('Environment'), wasmMarkers);
 
         // The compiled-code tab follows the target: on wasm it is the module's
         // WAT, the program's own functions first, with the rest a click away.
@@ -2066,7 +2095,12 @@ chrome.on('error', e => {
             const said = await viewStatus();
             check('the library functions left out are counted', /\d+ library functions? hidden/.test(said), said);
 
-            await ev(`document.querySelector('#view .view-action')?.click(); true`);
+            const entries = await ev(`JSON.stringify([...document.querySelectorAll('#view .view-kinds button')]
+                .map(b => b.textContent + (b.classList.contains('runs') ? '*' : '')))`);
+            check('the listings are offered in a fixed order, WAT marked as what runs',
+                /^\["IL","WAT\*"(,"LLVM IR","x86-64")?\]$/.test(entries), entries);
+
+            await ev(`[...document.querySelectorAll('#view .view-option')].find(b => b.textContent === 'show all')?.click(); true`);
 
             let whole = text;
             for (let i = 0; i < 120 && whole.length <= text.length; i++) {
@@ -2158,8 +2192,12 @@ chrome.on('error', e => {
         check('a program wasm cannot compile runs on .NET, with a note',
             fellBack.includes('3.75') && fellBack.includes('ran on .NET'), JSON.stringify(fellBack.trim()));
 
-        // Chosen .NET, a program that would run on wasm runs on .NET.
-        await ev(`document.querySelector('#target [data-target="dotnet"]').click(); true`);
+        // Chosen .NET, from under a run on wasm, a program that would run on
+        // wasm runs on .NET.
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(sixBySeven)}); true`);
+        await sleep(1000);
+        await runFor('42');
+        await ev(`document.querySelector('#ran-on .ran-on-switch').click(); true`);
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(reading)}); true`);
         await sleep(1000);
         await ev(`document.getElementById('run').click(); true`);

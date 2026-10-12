@@ -70,10 +70,15 @@ const compileOffered = () => {
 const wasmCompiled = () => compileOffered()
     .then(answer => Array.isArray(answer.targets) && answer.targets.includes('wasm'));
 
-/// The native listings the compile service can show for a program: any of
-/// `llvm-ir` and `x86-asm`, or none.
-export const nativeViews = () => compileOffered()
-    .then(answer => Array.isArray(answer.views) ? answer.views : []);
+/// The listings the compile service can show for a program, in the order the
+/// compiled-code tab offers them: `il` always, `wat` where it builds for
+/// WebAssembly, and `llvm-ir` and `x86-asm` where it offers native views.
+export const listingKinds = () => compileOffered()
+    .then(answer => [
+        'il',
+        ...(Array.isArray(answer.targets) && answer.targets.includes('wasm') ? ['wat'] : []),
+        ...(Array.isArray(answer.views) ? answer.views.filter(v => v === 'llvm-ir' || v === 'x86-asm') : [])
+    ]);
 
 // Whether a program can run on wasm here: the browser has to be able to run
 // the module, and the compile service has to be able to build it.
@@ -212,7 +217,10 @@ export async function createPlayground({
     // Called with { capable, supported, target } whenever the choice of target
     // changes: whether the program is known to run on wasm, whether this
     // browser can run wasm, and the target the next run uses.
-    onTargets = () => { }
+    onTargets = () => { },
+    // Called with the target a run actually ran on, `wasm` or `dotnet`, once
+    // it has compiled and starts.
+    onRan = () => { }
 }) {
     await loadMonaco();
 
@@ -480,14 +488,15 @@ export async function createPlayground({
     let wasmRun = null;
 
     // The compiled code of what the editor holds, for the assembly view: a
-    // request of its own, so a run never builds it. `kind` is `run` for the
-    // listing of the target a run would use, or one of the native listings.
-    // Answers the status and the parsed body, or throws when the service
-    // cannot be reached.
-    async function viewCompiled(scope = 'program', kind = 'run') {
-        const wanted = kind === 'run'
-            ? { target: await effectiveTarget() }
-            : { target: 'llvm', view: kind };
+    // request of its own, so a run never builds it. `kind` is the listing: `il`
+    // for .NET, `wat` for WebAssembly, or `llvm-ir` or `x86-asm` for native, the
+    // last built at `optimise`, 0 or 2. Answers the status and the parsed body,
+    // or throws when the service cannot be reached.
+    async function viewCompiled(scope = 'program', kind = 'il', optimise = 2) {
+        const wanted =
+            kind === 'il' ? { target: 'dotnet' }
+                : kind === 'wat' ? { target: 'wasm' }
+                    : { target: 'llvm', view: kind, optimise };
 
         const token = getToken();
 
@@ -617,6 +626,8 @@ export async function createPlayground({
             }
 
             const compiled = Math.round(performance.now() - started);
+
+            onRan(runTarget);
 
             if (runTarget === 'wasm') {
                 await runInWasm(result, args, { compiled, note });

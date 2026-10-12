@@ -50,7 +50,6 @@ function post(type, payload = {}) {
 }
 
 const container = document.getElementById('editor');
-const targetChoice = document.getElementById('target');
 
 let playground = null;
 let lastHeight = 0;
@@ -132,23 +131,11 @@ window.addEventListener('message', async event => {
             onStatus: (state, detail) => post('status', { state, detail: detail ?? null }),
             onAnalyser: state => post('analyser', { state }),
 
-            // The wasm/.NET choice, offered only for a program the page says
-            // runs on wasm, in a browser that can run it. The page is told
-            // too, in case it would rather offer the choice itself.
-            onTargets: ({ capable, supported, target }) => {
-                targetChoice.hidden = !(capable && supported);
-
-                for (const button of targetChoice.querySelectorAll('button')) {
-                    button.setAttribute('aria-pressed', String(button.dataset.target === target));
-                }
-
-                post('targets', { capable, supported, target });
-            }
+            // Where the next run goes, chosen for the reader, and where each
+            // run went, which the page shows under the output.
+            onTargets: ({ capable, supported, target }) => post('targets', { capable, supported, target }),
+            onRan: target => post('ran', { target })
         });
-
-        for (const button of targetChoice.querySelectorAll('button')) {
-            button.addEventListener('click', () => playground.setTarget(button.dataset.target));
-        }
 
         playground.setWasmCapable(message.wasm === true);
 

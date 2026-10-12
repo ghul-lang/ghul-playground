@@ -17,7 +17,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS base
 # Node runs the service; the SDK supplies dotnet, the reference pack the
 # compiler compiles against, and a place to install the compiler tool.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends nodejs binutils \
+ && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/*
 
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
@@ -74,11 +74,10 @@ RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghu
  && test -f /home/playground/libraries/ghul-runtime/wasm-sources.rsp \
  && test -d /home/playground/libraries/ghul-raster/src
 
-# The assembler and linker an llvm build hands its module to, for the native
-# views: the release the compiler's build/requirements.json names
-# (scripts/check-wasm-pins.js holds the two in step), checked against the
-# sha256 published beside it. objdump, from binutils above, disassembles what
-# it links.
+# The optimiser, assembler and linker an llvm build hands its module to,
+# which writes the native views' optimised IR and assembly: the release the
+# compiler's build/requirements.json names (scripts/check-wasm-pins.js holds
+# the two in step), checked against the sha256 published beside it.
 ARG GHUL_LLVM_VERSION=0.16.0
 ARG GHUL_LLVM_TRIPLE=x86_64-unknown-linux-musl
 
@@ -98,8 +97,7 @@ RUN cd /tmp/ghul-llvm \
 # fails the build rather than the first user request.
 ENV ILSPYCMD=/home/playground/tools/ilspycmd \
     GHUL_LLVM=/home/playground/tools/ghul-llvm/ghul-llvm-${GHUL_LLVM_TRIPLE}/bin/ghul-llvm \
-    GHUL_LLVM_VERSION=${GHUL_LLVM_VERSION} \
-    OBJDUMP=/usr/bin/objdump
+    GHUL_LLVM_VERSION=${GHUL_LLVM_VERSION}
 
 ENV GHUL_COMPILER_DLL=/home/playground/tools/.store/ghul.compiler/${GHUL_COMPILER_VERSION}/ghul.compiler/${GHUL_COMPILER_VERSION}/tools/net10.0/any/ghul.dll \
     GHUL_RUNTIME_DLL=/home/playground/.nuget/packages/ghul.runtime/${GHUL_RUNTIME_VERSION}/lib/net10.0/ghul-runtime.dll \

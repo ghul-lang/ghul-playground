@@ -4,7 +4,7 @@
 // First, so that the runtime starts its workers from the constructor this
 // module wraps; see errors.js.
 import { countErrors } from './errors.js'
-import { createPlayground, nativeViews, replOffered } from './playground.js'
+import { createPlayground, listingKinds, replOffered } from './playground.js'
 import { replPageUrl } from './repl-route.js'
 import { setUpFullscreen, setUpHelp } from './chrome.js'
 import { requestedProgram, loadProgram, pathBelowBase } from './collections.js'
@@ -28,7 +28,7 @@ const count = (what, detail) => countEvent(`mini-ide-${what}/${HOST}${detail ? `
 countErrors(`mini-ide-error/${HOST}`, countEvent);
 
 const runButton = document.getElementById('run');
-const targetChoice = document.getElementById('target');
+const ranOn = document.getElementById('ran-on');
 
 // `?wasm` in the address offers wasm for whatever is in the editor, so a
 // program the index does not list yet can be tried on it.
@@ -600,6 +600,35 @@ const initialSource = program?.source ?? savedSource;
 // The target a run uses now, as the playground last reported it.
 let runTarget = 'dotnet';
 
+// Whether the reader could run this program on the other target: it is known
+// to run on wasm, and this browser can.
+let switchable = false;
+
+// Under the output, where the run happened. Where it is not a framed page the
+// line also offers the other target, for a program that can run on both, so
+// a reader wanting the fuller .NET library knows where to go. A run that fell
+// back to .NET was not a choice, and has nothing to switch.
+function showRanOn(target) {
+    ranOn.replaceChildren(target === 'wasm' ? 'ran on WebAssembly in your browser' : 'ran on .NET');
+
+    if (HOST === 'standalone' && switchable && target === runTarget) {
+        const other = target === 'wasm' ? 'dotnet' : 'wasm';
+        const link = document.createElement('button');
+
+        link.className = 'ran-on-switch';
+        link.textContent = other === 'wasm' ? 'switch to WebAssembly' : 'switch to .NET';
+        link.addEventListener('click', () => {
+            playground.setTarget(other);
+            count('target', other);
+            ranOn.hidden = true;
+        });
+
+        ranOn.append(' · ', link);
+    }
+
+    ranOn.hidden = false;
+}
+
 const playground = await createPlayground({
     container: document.getElementById('editor'),
     theme: isDark() ? 'vs-dark' : 'vs',
@@ -646,24 +675,20 @@ const playground = await createPlayground({
 
     onImages: showImages,
 
-    // The wasm/.NET choice is offered only for a program known to run on wasm,
-    // in a browser that can run it; everywhere else the program runs on .NET
-    // and there is nothing to choose.
+    // Where the next run goes is decided for the reader: wasm for a program
+    // known to run there, in a browser that can, and .NET otherwise.
     onTargets: ({ capable, supported, target }) => {
         runTarget = target;
+        switchable = capable && supported;
 
         // The tab says which listing it would show, whether or not
         // it is open.
         viewTab.textContent = assemblyView?.label() ?? viewLabel(target);
 
         if (!viewPane.hidden) assemblyView?.changed();
-
-        targetChoice.hidden = !(capable && supported);
-
-        for (const button of targetChoice.querySelectorAll('button')) {
-            button.setAttribute('aria-pressed', String(button.dataset.target === target));
-        }
     },
+
+    onRan: showRanOn,
 
     onDiagnostics: list => {
         problemCount.hidden = list.length === 0;
@@ -685,6 +710,8 @@ const playground = await createPlayground({
 
     onStatus: (state, detail) => {
         status.textContent = (STATUS_TEXT[state] ?? (() => state))(detail);
+
+        if (state === 'compiling') ranOn.hidden = true;
 
         compiler.dataset.state =
             BUSY.has(state) ? 'working'
@@ -779,21 +806,14 @@ const playground = await createPlayground({
 
 assemblyView = createAssemblyView({
     panel: viewPane,
-    fetchView: (scope, kind) => playground.viewCompiled(scope, kind),
-    getNativeViews: nativeViews,
+    fetchView: (scope, kind, optimise) => playground.viewCompiled(scope, kind, optimise),
+    getKinds: listingKinds,
     getSource: () => playground.getSource(),
     getTarget: () => runTarget,
     onLabel: label => { viewTab.textContent = label; }
 });
 
 playground.setWasmCapable(WASM_REQUESTED || program?.wasm === true);
-
-for (const button of targetChoice.querySelectorAll('button')) {
-    button.addEventListener('click', () => {
-        playground.setTarget(button.dataset.target);
-        count('target', button.dataset.target);
-    });
-}
 
 // The source as the program gave it, so a swap can tell a reader who has
 // changed something from one who has only read it. Reset by every load, and by
