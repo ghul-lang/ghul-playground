@@ -198,7 +198,7 @@ const OBJDUMP_FUNCTION_NAME = /^\S.*\(\):$/;
 function objdump(command, executable, timeout) {
     return new Promise((resolve, reject) => {
         execFile(command, ['-d', '-l', '-S', '--no-show-raw-insn', executable],
-            { timeout, maxBuffer: 64 * 1024 * 1024 },
+            { timeout, maxBuffer: 16 << 20 },
             (error, stdout) => error ? reject(error) : resolve(stdout));
     });
 }
