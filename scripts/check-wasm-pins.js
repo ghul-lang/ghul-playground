@@ -7,6 +7,9 @@
 //
 // The pins live in ghul-cli's source, so this reads them from its main branch.
 //
+// It also holds the image's ghul-llvm, which the native views link with, to
+// the release the image's compiler requires.
+//
 //   node scripts/check-wasm-pins.js
 
 const fs = require('fs');
@@ -88,6 +91,31 @@ async function main() {
 
         console.error(`${library}: the image takes ${actual}, but ghul-cli pins ${wanted ?? 'none'} ` +
             `for compiler ${compiler}; set ${arg} in compile-service/Dockerfile to match`);
+    }
+
+    // The native views link with ghul-llvm, which the compiler names the
+    // release of in build/requirements.json at its own tag. A compiler from
+    // before that file names none, and there is nothing to hold the image to.
+    const llvm = `v${dockerArg(dockerfile, 'GHUL_LLVM_VERSION')}`;
+    let requirements = null;
+
+    try {
+        requirements = JSON.parse(await fetchText(
+            `https://raw.githubusercontent.com/ghul-lang/ghul/v${compiler}/build/requirements.json`));
+    } catch {
+        console.log(`ghul-llvm: compiler ${compiler} names no release, so ${llvm} is not checked`);
+    }
+
+    if (requirements?.['ghul-llvm']) {
+        const named = `v${requirements['ghul-llvm']}`;
+
+        if (named === llvm) {
+            console.log(`ghul-llvm: ${llvm}, as compiler ${compiler} requires`);
+        } else {
+            failed = true;
+            console.error(`ghul-llvm: the image takes ${llvm}, but compiler ${compiler} requires ${named}; ` +
+                'set GHUL_LLVM_VERSION in compile-service/Dockerfile to match');
+        }
     }
 
     // The analyse service reads the same library sources for a wasm session,

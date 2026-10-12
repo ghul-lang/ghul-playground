@@ -15,8 +15,18 @@
 //     leaves out; IL has none to leave out)
 //     or {"ok": false, "target", "diagnostics": [...], "cached": bool}
 //
+//   POST /compile/view  {"source": "...", "target": "llvm", "view": "llvm-ir"|"x86-asm", "scope": ...}
+//     -> as above, with "language": "llvm-ir"|"x86-asm". An LLVM IR view of
+//     scope "program" says so with "programOnly": true rather than a count;
+//     an x86-64 view counts the functions it leaves out in "omitted". Offered
+//     only where GHUL_LLVM names ghul-llvm and the wasm libraries are present,
+//     and nothing compiled for llvm is run.
+//
 //   The compiled code as text, built by a compile of its own only when asked
 //   for, so a POST /compile never pays for it. See view.js.
+//
+//   GET /compile
+//     -> {"targets": [...], "views": [...]}, what a compile and a view may ask for.
 //
 //   with "target": "wasm"
 //     -> {"ok": bool, "diagnostics": [...], "module": "<base64>"|null,
