@@ -54,18 +54,26 @@ export const replOffered = () => serviceState().then(state => state.repl === tru
 
 const tokenRequired = () => serviceState().then(state => state.tokensRequired !== false);
 
-let compileTargets = null;
+let compileOffer = null;
 
-// Whether the compile service builds for the wasm target. Asked once; a
-// service that cannot be asked builds for .NET only, as every one did before.
-const wasmCompiled = () => {
-    compileTargets ??= fetch(COMPILE_SERVICE)
-        .then(response => response.ok ? response.json() : { targets: [] })
-        .then(answer => Array.isArray(answer.targets) && answer.targets.includes('wasm'))
-        .catch(() => false);
+// What the compile service builds, asked once. A service that cannot be asked
+// builds for .NET only, as every one did before, and offers no native views.
+const compileOffered = () => {
+    compileOffer ??= fetch(COMPILE_SERVICE)
+        .then(response => response.ok ? response.json() : {})
+        .catch(() => ({}));
 
-    return compileTargets;
+    return compileOffer;
 };
+
+// Whether the compile service builds for the wasm target.
+const wasmCompiled = () => compileOffered()
+    .then(answer => Array.isArray(answer.targets) && answer.targets.includes('wasm'));
+
+/// The native listings the compile service can show for a program: any of
+/// `llvm-ir` and `x86-asm`, or none.
+export const nativeViews = () => compileOffered()
+    .then(answer => Array.isArray(answer.views) ? answer.views : []);
 
 // Whether a program can run on wasm here: the browser has to be able to run
 // the module, and the compile service has to be able to build it.
@@ -472,9 +480,15 @@ export async function createPlayground({
     let wasmRun = null;
 
     // The compiled code of what the editor holds, for the assembly view: a
-    // request of its own, so a run never builds it. Answers the status and
-    // the parsed body, or throws when the service cannot be reached.
-    async function viewCompiled(scope = 'program') {
+    // request of its own, so a run never builds it. `kind` is `run` for the
+    // listing of the target a run would use, or one of the native listings.
+    // Answers the status and the parsed body, or throws when the service
+    // cannot be reached.
+    async function viewCompiled(scope = 'program', kind = 'run') {
+        const wanted = kind === 'run'
+            ? { target: await effectiveTarget() }
+            : { target: 'llvm', view: kind };
+
         const token = getToken();
 
         const response = await fetch(`${COMPILE_SERVICE}/view`, {
@@ -483,7 +497,7 @@ export async function createPlayground({
                 'content-type': 'application/json',
                 ...(token ? { authorization: `Bearer ${token}` } : {})
             },
-            body: JSON.stringify({ source: editor.getValue(), target: await effectiveTarget(), scope })
+            body: JSON.stringify({ source: editor.getValue(), ...wanted, scope })
         });
 
         let result = null;

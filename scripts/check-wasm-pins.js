@@ -1,11 +1,16 @@
 // The compile service builds --target wasm programs against ghul-core and
 // ghul-runtime sources at the tags its Dockerfile names. ghul-cli, which is how
-// a reader builds the same program locally, pins a tag of each library to each
-// range of compiler versions. This checks the image takes the tags ghul-cli
-// would take for the image's compiler, so a program behaves here as it does
-// with `ghul run --target wasm`.
+// a reader builds the same program locally, takes a release of each library
+// that the compiler and the library each accept, by the requirements.json
+// each publishes, and falls back on a tag pinned to each range of compiler
+// versions only for a compiler from before those. This checks the image
+// takes releases ghul-cli would accept for the image's compiler, so a program
+// behaves here as it does with `ghul run --target wasm`.
 //
 // The pins live in ghul-cli's source, so this reads them from its main branch.
+//
+// It also holds the image's ghul-llvm, which the native views link with, to
+// the release the image's compiler requires.
 //
 //   node scripts/check-wasm-pins.js
 
@@ -68,6 +73,21 @@ async function main() {
 
     const compiler = dockerArg(dockerfile, 'GHUL_COMPILER_VERSION');
 
+    // A compiler names the oldest release of each library it works with in
+    // build/requirements.json at its own tag, and each library release names
+    // the oldest compiler that builds it in a requirements.json of its own.
+    // ghul-cli takes the newest release satisfying both, falling back on its
+    // pin table only for a compiler from before the file, so the image is
+    // held to the same rule. The native views' ghul-llvm is named there too.
+    let requirements = null;
+
+    try {
+        requirements = JSON.parse(await fetchText(
+            `https://raw.githubusercontent.com/ghul-lang/ghul/v${compiler}/build/requirements.json`));
+    } catch {
+        requirements = null;
+    }
+
     const checks = [
         { library: 'ghul-core', file: 'core_library.ghul', arg: 'GHUL_CORE_VERSION' },
         { library: 'ghul-runtime', file: 'runtime_library.ghul', arg: 'GHUL_RUNTIME_VERSION' }
@@ -76,18 +96,63 @@ async function main() {
     let failed = false;
 
     for (const { library, file, arg } of checks) {
-        const wanted = pinnedTag(await fetchText(`${PINS}/${file}`), compiler);
-        const actual = `v${dockerArg(dockerfile, arg)}`;
+        const actual = dockerArg(dockerfile, arg);
 
-        if (wanted === actual) {
-            console.log(`${library}: ${actual}, as ghul-cli pins for compiler ${compiler}`);
+        if (requirements?.[library]) {
+            const floor = requirements[library];
+            let own = null;
+
+            try {
+                own = JSON.parse(await fetchText(
+                    `https://raw.githubusercontent.com/ghul-lang/${library}/v${actual}/requirements.json`))['minimum-compiler'];
+            } catch {
+                own = null;
+            }
+
+            if (compareVersions(actual, floor) < 0) {
+                failed = true;
+                console.error(`${library}: the image takes v${actual}, but compiler ${compiler} requires v${floor} or newer; ` +
+                    `set ${arg} in compile-service/Dockerfile`);
+            } else if (own && compareVersions(own, compiler) > 0) {
+                failed = true;
+                console.error(`${library}: v${actual} requires compiler ${own} or newer, but the image takes ${compiler}; ` +
+                    `set ${arg} in compile-service/Dockerfile`);
+            } else {
+                console.log(`${library}: v${actual}, which compiler ${compiler} accepts and which accepts it`);
+            }
+
+            continue;
+        }
+
+        const wanted = pinnedTag(await fetchText(`${PINS}/${file}`), compiler);
+
+        if (wanted === `v${actual}`) {
+            console.log(`${library}: v${actual}, as ghul-cli pins for compiler ${compiler}`);
             continue;
         }
 
         failed = true;
 
-        console.error(`${library}: the image takes ${actual}, but ghul-cli pins ${wanted ?? 'none'} ` +
+        console.error(`${library}: the image takes v${actual}, but ghul-cli pins ${wanted ?? 'none'} ` +
             `for compiler ${compiler}; set ${arg} in compile-service/Dockerfile to match`);
+    }
+
+    const llvm = `v${dockerArg(dockerfile, 'GHUL_LLVM_VERSION')}`;
+
+    if (!requirements) {
+        console.log(`ghul-llvm: compiler ${compiler} names no release, so ${llvm} is not checked`);
+    }
+
+    if (requirements?.['ghul-llvm']) {
+        const named = `v${requirements['ghul-llvm']}`;
+
+        if (named === llvm) {
+            console.log(`ghul-llvm: ${llvm}, as compiler ${compiler} requires`);
+        } else {
+            failed = true;
+            console.error(`ghul-llvm: the image takes ${llvm}, but compiler ${compiler} requires ${named}; ` +
+                'set GHUL_LLVM_VERSION in compile-service/Dockerfile to match');
+        }
     }
 
     // The analyse service reads the same library sources for a wasm session,

@@ -4,7 +4,7 @@
 // First, so that the runtime starts its workers from the constructor this
 // module wraps; see errors.js.
 import { countErrors } from './errors.js'
-import { createPlayground, replOffered } from './playground.js'
+import { createPlayground, nativeViews, replOffered } from './playground.js'
 import { replPageUrl } from './repl-route.js'
 import { setUpFullscreen, setUpHelp } from './chrome.js'
 import { requestedProgram, loadProgram, pathBelowBase } from './collections.js'
@@ -652,9 +652,9 @@ const playground = await createPlayground({
     onTargets: ({ capable, supported, target }) => {
         runTarget = target;
 
-        // The tab says which listing it would show, IL or WAT, whether or not
+        // The tab says which listing it would show, whether or not
         // it is open.
-        viewTab.textContent = viewLabel(target);
+        viewTab.textContent = assemblyView?.label() ?? viewLabel(target);
 
         if (!viewPane.hidden) assemblyView?.changed();
 
@@ -779,7 +779,8 @@ const playground = await createPlayground({
 
 assemblyView = createAssemblyView({
     panel: viewPane,
-    fetchView: scope => playground.viewCompiled(scope),
+    fetchView: (scope, kind) => playground.viewCompiled(scope, kind),
+    getNativeViews: nativeViews,
     getSource: () => playground.getSource(),
     getTarget: () => runTarget,
     onLabel: label => { viewTab.textContent = label; }

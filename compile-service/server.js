@@ -15,8 +15,18 @@
 //     leaves out; IL has none to leave out)
 //     or {"ok": false, "target", "diagnostics": [...], "cached": bool}
 //
+//   POST /compile/view  {"source": "...", "target": "llvm", "view": "llvm-ir"|"x86-asm", "scope": ...}
+//     -> as above, with "language": "llvm-ir"|"x86-asm". An LLVM IR view of
+//     scope "program" says so with "programOnly": true rather than a count;
+//     an x86-64 view counts the functions it leaves out in "omitted". Offered
+//     only where GHUL_LLVM names ghul-llvm and the wasm libraries are present,
+//     and nothing compiled for llvm is run.
+//
 //   The compiled code as text, built by a compile of its own only when asked
 //   for, so a POST /compile never pays for it. See view.js.
+//
+//   GET /compile
+//     -> {"targets": [...], "views": [...]}, what a compile and a view may ask for.
 //
 //   with "target": "wasm"
 //     -> {"ok": bool, "diagnostics": [...], "module": "<base64>"|null,
@@ -77,6 +87,16 @@ const RESULT_CACHE_BYTES = Number(process.env.RESULT_CACHE_BYTES ?? 128 * 1024 *
 // the image.
 const ILSPYCMD = process.env.ILSPYCMD ?? 'ilspycmd';
 
+// The tools an llvm view links and disassembles with: ghul-llvm, at the
+// release the compiler names in its requirements.json, and objdump. Without
+// GHUL_LLVM there is no llvm view.
+const GHUL_LLVM = process.env.GHUL_LLVM ?? null;
+const GHUL_LLVM_VERSION = process.env.GHUL_LLVM_VERSION ?? 'unknown';
+const OBJDUMP = process.env.OBJDUMP ?? 'objdump';
+
+// The two listings an llvm view can be.
+const LLVM_VIEWS = new Set(['llvm-ir', 'x86-asm']);
+
 // The request body as JSON can be up to six times its source when every
 // character needs escaping, plus the names and punctuation around each cell.
 const MAX_CELL_REQUEST_BYTES = MAX_CHAIN_BYTES * 6 + MAX_CELLS * 64;
@@ -104,10 +124,19 @@ async function getToolchain() {
     return toolchain;
 }
 
-// The target a request names, checked before it waits for a slot.
-async function requestedTarget(target) {
+// The target a request names, checked before it waits for a slot. llvm is a
+// view's target only: nothing runs natively in the browser.
+async function requestedTarget(target, { view = false } = {}) {
     if (target === undefined || target === null || target === 'dotnet') {
         return 'dotnet';
+    }
+
+    if (target === 'llvm' && view) {
+        if (!GHUL_LLVM || !(await getToolchain()).wasm) {
+            throw new cells.BadRequest(400, 'the llvm target is not available here');
+        }
+
+        return 'llvm';
     }
 
     if (target !== 'wasm') {
@@ -140,10 +169,36 @@ function parseDiagnostics(text) {
     return diagnostics;
 }
 
-function runCompiler(args, cwd) {
+// The compiler runs as the head of its own process group, and a timeout kills
+// the whole group: an llvm build hands its module to ghul-llvm, which has no
+// timeout of its own and would outlive a compiler killed alone. A timeout is
+// reported as execFile reports its own, with error.killed set.
+function runCompiler(args, cwd, env = null) {
     return new Promise(resolve => {
-        execFile('dotnet', args, { cwd, timeout: COMPILE_TIMEOUT_MS, maxBuffer: 4 << 20 },
-            (error, stdout, stderr) => resolve({ error, stdout, stderr }));
+        let timedOut = false;
+
+        const child = execFile('dotnet', args,
+            { cwd, detached: true, maxBuffer: 4 << 20, ...(env ? { env: { ...process.env, ...env } } : {}) },
+            (error, stdout, stderr) => {
+                clearTimeout(timer);
+
+                if (timedOut) {
+                    error ??= new Error('the compiler timed out');
+                    error.killed = true;
+                }
+
+                resolve({ error, stdout, stderr });
+            });
+
+        const timer = setTimeout(() => {
+            timedOut = true;
+
+            try {
+                process.kill(-child.pid, 'SIGKILL');
+            } catch {
+                // the group has already gone
+            }
+        }, COMPILE_TIMEOUT_MS);
     });
 }
 
@@ -254,6 +309,18 @@ function getResultState() {
                         compiler,
                         references: (wasm.withRaster ?? wasm).libraries.flatMap(l => l.files),
                         flags: ['--target', 'wasm', ...(wasm.withRaster ?? wasm).libraries.map(l => `${l.name}@${l.version}`)],
+                        salt
+                    })
+                    : null,
+                // An llvm view builds against the same library sources as
+                // wasm, and is linked by ghul-llvm, so its version is part
+                // of the identity.
+                llvm: wasm && GHUL_LLVM
+                    ? await cells.toolchainIdentity({
+                        compiler,
+                        references: (wasm.withRaster ?? wasm).libraries.flatMap(l => l.files),
+                        flags: ['--target', 'llvm', `ghul-llvm@${GHUL_LLVM_VERSION}`,
+                            ...(wasm.withRaster ?? wasm).libraries.map(l => `${l.name}@${l.version}`)],
                         salt
                     })
                     : null
@@ -370,16 +437,20 @@ async function compileUncached(source, target = 'dotnet') {
 // The compiled code of `source` as text, from the cache where it has been
 // viewed before. Keyed apart from the compile a Run asks for, which it never
 // replaces: the view is a separate build, with debug information on.
-async function compileView(source, target, scope) {
+async function compileView(source, target, scope, language) {
     const { cache, toolchainIds } = await getResultState();
-    const key = `${toolchainIds[target]}:view${scope === 'all' ? ':all' : ''}`;
+    const key = `${toolchainIds[target]}:view${target === 'llvm' ? `:${language}` : ''}${scope === 'all' ? ':all' : ''}`;
 
-    return cache.answer(results.resultKey(key, source), () => compileViewUncached(source, target, scope));
+    return cache.answer(results.resultKey(key, source), () => compileViewUncached(source, target, scope, language));
 }
 
-async function compileViewUncached(source, target, scope = 'program') {
+async function compileViewUncached(source, target, scope = 'program', language = null) {
     if (target === 'wasm') {
         return compileWatView(source, scope);
+    }
+
+    if (target === 'llvm') {
+        return compileLlvmView(source, scope, language);
     }
 
     const toolchain = await getToolchain();
@@ -443,6 +514,50 @@ async function compileWatView(source, scope) {
         const wat = await readFile(path.join(directory, 'main.wat'), 'utf8');
 
         return { ok: true, target: 'wasm', language: 'wat', ...view.shapeWat(wat, 'main.ghul') };
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+}
+
+// The program as LLVM IR or as x86-64 assembly. One build serves both: the
+// compiler writes the IR and links an executable with ghul-llvm, unoptimised
+// so each of the program's functions keeps its own symbol and its source
+// lines, and objdump disassembles that executable. The program's own
+// functions are those the IR `--llvm-program-only` keeps defines, unless
+// `scope` asks for everything.
+async function compileLlvmView(source, scope, language) {
+    const { compiler, wasm } = await getToolchain();
+    const directory = await mkdtemp(path.join(tmpdir(), 'ghul-playground-view-'));
+
+    try {
+        await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
+
+        const libraries = wasm.withRaster && usesRaster(source) ? wasm.withRaster : wasm;
+        const programOnly = scope === 'all' && language === 'llvm-ir' ? [] : ['--llvm-program-only'];
+        const args = [compiler, '--target', 'llvm', '--debug', ...libraries.args,
+            '--llvm-output', 'program.ll', ...programOnly,
+            '-o', 'main', 'main.ghul'];
+
+        const { error, stdout, stderr } = await runCompiler(args, directory, { GHUL_LLVM });
+        const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
+
+        if (error) {
+            const timedOut = !!error.killed;
+            const failed = !error.killed && !diagnostics.length;
+
+            return { ok: false, target: 'llvm', diagnostics, ...(timedOut ? { timedOut } : {}), ...(failed ? { failed } : {}) };
+        }
+
+        const ir = await readFile(path.join(directory, 'program.ll'), 'utf8');
+
+        if (language === 'llvm-ir') {
+            return { ok: true, target: 'llvm', language: 'llvm-ir', toolchain: GHUL_LLVM_VERSION, ...view.shapeLlvm(ir), programOnly: programOnly.length > 0 };
+        }
+
+        const listing = await view.objdump(OBJDUMP, path.join(directory, 'main'), COMPILE_TIMEOUT_MS);
+        const names = scope === 'all' ? null : view.llvmFunctionNames(ir);
+
+        return { ok: true, target: 'llvm', language: 'x86-asm', toolchain: GHUL_LLVM_VERSION, ...view.shapeObjdump(listing, names, 'main.ghul') };
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
@@ -547,19 +662,22 @@ http.createServer((request, response) => {
         return;
     }
 
-    // The targets a compile can ask for, answered on the very path the page
-    // compiles through, which every proxy in front of this service already
-    // forwards: the page's own /health is the analyse service's, which cannot
-    // say what this service builds.
+    // The targets a compile can ask for, and the native listings a view can,
+    // answered on the very path the page compiles through, which every proxy
+    // in front of this service already forwards: the page's own /health is the
+    // analyse service's, which cannot say what this service builds.
     const route = request.url.split('?')[0];
 
     if (request.method === 'GET' && route === '/compile') {
         getToolchain().then(({ wasm }) => {
             response.writeHead(200, { 'content-type': 'application/json' });
-            response.end(JSON.stringify({ targets: wasm ? ['dotnet', 'wasm'] : ['dotnet'] }));
+            response.end(JSON.stringify({
+                targets: wasm ? ['dotnet', 'wasm'] : ['dotnet'],
+                views: wasm && GHUL_LLVM ? [...LLVM_VIEWS] : []
+            }));
         }, () => {
             response.writeHead(200, { 'content-type': 'application/json' });
-            response.end(JSON.stringify({ targets: [] }));
+            response.end(JSON.stringify({ targets: [], views: [] }));
         });
         return;
     }
@@ -644,7 +762,7 @@ http.createServer((request, response) => {
             } else {
                 const parsed = JSON.parse(body);
                 const source = parsed.source ?? '';
-                target = await requestedTarget(parsed.target);
+                target = await requestedTarget(parsed.target, { view: isView });
 
                 if (isView) {
                     const scope = parsed.scope ?? 'program';
@@ -653,7 +771,13 @@ http.createServer((request, response) => {
                         throw new cells.BadRequest(400, `unknown scope ${JSON.stringify(scope)}`);
                     }
 
-                    work = () => compileView(source, target, scope);
+                    const language = target === 'llvm' ? (parsed.view ?? 'llvm-ir') : null;
+
+                    if (target === 'llvm' && !LLVM_VIEWS.has(language)) {
+                        throw new cells.BadRequest(400, `unknown view ${JSON.stringify(parsed.view)}`);
+                    }
+
+                    work = () => compileView(source, target, scope, language);
                 } else {
                     work = () => compile(source, target);
                 }

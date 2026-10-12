@@ -9,7 +9,7 @@
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { shapeListing, shapeWat } = require('../compile-service/view.js');
+const { shapeListing, shapeWat, llvmFunctionNames, shapeLlvm, shapeObjdump } = require('../compile-service/view.js');
 
 let failures = 0;
 
@@ -91,5 +91,62 @@ const cutWat = shapeWat(longWat, 'main.ghul');
 
 check('a long WAT listing is cut and says so', cutWat.truncated && cutWat.text.endsWith('KB'), cutWat.text.slice(-60));
 check('the cut WAT keeps one source line per listing line', cutWat.lines.length === cutWat.text.split('\n').length);
+
+const ir = [
+    'define internal i32 @square(i32 %n) {',
+    'entry:',
+    '  %0 = mul i32 %n, %n',
+    '  ret i32 %0',
+    '}',
+    '',
+    'define i32 @"Main.$globals.entry"() {',
+    '  ret i32 0',
+    '}',
+    ''
+].join('\n');
+
+check('the functions LLVM IR defines are named, quoted ones included',
+    JSON.stringify(llvmFunctionNames(ir)) === JSON.stringify(['square', 'Main.$globals.entry']), llvmFunctionNames(ir));
+
+const shapedIr = shapeLlvm(ir);
+
+check('LLVM IR is shown as written, without its trailing blank line', shapedIr.text === ir.trimEnd(), shapedIr.text);
+check('no LLVM IR line maps to the source', shapedIr.lines.every(line => line === null));
+
+const dump = [
+    '',
+    'main:     file format elf64-x86-64',
+    '',
+    'Disassembly of section .text:',
+    '',
+    '0000000000401000 <square>:',
+    'square():',
+    '/tmp/view/main.ghul:3',
+    '  401000:\timul   %edi,%edi',
+    '  401003:\tmov    %edi,%eax',
+    '/tmp/view/lib/core.ghul:40',
+    '  401005:\tret',
+    '',
+    '0000000000401010 <string_concat>:',
+    'string_concat():',
+    '/tmp/view/lib/core.ghul:12',
+    '  401010:\tpush   %rbp',
+    ''
+].join('\n');
+
+const kept = shapeObjdump(dump, ['square'], 'main.ghul');
+const keptLines = kept.text.split('\n');
+
+check('objdump keeps only the functions named', keptLines[0] === '0000000000401000 <square>:' && !kept.text.includes('string_concat'), kept.text);
+check('the functions left out are counted', kept.omitted === 1, kept.omitted);
+check('objdump position lines and repeated names are dropped',
+    !kept.text.includes('main.ghul:') && !kept.text.includes('square():'), kept.text);
+check('instructions take the line of the position before them', kept.lines[1] === 3 && kept.lines[2] === 3, kept.lines);
+check('a position in a library file maps to no line', kept.lines[3] === null, kept.lines);
+check('a function header maps to no line', kept.lines[0] === null, kept.lines);
+
+const everything = shapeObjdump(dump, null, 'main.ghul');
+
+check('with no names objdump keeps every function', everything.text.includes('<string_concat>:') && everything.omitted === 0, everything.text);
 
 process.exit(failures ? 1 : 0);
