@@ -169,10 +169,36 @@ function parseDiagnostics(text) {
     return diagnostics;
 }
 
+// The compiler runs as the head of its own process group, and a timeout kills
+// the whole group: an llvm build hands its module to ghul-llvm, which has no
+// timeout of its own and would outlive a compiler killed alone. A timeout is
+// reported as execFile reports its own, with error.killed set.
 function runCompiler(args, cwd, env = null) {
     return new Promise(resolve => {
-        execFile('dotnet', args, { cwd, timeout: COMPILE_TIMEOUT_MS, maxBuffer: 4 << 20, ...(env ? { env: { ...process.env, ...env } } : {}) },
-            (error, stdout, stderr) => resolve({ error, stdout, stderr }));
+        let timedOut = false;
+
+        const child = execFile('dotnet', args,
+            { cwd, detached: true, maxBuffer: 4 << 20, ...(env ? { env: { ...process.env, ...env } } : {}) },
+            (error, stdout, stderr) => {
+                clearTimeout(timer);
+
+                if (timedOut) {
+                    error ??= new Error('the compiler timed out');
+                    error.killed = true;
+                }
+
+                resolve({ error, stdout, stderr });
+            });
+
+        const timer = setTimeout(() => {
+            timedOut = true;
+
+            try {
+                process.kill(-child.pid, 'SIGKILL');
+            } catch {
+                // the group has already gone
+            }
+        }, COMPILE_TIMEOUT_MS);
     });
 }
 
