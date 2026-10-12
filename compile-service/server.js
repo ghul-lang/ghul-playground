@@ -515,7 +515,7 @@ async function compileLlvmView(source, scope, language) {
         const ir = await readFile(path.join(directory, 'program.ll'), 'utf8');
 
         if (language === 'llvm-ir') {
-            return { ok: true, target: 'llvm', language: 'llvm-ir', ...view.shapeLlvm(ir), omitted: programOnly.length > 0 ? 1 : 0 };
+            return { ok: true, target: 'llvm', language: 'llvm-ir', ...view.shapeLlvm(ir), programOnly: programOnly.length > 0 };
         }
 
         const listing = await view.objdump(OBJDUMP, path.join(directory, 'main'), COMPILE_TIMEOUT_MS);
@@ -626,19 +626,22 @@ http.createServer((request, response) => {
         return;
     }
 
-    // The targets a compile can ask for, answered on the very path the page
-    // compiles through, which every proxy in front of this service already
-    // forwards: the page's own /health is the analyse service's, which cannot
-    // say what this service builds.
+    // The targets a compile can ask for, and the native listings a view can,
+    // answered on the very path the page compiles through, which every proxy
+    // in front of this service already forwards: the page's own /health is the
+    // analyse service's, which cannot say what this service builds.
     const route = request.url.split('?')[0];
 
     if (request.method === 'GET' && route === '/compile') {
         getToolchain().then(({ wasm }) => {
             response.writeHead(200, { 'content-type': 'application/json' });
-            response.end(JSON.stringify({ targets: wasm ? ['dotnet', 'wasm'] : ['dotnet'] }));
+            response.end(JSON.stringify({
+                targets: wasm ? ['dotnet', 'wasm'] : ['dotnet'],
+                views: wasm && GHUL_LLVM ? [...LLVM_VIEWS] : []
+            }));
         }, () => {
             response.writeHead(200, { 'content-type': 'application/json' });
-            response.end(JSON.stringify({ targets: [] }));
+            response.end(JSON.stringify({ targets: [], views: [] }));
         });
         return;
     }

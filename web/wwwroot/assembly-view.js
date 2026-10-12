@@ -77,6 +77,73 @@ function registerWat() {
     });
 }
 
+// Enough of LLVM IR for the listing to read: comments, metadata, globals and
+// locals, keywords, types, numbers and strings.
+let llvmRegistered = false;
+
+function registerLlvm() {
+    if (llvmRegistered || monaco.languages.getLanguages().some(l => l.id === 'llvm-ir')) {
+        llvmRegistered = true;
+        return;
+    }
+
+    llvmRegistered = true;
+
+    monaco.languages.register({ id: 'llvm-ir' });
+    monaco.languages.setMonarchTokensProvider('llvm-ir', {
+        tokenizer: {
+            root: [
+                [/;.*$/, 'comment'],
+                [/c?"([^"\\]|\\.)*"/, 'string'],
+                [/![\w.]+/, 'annotation'],
+                [/[@%][-\w.$]+|[@%]"[^"]*"/, 'variable'],
+                [/\b(define|declare|ret|br|switch|call|invoke|load|store|alloca|getelementptr|phi|select|icmp|fcmp|add|sub|mul|sdiv|udiv|srem|urem|fadd|fsub|fmul|fdiv|and|or|xor|shl|lshr|ashr|zext|sext|trunc|bitcast|ptrtoint|inttoptr|unreachable|landingpad|resume|global|constant|private|internal|external|type|to|label|nuw|nsw|inbounds|align)\b/, 'keyword'],
+                [/\b(void|ptr|i\d+|half|float|double|opaque)\b/, 'type'],
+                [/-?\b(0x[0-9a-fA-F]+|\d+(\.\d+)?([eE][-+]?\d+)?)\b/, 'number']
+            ]
+        }
+    });
+    monaco.languages.setLanguageConfiguration('llvm-ir', {
+        comments: { lineComment: ';' },
+        brackets: [['{', '}'], ['(', ')'], ['[', ']']]
+    });
+}
+
+// Enough of objdump's AT&T listing for it to read: comments, function
+// headers, addresses, registers and immediates.
+let asmRegistered = false;
+
+function registerAsm() {
+    if (asmRegistered || monaco.languages.getLanguages().some(l => l.id === 'x86-asm')) {
+        asmRegistered = true;
+        return;
+    }
+
+    asmRegistered = true;
+
+    monaco.languages.register({ id: 'x86-asm' });
+    monaco.languages.setMonarchTokensProvider('x86-asm', {
+        tokenizer: {
+            root: [
+                [/#.*$/, 'comment'],
+                [/^[0-9a-f]+ <[^>]+>:$/, 'type'],
+                [/^\s*[0-9a-f]+:/, 'number'],
+                [/<[^>]+>/, 'type'],
+                [/%\w+/, 'variable'],
+                [/\$-?(0x[0-9a-fA-F]+|\d+)/, 'number'],
+                [/\b(0x[0-9a-fA-F]+|\d+)\b/, 'number'],
+                [/^\s+[a-z][\w.]*/, 'keyword']
+            ]
+        }
+    });
+    monaco.languages.setLanguageConfiguration('x86-asm', {
+        comments: { lineComment: '#' }
+    });
+}
+
+// What each kind of listing is called, for the choice and the tab.
+const KIND_LABELS = { 'llvm-ir': 'LLVM IR', 'x86-asm': 'x86-64' };
+
 /// The tab's label for a target, before an answer names the language itself.
 export const viewLabel = target => target === 'wasm' ? 'WAT' : 'IL';
 
@@ -87,15 +154,33 @@ export const viewLabel = target => target === 'wasm' ? 'WAT' : 'IL';
 ///   request to the compile service for the current source and target
 /// - getSource: the source the editor holds now
 /// - getTarget: the target a run would use now
+/// - getNativeViews: `() => Promise<string[]>`, the native listings the
+///   compile service offers, any of `llvm-ir` and `x86-asm`
 /// - onLabel: called with the label the tab should carry
-export function createAssemblyView({ panel, fetchView, getSource, getTarget, onLabel }) {
+export function createAssemblyView({ panel, fetchView, getSource, getTarget, getNativeViews, onLabel }) {
     let editor = null;
     let shown = null;
     let request = 0;
 
-    // Whether a wasm listing shows the program's own functions or the whole
-    // module. IL has nothing to leave out, so it is always the whole listing.
+    // Whether a listing shows the program's own functions or everything the
+    // build holds. IL has nothing to leave out, so it is always the whole.
     let scope = 'program';
+
+    // `run` for the listing of the target a run would use, IL or WAT, or one
+    // of the native listings.
+    let kind = 'run';
+
+    const label = () => kind === 'run' ? viewLabel(getTarget()) : KIND_LABELS[kind];
+
+    const kinds = document.createElement('div');
+    kinds.className = 'view-kinds';
+    kinds.hidden = true;
+
+    const choice = document.createElement('div');
+    choice.className = 'target';
+    choice.setAttribute('role', 'group');
+    choice.setAttribute('aria-label', 'Which compiled code to show');
+    kinds.append(choice);
 
     const status = document.createElement('div');
     status.className = 'view-status';
@@ -104,12 +189,48 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
     host.className = 'view-listing';
     host.hidden = true;
 
-    panel.replaceChildren(status, host);
+    panel.replaceChildren(kinds, status, host);
 
-    // The source and target a listing was made from, so a look at an
-    // unchanged program asks for nothing at all.
-    const current = () => ({ source: getSource(), target: getTarget(), scope });
-    const same = (a, b) => a && b && a.source === b.source && a.target === b.target && a.scope === b.scope;
+    // The choice is offered only where the service can build a native
+    // listing; elsewhere the tab shows the run target's listing alone.
+    function offer(available) {
+        const wanted = ['run', ...available.filter(k => KIND_LABELS[k])];
+
+        if (wanted.length < 2) return;
+
+        choice.replaceChildren(...wanted.map(k => {
+            const button = document.createElement('button');
+            button.dataset.kind = k;
+            button.addEventListener('click', () => {
+                if (kind === k) return;
+                kind = k;
+                scope = 'program';
+                pressed();
+                refresh();
+            });
+            return button;
+        }));
+
+        pressed();
+        kinds.hidden = false;
+    }
+
+    function pressed() {
+        for (const button of choice.querySelectorAll('button')) {
+            const k = button.dataset.kind;
+            button.textContent = k === 'run' ? viewLabel(getTarget()) : KIND_LABELS[k];
+            button.setAttribute('aria-pressed', String(k === kind));
+        }
+    }
+
+    getNativeViews?.().then(offer, () => {});
+
+    // The source, target and kind a listing was made from, so a look at an
+    // unchanged program asks for nothing at all. A native listing does not
+    // depend on the run target.
+    const current = () => ({ source: getSource(), target: kind === 'run' ? getTarget() : 'llvm', scope, kind });
+    const same = (a, b) => a && b && a.source === b.source && a.target === b.target
+        && a.scope === b.scope && a.kind === b.kind;
 
     function say(text, { spinning = false, action = null } = {}) {
         status.replaceChildren();
@@ -144,6 +265,8 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
     function listing(text, language) {
         if (language === 'il') registerIl();
         if (language === 'wat') registerWat();
+        if (language === 'llvm-ir') registerLlvm();
+        if (language === 'x86-asm') registerAsm();
 
         host.hidden = false;
 
@@ -173,7 +296,10 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
     async function refresh({ force = false } = {}) {
         const wanted = current();
 
-        onLabel(viewLabel(wanted.target));
+        const name = label();
+
+        onLabel(name);
+        pressed();
 
         if (!force && same(wanted, shown)) {
             say('');
@@ -182,12 +308,12 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
 
         const mine = ++request;
 
-        say(`compiling for the ${viewLabel(wanted.target)} listing`, { spinning: true });
+        say(`compiling for the ${name} listing`, { spinning: true });
 
         let answer;
 
         try {
-            answer = await fetchView(wanted.scope);
+            answer = await fetchView(wanted.scope, wanted.kind);
         } catch {
             answer = null;
         }
@@ -210,24 +336,26 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
         if (!result.ok) {
             say(result.timedOut
                 ? 'The compile timed out, so there is no listing.'
-                : `Fix the problems to see the ${viewLabel(wanted.target)}.`);
+                : `Fix the problems to see the ${name}.`);
             host.hidden = true;
             shown = null;
             return;
         }
 
-        onLabel(result.language === 'wat' ? 'WAT' : 'IL');
         listing(result.text, result.language ?? 'plaintext');
         shown = wanted;
 
         const cut = result.truncated ? ' The listing is long, so only its start is shown.' : '';
         const hidden = result.omitted ?? 0;
+        const showAll = { label: 'Show all', run: () => { scope = 'all'; refresh(); } };
 
         if (hidden > 0) {
             say(`The program's own functions. ${hidden} library function${hidden === 1 ? '' : 's'} hidden.${cut}`,
-                { action: { label: 'Show all', run: () => { scope = 'all'; refresh(); } } });
-        } else if (wanted.scope === 'all' && result.language === 'wat') {
-            say(`The whole module.${cut}`,
+                { action: showAll });
+        } else if (result.programOnly) {
+            say(`The program's own functions.${cut}`, { action: showAll });
+        } else if (wanted.scope === 'all' && result.language !== 'il') {
+            say(`The whole ${result.language === 'x86-asm' ? 'executable' : 'module'}.${cut}`,
                 { action: { label: 'Program only', run: () => { scope = 'program'; refresh(); } } });
         } else {
             say(cut.trim());
@@ -235,6 +363,8 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
     }
 
     return {
+        /// The label the tab carries for the listing chosen now.
+        label,
         /// Shows the listing for what the editor holds now, asking for one
         /// only if it has changed since the last look.
         show: () => refresh(),
@@ -247,7 +377,8 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, onL
                 return;
             }
 
-            onLabel(viewLabel(getTarget()));
+            onLabel(label());
+            pressed();
 
             if (shown) {
                 say('The program has changed since this listing.',
