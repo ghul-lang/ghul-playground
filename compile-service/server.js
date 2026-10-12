@@ -15,12 +15,13 @@
 //     leaves out; IL has none to leave out)
 //     or {"ok": false, "target", "diagnostics": [...], "cached": bool}
 //
-//   POST /compile/view  {"source": "...", "target": "llvm", "view": "llvm-ir"|"x86-asm", "scope": ...}
+//   POST /compile/view  {"source": "...", "target": "llvm", "view": "llvm-ir"|"x86-asm", "scope": ..., "optimise": 0|2}
 //     -> as above, with "language": "llvm-ir"|"x86-asm". An LLVM IR view of
 //     scope "program" says so with "programOnly": true rather than a count;
 //     an x86-64 view counts the functions it leaves out in "omitted". Offered
 //     only where GHUL_LLVM names ghul-llvm and the wasm libraries are present,
-//     and nothing compiled for llvm is run.
+//     and nothing compiled for llvm is run. "optimise", 2 unless given, is the
+//     level the x86-64 listing is built at.
 //
 //   The compiled code as text, built by a compile of its own only when asked
 //   for, so a POST /compile never pays for it. See view.js.
@@ -437,20 +438,21 @@ async function compileUncached(source, target = 'dotnet') {
 // The compiled code of `source` as text, from the cache where it has been
 // viewed before. Keyed apart from the compile a Run asks for, which it never
 // replaces: the view is a separate build, with debug information on.
-async function compileView(source, target, scope, language) {
+async function compileView(source, target, scope, language, optimise = 2) {
     const { cache, toolchainIds } = await getResultState();
-    const key = `${toolchainIds[target]}:view${target === 'llvm' ? `:${language}` : ''}${scope === 'all' ? ':all' : ''}`;
+    const level = language === 'x86-asm' ? `:O${optimise}` : '';
+    const key = `${toolchainIds[target]}:view${target === 'llvm' ? `:${language}` : ''}${level}${scope === 'all' ? ':all' : ''}`;
 
-    return cache.answer(results.resultKey(key, source), () => compileViewUncached(source, target, scope, language));
+    return cache.answer(results.resultKey(key, source), () => compileViewUncached(source, target, scope, language, optimise));
 }
 
-async function compileViewUncached(source, target, scope = 'program', language = null) {
+async function compileViewUncached(source, target, scope = 'program', language = null, optimise = 2) {
     if (target === 'wasm') {
         return compileWatView(source, scope);
     }
 
     if (target === 'llvm') {
-        return compileLlvmView(source, scope, language);
+        return compileLlvmView(source, scope, language, optimise);
     }
 
     const toolchain = await getToolchain();
@@ -520,12 +522,13 @@ async function compileWatView(source, scope) {
 }
 
 // The program as LLVM IR or as x86-64 assembly. One build serves both: the
-// compiler writes the IR and links an executable with ghul-llvm, unoptimised
-// so each of the program's functions keeps its own symbol and its source
-// lines, and objdump disassembles that executable. The program's own
-// functions are those the IR `--llvm-program-only` keeps defines, unless
-// `scope` asks for everything.
-async function compileLlvmView(source, scope, language) {
+// compiler writes the IR and links an executable with ghul-llvm at
+// `optimise`, 2 for what `ghul build` makes or 0 for one function per method
+// with every line marked, and objdump disassembles that executable. The IR is
+// written before ghul-llvm's passes, so the level changes nothing there. The
+// program's own functions are those the IR `--llvm-program-only` keeps
+// defines, unless `scope` asks for everything.
+async function compileLlvmView(source, scope, language, optimise = 2) {
     const { compiler, wasm } = await getToolchain();
     const directory = await mkdtemp(path.join(tmpdir(), 'ghul-playground-view-'));
 
@@ -534,7 +537,7 @@ async function compileLlvmView(source, scope, language) {
 
         const libraries = wasm.withRaster && usesRaster(source) ? wasm.withRaster : wasm;
         const programOnly = scope === 'all' && language === 'llvm-ir' ? [] : ['--llvm-program-only'];
-        const args = [compiler, '--target', 'llvm', '--debug', ...libraries.args,
+        const args = [compiler, '--target', 'llvm', '--debug', '--optimise', String(optimise), ...libraries.args,
             '--llvm-output', 'program.ll', ...programOnly,
             '-o', 'main', 'main.ghul'];
 
@@ -777,7 +780,13 @@ http.createServer((request, response) => {
                         throw new cells.BadRequest(400, `unknown view ${JSON.stringify(parsed.view)}`);
                     }
 
-                    work = () => compileView(source, target, scope, language);
+                    const optimise = parsed.optimise ?? 2;
+
+                    if (optimise !== 0 && optimise !== 2) {
+                        throw new cells.BadRequest(400, `unknown optimise ${JSON.stringify(parsed.optimise)}`);
+                    }
+
+                    work = () => compileView(source, target, scope, language, optimise);
                 } else {
                     work = () => compile(source, target);
                 }
