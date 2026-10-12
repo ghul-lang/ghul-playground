@@ -525,13 +525,13 @@ async function compileLlvmView(source, scope, language) {
         const ir = await readFile(path.join(directory, 'program.ll'), 'utf8');
 
         if (language === 'llvm-ir') {
-            return { ok: true, target: 'llvm', language: 'llvm-ir', ...view.shapeLlvm(ir), programOnly: programOnly.length > 0 };
+            return { ok: true, target: 'llvm', language: 'llvm-ir', toolchain: GHUL_LLVM_VERSION, ...view.shapeLlvm(ir), programOnly: programOnly.length > 0 };
         }
 
         const listing = await view.objdump(OBJDUMP, path.join(directory, 'main'), COMPILE_TIMEOUT_MS);
         const names = scope === 'all' ? null : view.llvmFunctionNames(ir);
 
-        return { ok: true, target: 'llvm', language: 'x86-asm', ...view.shapeObjdump(listing, names, 'main.ghul') };
+        return { ok: true, target: 'llvm', language: 'x86-asm', toolchain: GHUL_LLVM_VERSION, ...view.shapeObjdump(listing, names, 'main.ghul') };
     } finally {
         await rm(directory, { recursive: true, force: true });
     }

@@ -189,7 +189,13 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
     host.className = 'view-listing';
     host.hidden = true;
 
-    panel.replaceChildren(kinds, status, host);
+    // Under a native listing, where to go to build and run the program
+    // natively: the question the listing raises.
+    const caption = document.createElement('div');
+    caption.className = 'view-caption';
+    caption.hidden = true;
+
+    panel.replaceChildren(kinds, status, host, caption);
 
     // The choice is offered only where the service can build a native
     // listing; elsewhere the tab shows the run target's listing alone.
@@ -291,6 +297,24 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
         }
     }
 
+    function native(result) {
+        const isNative = result.language === 'llvm-ir' || result.language === 'x86-asm';
+
+        caption.hidden = !isNative;
+
+        if (!isNative) return;
+
+        const link = document.createElement('a');
+        link.href = 'https://ghul.dev/native';
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = 'Native executables';
+
+        const built = result.toolchain ? `Built with ghul-llvm ${result.toolchain} for x86-64 Linux` : 'Built for x86-64 Linux';
+
+        caption.replaceChildren(`${built}; to build and run it yourself, see `, link, '.');
+    }
+
     // Asks for the listing of what the editor holds now, unless that is what
     // is already shown.
     async function refresh({ force = false } = {}) {
@@ -338,12 +362,14 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
                 ? 'The compile timed out, so there is no listing.'
                 : `Fix the problems to see the ${name}.`);
             host.hidden = true;
+            caption.hidden = true;
             shown = null;
             return;
         }
 
         listing(result.text, result.language ?? 'plaintext');
         shown = wanted;
+        native(result);
 
         const cut = result.truncated ? ' The listing is long, so only its start is shown.' : '';
         const hidden = result.omitted ?? 0;
