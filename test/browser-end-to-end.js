@@ -1221,7 +1221,7 @@ chrome.on('error', e => {
 
     check('the identity takes a row of its own on a phone',
         narrow.identityInTheTabRow && narrow.identityOnItsOwnRow, JSON.stringify(narrow));
-    check('the timing has yielded its place by then', !narrow.timingShown, JSON.stringify(narrow));
+    check('the timing stays on a phone, wrapping under the tabs', narrow.timingShown, JSON.stringify(narrow));
     check('nothing in the strip is cut short at 390px either',
         narrow.links > 0 && narrow.clippedLinks.length === 0, JSON.stringify(narrow));
     check('and the identity is not cut short', !narrow.identityClipped, JSON.stringify(narrow));
@@ -1966,8 +1966,8 @@ chrome.on('error', e => {
 
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program)}); true`);
 
-        check('the compiled-code tab is labelled for .NET',
-            (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'IL');
+        check('the compiled-code tab is labelled the same whatever runs',
+            (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'compiled');
 
         await ev(`document.getElementById('tab-view').click(); true`);
 
@@ -2001,12 +2001,11 @@ chrome.on('error', e => {
 
     const wasmSupported = await ev(`(async () => (await import('./playground.js')).wasmAvailable())()`);
 
-    check('where a program runs is not a control beside Run', await ev(`document.getElementById('target') === null`));
+    const choiceShowing = () => ev(`(() => { const t = document.getElementById('target');
+                 return Boolean(t) && t.offsetParent !== null; })()`);
 
-    // Under the output, after a run: where it ran, and on this page the way to
-    // the other target.
-    const ranOn = () => ev(`(() => { const r = document.getElementById('ran-on');
-                 return r && !r.hidden ? r.innerText : ''; })()`);
+    // The timing in the tab row, which names where the program ran.
+    const ranOn = () => ev(`document.getElementById('run-cost').textContent`);
 
     async function runFor(expected) {
         await ev(`document.getElementById('run').click(); true`);
@@ -2023,16 +2022,17 @@ chrome.on('error', e => {
 
     if (!wasmSupported) {
         log('skip  wasm: this browser or compile service cannot run a wasm build');
+        check('no .NET / WebAssembly choice where wasm cannot run', !(await choiceShowing()));
     } else {
+        check('the standalone page offers .NET or WebAssembly beside Run', await choiceShowing());
         const sixBySeven = ['use IO.Std.write_line;', '', 'entry() is', '    write_line("{6 * 7}");', 'si', ''].join('\n');
 
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(sixBySeven)}); true`);
         await sleep(1000);
 
         const onWasm = await runFor('42');
-        check('a program that runs on wasm runs there, and says so',
-            onWasm.startsWith('ran on WebAssembly in your browser'), JSON.stringify(onWasm));
-        check('and offers .NET instead', onWasm.includes('switch to .NET'), JSON.stringify(onWasm));
+        check('a program that runs on wasm runs there, and the timing says so',
+            onWasm.endsWith('on WebAssembly'), JSON.stringify(onWasm));
 
         // The analyser follows the target: a .NET API the wasm target lacks is
         // reported as the program is typed, and not once .NET is chosen.
@@ -2040,7 +2040,7 @@ chrome.on('error', e => {
             '    write_line(System.Environment.machine_name);', 'si', ''].join('\n');
         const markerText = () => ev(`JSON.stringify(monaco.editor.getModelMarkers({}).map(m => m.message))`);
 
-        await ev(`document.querySelector('#ran-on .ran-on-switch').click(); true`);
+        await ev(`document.querySelector('#target [data-target="dotnet"]').click(); true`);
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(dotnetOnly)}); true`);
 
         let dotnetMarkers = '[]';
@@ -2056,9 +2056,9 @@ chrome.on('error', e => {
         await sleep(1000);
 
         const onDotnet = await runFor('42');
-        check('switched, it runs on .NET and says so', onDotnet.startsWith('ran on .NET'), JSON.stringify(onDotnet));
+        check('switched, it runs on .NET and the timing says so', onDotnet.endsWith('on .NET'), JSON.stringify(onDotnet));
 
-        await ev(`document.querySelector('#ran-on .ran-on-switch').click(); true`);
+        await ev(`document.querySelector('#target [data-target="wasm"]').click(); true`);
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(dotnetOnly)}); true`);
 
         let wasmMarkers = '[]';
@@ -2078,8 +2078,8 @@ chrome.on('error', e => {
 
             await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program)}); true`);
 
-            check('the compiled-code tab is labelled for wasm',
-                (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'WAT');
+            check('the compiled-code tab keeps its label on wasm',
+                (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'compiled');
 
             await ev(`document.getElementById('tab-view').click(); true`);
 
@@ -2092,10 +2092,10 @@ chrome.on('error', e => {
             check('opening the tab shows the program\'s WAT', text.includes('$entry'), text.slice(0, 200));
             check('the WAT marks source lines', text.includes(';; main.ghul:4'), text.slice(0, 300));
 
-            const said = await viewStatus();
-            check('the library functions left out are counted', /\d+ library functions? hidden/.test(said), said);
+            const hiddenTitle = await ev(`[...document.querySelectorAll('#view .view-option')].find(b => b.textContent === 'program only')?.title ?? ''`);
+            check('the library functions left out are counted on program only', /\d+ library functions? hidden/.test(hiddenTitle), hiddenTitle);
 
-            const entries = await ev(`JSON.stringify([...document.querySelectorAll('#view .view-kinds button')]
+            const entries = await ev(`JSON.stringify([...document.querySelectorAll('#view .view-kinds .target button')]
                 .map(b => b.textContent + (b.classList.contains('runs') ? '*' : '')))`);
             check('the listings are offered in a fixed order, WAT marked as what runs',
                 /^\["IL","WAT\*"(,"LLVM IR","x86-64")?\]$/.test(entries), entries);
@@ -2148,7 +2148,7 @@ chrome.on('error', e => {
             if (cost) break;
             await sleep(250);
         }
-        check('the run says it ran on wasm', cost.includes('on wasm'), JSON.stringify(cost));
+        check('the run says it ran on WebAssembly', cost.includes('on WebAssembly'), JSON.stringify(cost));
 
         // A program that never ends. Stopping a .NET one means reloading the
         // page; a wasm one is in a worker the page can terminate.
@@ -2192,12 +2192,8 @@ chrome.on('error', e => {
         check('a program wasm cannot compile runs on .NET, with a note',
             fellBack.includes('3.75') && fellBack.includes('ran on .NET'), JSON.stringify(fellBack.trim()));
 
-        // Chosen .NET, from under a run on wasm, a program that would run on
-        // wasm runs on .NET.
-        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(sixBySeven)}); true`);
-        await sleep(1000);
-        await runFor('42');
-        await ev(`document.querySelector('#ran-on .ran-on-switch').click(); true`);
+        // Chosen .NET, a program that would run on wasm runs on .NET.
+        await ev(`document.querySelector('#target [data-target="dotnet"]').click(); true`);
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(reading)}); true`);
         await sleep(1000);
         await ev(`document.getElementById('run').click(); true`);
@@ -2220,7 +2216,7 @@ chrome.on('error', e => {
             if (dotnetCost && (await ev(`document.getElementById('output').innerText`)).includes('hello, world')) break;
             await sleep(500);
         }
-        check('choosing .NET runs on .NET', dotnetCost && !dotnetCost.includes('on wasm'),
+        check('choosing .NET runs on .NET', dotnetCost && dotnetCost.includes('on .NET'),
             JSON.stringify(dotnetCost));
     }
 

@@ -192,6 +192,7 @@
 
     #tabs {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 0.25rem;
       padding: 0 0.5rem;
@@ -244,30 +245,28 @@
     #output .spin { color: var(--fg-muted); margin-left: 1ch; }
     #output:has(> .spin:only-child) .spin { margin-left: 0; }
 
-    /* The compiled code: a status line over a read-only editor, which takes
-       the rest of the pane. */
+    /* The compiled code: one row choosing the listing, with what applies to it
+       at its right end, wrapping on a phone; a status line only while there is
+       something to say; and a read-only editor taking the rest of the pane. */
     #view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
     #view[hidden] { display: none; }
-    .view-kinds { padding: 0.5rem 1rem 0; }
+    .view-kinds { padding: 0.4rem 1rem 0.2rem; display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem; align-items: center; }
+    .view-kinds[hidden] { display: none; }
     .view-kinds .target button.runs::after { content: " •"; color: var(--accent); }
-    .view-options { padding: 0.4rem 1rem 0; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; font-size: 0.8rem; }
-    .view-options[hidden] { display: none; }
+    .view-kinds .target button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .view-options { margin-left: auto; display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
     .view-option { font-size: 0.78rem; padding: 0.1rem 0.5rem; background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--fg-muted); }
     .view-option[aria-pressed="true"] { color: var(--fg); background: color-mix(in srgb, var(--accent) 20%, transparent); }
-    .view-framing { color: var(--fg-muted); }
-
-    /* Under the output, where the program ran; only beside the output. */
-    #ran-on { margin: 0; padding: 0.3rem 1rem; color: var(--fg-muted); font-size: 0.78rem; border-top: 1px solid var(--border); }
-    #ran-on[hidden], #output[hidden] + #ran-on { display: none; }
-    .ran-on-switch { background: none; border: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; }
-    .view-kinds[hidden] { display: none; }
-    .view-status { padding: 0.5rem 1rem; color: var(--fg-muted); font-size: 0.82rem; display: flex; gap: 1ch; align-items: center; }
+    .view-status { padding: 0.3rem 1rem; color: var(--fg-muted); font-size: 0.82rem; display: flex; gap: 1ch; align-items: center; }
     .view-status[hidden] { display: none; }
     .view-action { font-size: 0.8125rem; }
     .view-listing { flex: 1; min-height: 0; }
     .view-listing[hidden] { display: none; }
-    .view-caption { padding: 0.4rem 1rem; color: var(--fg-muted); font-size: 0.8rem; border-top: 1px solid var(--border); }
-    .view-caption[hidden] { display: none; }
+
+    /* On a phone the listing keeps at least a third of the screen. */
+    @media (max-width: 34rem) {
+      .view-listing { min-height: 33vh; }
+    }
 
     #arguments-row[hidden] { display: none; }
 
@@ -337,11 +336,11 @@
       text-overflow: ellipsis;
     }
 
-    /* The timing sits to its right and is the first thing to go when the row
-       runs out of room: it is the least important thing on it, and it is
-       already written in the size of a tooltip. */
+    /* The timing, which also says where the program ran, wraps under the
+       tabs when the row runs out of room rather than going. */
     @media (max-width: 62rem) {
-      #run-cost { display: none; }
+      #run-cost { flex-basis: 100%; order: 10; padding: 0 0 0.25rem 0.5rem; }
+      #run-cost:empty { display: none; }
     }
 
     /* Narrower still, the part's heading goes and the arrow carries the
@@ -669,6 +668,11 @@
       <span id="run-label">Run</span>
     </button>
 
+    <span id="target" class="target" role="group" aria-label="Run on" hidden>
+      <button data-target="wasm" title="Run in the browser's WebAssembly engine">WebAssembly</button>
+      <button data-target="dotnet" title="Run on .NET">.NET</button>
+    </span>
+
     <span class="spacer"></span>
 
     <span id="compiler" class="indicator" data-state="working" title="Loading the .NET runtime">
@@ -730,7 +734,7 @@
           Output
         </button>
         <button class="tab" id="tab-view" role="tab" aria-selected="false" aria-controls="view"
-                title="The compiled code, built when this is opened">IL</button>
+                title="The compiled code, built when this is opened">compiled</button>
 
         <!-- Which task the pane is showing: the title, and for a task solved
              more than one way the part and the way to the next. Here rather
@@ -767,7 +771,6 @@
 
       <pre id="diagnostics" role="tabpanel"><span class="empty">No problems.</span></pre>
       <pre id="output" role="tabpanel" hidden><span class="empty">Run the program to see its output here.</span></pre>
-      <p id="ran-on" hidden></p>
       <div id="view" role="tabpanel" hidden></div>
 
       <!-- Shown only while a program is actually blocked reading a line, which
