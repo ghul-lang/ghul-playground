@@ -134,7 +134,7 @@ services directly when run outside it. None of these is set for local use.
 | `MAX_CONCURRENT_COMPILES`, `MAX_QUEUED_COMPILES`, `COMPILE_TIMEOUT_MS` | compile service caps |
 | `ILSPYCMD`, `MAX_VIEW_BYTES` | the disassembler `POST /compile/view` runs for the compiled-code tab, and the cap on a listing (256 KB); the image installs a pinned `ilspycmd` and sets the path |
 | `REPL_ENABLED`, `MAX_CELLS`, `MAX_CHAIN_BYTES`, `CELL_CACHE_DIR`, `CELL_CACHE_BYTES`, `CELL_TOOLCHAIN_SALT` | session cells: off unless `REPL_ENABLED` is 1; see docs/design.md. The analyse service reads `REPL_ENABLED`, `MAX_CELLS` and `CELL_CACHE_DIR` too, and has to be given the directory the compile service writes |
-| `GHUL_CORE_DIR`, `GHUL_CORE_VERSION`, `GHUL_RUNTIME_SOURCE_DIR`, `GHUL_RUNTIME_SOURCE_VERSION` | the ghul-core and ghul-runtime sources a `"target": "wasm"` compile builds against; unset, the compile service offers only .NET. The image sets them, at the tags `scripts/check-wasm-pins.js` checks against ghul-cli's pins |
+| `GHUL_CORE_DIR`, `GHUL_CORE_VERSION`, `GHUL_RUNTIME_SOURCE_DIR`, `GHUL_RUNTIME_SOURCE_VERSION` | the ghul-core and ghul-runtime sources a `"target": "wasm"` compile builds against; unset, the compile service offers only .NET. The image sets them, at the newest releases, which `scripts/check-wasm-pins.js` checks |
 | `GHUL_LLVM`, `GHUL_LLVM_VERSION` | the ghul-llvm executable that writes a native view's optimised IR and assembly, and its version; unset `GHUL_LLVM`, or without the wasm library sources, the compiled-code tab offers no LLVM IR or x86-64 listing. The image installs the release the compiler requires |
 | `MAX_SESSIONS`, `POOL_SIZE`, `IDLE_TIMEOUT_MS`, `MAX_SESSION_MS` | analyse service caps |
 

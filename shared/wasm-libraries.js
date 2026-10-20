@@ -7,7 +7,7 @@
 // `--library-source <name>@<version>=<root>` followed by its files, core first,
 // which is the command line ghul-cli writes for `ghul run --target wasm`.
 //
-// The image checks both out at the tags ghul-cli pins for its compiler (see
+// The image checks both out at their newest releases (see
 // scripts/check-wasm-pins.js), so a program behaves here as it does locally.
 //
 // ghul-raster is a third, for a program that draws: its sources at the tag of

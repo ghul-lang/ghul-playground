@@ -1,16 +1,12 @@
 // The compile service builds --target wasm programs against ghul-core and
-// ghul-runtime sources at the tags its Dockerfile names. ghul-cli, which is how
-// a reader builds the same program locally, takes a release of each library
-// that the compiler and the library each accept, by the requirements.json
-// each publishes, and falls back on a tag pinned to each range of compiler
-// versions only for a compiler from before those. This checks the image
-// takes releases ghul-cli would accept for the image's compiler, so a program
-// behaves here as it does with `ghul run --target wasm`.
+// ghul-runtime sources at the tags its Dockerfile names, and links the native
+// views with the ghul-llvm release it names. ghul-cli, which is how a reader
+// builds the same program locally, always takes the newest release of each
+// tool, so the image is held to the same rule: a program behaves here as it
+// does with `ghul run --target wasm`.
 //
-// The pins live in ghul-cli's source, so this reads them from its main branch.
-//
-// It also holds the image's ghul-llvm, which the native views link with, to
-// the release the image's compiler requires.
+// This checks the image takes the newest release of ghul-core, ghul-runtime
+// and ghul-llvm, and that the analyse image reads the same ghul-core.
 //
 //   node scripts/check-wasm-pins.js
 
@@ -19,9 +15,8 @@ const path = require('path');
 const https = require('https');
 
 const root = path.join(__dirname, '..');
-const PINS = 'https://raw.githubusercontent.com/ghul-lang/ghul-cli/main/project/src';
 
-function fetchText(url) {
+function fetchJson(url) {
     return new Promise((resolve, reject) => {
         https.get(url, { headers: { 'user-agent': 'ghul-playground-check-wasm-pins' } }, res => {
             if (res.statusCode !== 200) {
@@ -32,30 +27,15 @@ function fetchText(url) {
 
             let body = '';
             res.on('data', chunk => body += chunk);
-            res.on('end', () => resolve(body));
+            res.on('end', () => {
+                try {
+                    resolve(JSON.parse(body));
+                } catch (err) {
+                    reject(new Error(`${url}: ${err.message}`));
+                }
+            });
         }).on('error', reject);
     });
-}
-
-function compareVersions(a, b) {
-    const [x, y] = [a, b].map(v => v.split('.').map(Number));
-
-    for (let i = 0; i < 3; i++) {
-        if (x[i] !== y[i]) return x[i] - y[i];
-    }
-
-    return 0;
-}
-
-// The tag ghul-cli takes for `compiler`: the entry with the newest earliest
-// compiler that is no newer than it, as ghul-cli's own pinned_tag does.
-function pinnedTag(source, compiler) {
-    const pins = [...source.matchAll(/earliest_compiler\s*=\s*"([^"]+)",\s*tag\s*=\s*"([^"]+)"/g)]
-        .map(m => ({ earliest: m[1], tag: m[2] }))
-        .filter(p => compareVersions(p.earliest, compiler) <= 0)
-        .sort((a, b) => compareVersions(a.earliest, b.earliest));
-
-    return pins.length ? pins[pins.length - 1].tag : null;
 }
 
 function dockerArg(text, name) {
@@ -68,90 +48,33 @@ function dockerArg(text, name) {
     return match[1].trim();
 }
 
+async function latestRelease(repository) {
+    const release = await fetchJson(`https://api.github.com/repos/ghul-lang/${repository}/releases/latest`);
+
+    return release.tag_name.replace(/^v/, '');
+}
+
 async function main() {
     const dockerfile = fs.readFileSync(path.join(root, 'compile-service/Dockerfile'), 'utf8');
 
-    const compiler = dockerArg(dockerfile, 'GHUL_COMPILER_VERSION');
-
-    // A compiler names the oldest release of each library it works with in
-    // build/requirements.json at its own tag, and each library release names
-    // the oldest compiler that builds it in a requirements.json of its own.
-    // ghul-cli takes the newest release satisfying both, falling back on its
-    // pin table only for a compiler from before the file, so the image is
-    // held to the same rule. The native views' ghul-llvm is named there too.
-    let requirements = null;
-
-    try {
-        requirements = JSON.parse(await fetchText(
-            `https://raw.githubusercontent.com/ghul-lang/ghul/v${compiler}/build/requirements.json`));
-    } catch {
-        requirements = null;
-    }
-
     const checks = [
-        { library: 'ghul-core', file: 'core_library.ghul', arg: 'GHUL_CORE_VERSION' },
-        { library: 'ghul-runtime', file: 'runtime_library.ghul', arg: 'GHUL_RUNTIME_VERSION' }
+        { repository: 'ghul-core', arg: 'GHUL_CORE_VERSION' },
+        { repository: 'ghul-runtime', arg: 'GHUL_RUNTIME_VERSION' },
+        { repository: 'ghul-llvm', arg: 'GHUL_LLVM_VERSION' }
     ];
 
     let failed = false;
 
-    for (const { library, file, arg } of checks) {
+    for (const { repository, arg } of checks) {
         const actual = dockerArg(dockerfile, arg);
+        const latest = await latestRelease(repository);
 
-        if (requirements?.[library]) {
-            const floor = requirements[library];
-            let own = null;
-
-            try {
-                own = JSON.parse(await fetchText(
-                    `https://raw.githubusercontent.com/ghul-lang/${library}/v${actual}/requirements.json`))['minimum-compiler'];
-            } catch {
-                own = null;
-            }
-
-            if (compareVersions(actual, floor) < 0) {
-                failed = true;
-                console.error(`${library}: the image takes v${actual}, but compiler ${compiler} requires v${floor} or newer; ` +
-                    `set ${arg} in compile-service/Dockerfile`);
-            } else if (own && compareVersions(own, compiler) > 0) {
-                failed = true;
-                console.error(`${library}: v${actual} requires compiler ${own} or newer, but the image takes ${compiler}; ` +
-                    `set ${arg} in compile-service/Dockerfile`);
-            } else {
-                console.log(`${library}: v${actual}, which compiler ${compiler} accepts and which accepts it`);
-            }
-
-            continue;
-        }
-
-        const wanted = pinnedTag(await fetchText(`${PINS}/${file}`), compiler);
-
-        if (wanted === `v${actual}`) {
-            console.log(`${library}: v${actual}, as ghul-cli pins for compiler ${compiler}`);
-            continue;
-        }
-
-        failed = true;
-
-        console.error(`${library}: the image takes v${actual}, but ghul-cli pins ${wanted ?? 'none'} ` +
-            `for compiler ${compiler}; set ${arg} in compile-service/Dockerfile to match`);
-    }
-
-    const llvm = `v${dockerArg(dockerfile, 'GHUL_LLVM_VERSION')}`;
-
-    if (!requirements) {
-        console.log(`ghul-llvm: compiler ${compiler} names no release, so ${llvm} is not checked`);
-    }
-
-    if (requirements?.['ghul-llvm']) {
-        const named = `v${requirements['ghul-llvm']}`;
-
-        if (named === llvm) {
-            console.log(`ghul-llvm: ${llvm}, as compiler ${compiler} requires`);
+        if (actual === latest) {
+            console.log(`${repository}: v${actual}, the newest release`);
         } else {
             failed = true;
-            console.error(`ghul-llvm: the image takes ${llvm}, but compiler ${compiler} requires ${named}; ` +
-                'set GHUL_LLVM_VERSION in compile-service/Dockerfile to match');
+            console.error(`${repository}: the image takes v${actual}, but the newest release is v${latest}; ` +
+                `set ${arg} in compile-service/Dockerfile`);
         }
     }
 
@@ -179,5 +102,3 @@ if (require.main === module) {
         process.exit(1);
     });
 }
-
-module.exports = { pinnedTag, compareVersions };
