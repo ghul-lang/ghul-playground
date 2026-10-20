@@ -44,7 +44,7 @@ jobs:
       # agree: the services compile against one runtime and the browser loads
       # another, so a disagreement is a program that compiles and then fails
       # to load.
-      - name: Check the pinned versions agree
+      - name: Check every tool is on one version across the site
         run: node scripts/check-versions.js
 
       # Everything below runs against the versions this repository pins, not
@@ -134,11 +134,6 @@ jobs:
 
       - name: Check how a disassembly is shaped for the assembly view
         run: node test/assembly-view.mjs
-
-      # The analyse image reads the same ghul-core the compile image builds
-      # wasm programs against, so the editor and the compile agree.
-      - name: Check the two images take the same ghul-core
-        run: node scripts/check-wasm-pins.js
 
       - name: Check which analyser events a session's changes produce
         run: node test/analyser-outcomes.mjs

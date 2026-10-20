@@ -1,0 +1,10 @@
+{
+    "compiler": "66.12.11",
+    "runtime": "29.1.1",
+    "raster": "0.13.1",
+    "core": "1.2.0",
+    "llvm": "1.5.0",
+    "languageServer": "1.33.2",
+    "disassembler": "11.1.0.9782",
+    "repl": "9.4.2"
+}

@@ -12,7 +12,7 @@ set -euo pipefail
 base=$1
 head=$2
 
-pin_files='^(\.config/dotnet-tools\.json|analyse-service/Dockerfile|compile-service/Dockerfile|runner/runner\.ghulproj|web/web\.csproj)$'
+pin_files='^(versions\.json|\.config/dotnet-tools\.json|analyse-service/Dockerfile|compile-service/Dockerfile|runner/runner\.ghulproj|web/web\.csproj)$'
 
 version='[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.-]+)?'
 
@@ -21,8 +21,13 @@ version='[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.-]+)?'
 normalise() {
     sed -E \
         -e "s/(\"version\": \")$version\"/\1V\"/" \
-        -e "s/^(ARG GHUL_[A-Z_]+_VERSION=)$version\$/\1V/" \
+        -e "s/^(ARG [A-Z_]+_VERSION=)$version\$/\1V/" \
         -e "s/(<PackageReference Include=\"[Gg]hul\.[A-Za-z.]+\" Version=\")$version\"/\1V\"/"
+}
+
+# versions.json is nothing but `"tool": "version"` lines.
+normalise_versions() {
+    sed -E -e "s/^(\s*\"[A-Za-z]+\": \")$version\"/\1V\"/"
 }
 
 changes=$(git diff --name-status "$base" "$head")
@@ -43,7 +48,13 @@ while read -r status path; do
         exit 1
     fi
 
-    if ! diff <(git show "$base:$path" | normalise) <(git show "$head:$path" | normalise) >/dev/null; then
+    normalise_this=normalise
+
+    if [ "$path" = versions.json ]; then
+        normalise_this=normalise_versions
+    fi
+
+    if ! diff <(git show "$base:$path" | $normalise_this) <(git show "$head:$path" | $normalise_this) >/dev/null; then
         echo "changes more than a version: $path"
         exit 1
     fi

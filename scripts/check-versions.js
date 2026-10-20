@@ -1,97 +1,75 @@
-// The compiler, runtime and raster versions are written in several places
-// each, and every copy of one has to say the same thing.
+// Every tool has one version across the whole site: the compile service, the
+// analyse service, the runner, the web app, the paired ghul-llvm, the language
+// server and the libraries all run what versions.json says, and a place that
+// says anything else fails here.
 //
 // The services compile user code against one runtime and the browser loads
-// another, so a disagreement between the service images and the web app is not
-// a build error - it is a program that compiles, downloads, and then fails to
-// load, with nothing in the compiler output to explain it. The tool manifest
-// matters for the same reason in the other direction: it is what a developer
-// gets locally, so a manifest that disagrees with the images means local
-// behaviour is not deployed behaviour.
+// another, so a disagreement is not a build error - it is a program that
+// compiles, downloads, and then fails to load, or an editor that reports
+// something the compile does not say. An updater proposing a new version edits
+// each site separately, so this is also what catches a bump that landed
+// everywhere but one.
 //
-// An updater proposing a new version edits each site separately, so this is
-// also what catches a bump that landed everywhere but one.
-//
-//   node scripts/check-versions.js
+//   node scripts/check-versions.js      fails on any site that is not versions.json
+//   node scripts/sync-versions.js       writes the sites from versions.json
 
-const fs = require('fs');
-const path = require('path');
+const { TOOLS, SITES, wanted, read } = require('./versions');
 
-const root = path.join(__dirname, '..');
-const read = f => fs.readFileSync(path.join(root, f), 'utf8');
-
-const sites = [];
-
-function record(file, what, version) {
-    sites.push({ file, what, version });
-}
-
-// The compiler, as the tool manifest pins it.
-const manifest = JSON.parse(read('.config/dotnet-tools.json'));
-record('.config/dotnet-tools.json', 'compiler', manifest.tools['ghul.compiler'].version);
-
-// The runtime, as each project references it.
-for (const project of ['web/web.csproj', 'runner/runner.ghulproj']) {
-    const match = read(project).match(/Include="ghul\.runtime"\s+Version="([^"]+)"/);
-
-    if (!match) {
-        console.error(`${project}: no ghul.runtime PackageReference`);
-        process.exit(1);
-    }
-
-    record(project, 'runtime', match[1]);
-}
-
-// Raster, which only the web app references: the runner does not draw.
-{
-    const match = read('web/web.csproj').match(/Include="ghul\.raster"\s+Version="([^"]+)"/);
-
-    if (!match) {
-        console.error('web/web.csproj: no ghul.raster PackageReference');
-        process.exit(1);
-    }
-
-    record('web/web.csproj', 'raster', match[1]);
-}
-
-// Both, as each service image builds them in.
-for (const image of ['compile-service/Dockerfile', 'analyse-service/Dockerfile']) {
-    const text = read(image);
-
-    for (const [what, arg] of [
-        ['compiler', 'GHUL_COMPILER_VERSION'],
-        ['runtime', 'GHUL_RUNTIME_VERSION'],
-        ['raster', 'GHUL_RASTER_VERSION']
-    ]) {
-        const match = text.match(new RegExp(`^ARG ${arg}=(.+)$`, 'm'));
-
-        if (!match) {
-            console.error(`${image}: no ${arg}`);
-            process.exit(1);
-        }
-
-        record(image, what, match[1].trim());
-    }
-}
+const versions = wanted();
 
 let failed = false;
 
-for (const what of ['compiler', 'runtime', 'raster']) {
-    const found = sites.filter(s => s.what === what);
-    const versions = [...new Set(found.map(s => s.version))];
+for (const tool of TOOLS) {
+    const found = SITES.filter(site => site.tool === tool).map(site => ({ site, version: site.read() }));
+    const wrong = found.filter(f => f.version !== versions[tool]);
 
-    if (versions.length === 1) {
-        console.log(`${what}: ${versions[0]} in all ${found.length} places`);
+    if (!wrong.length) {
+        console.log(`${tool}: ${versions[tool]}${found.length ? ` in all ${found.length} places` : ''}`);
         continue;
     }
 
     failed = true;
 
-    console.error(`${what}: disagreement`);
+    console.error(`${tool}: versions.json says ${versions[tool]}, but`);
 
-    for (const site of found) {
-        console.error(`    ${site.version.padEnd(12)} ${site.file}`);
+    for (const { site, version } of wrong) {
+        console.error(`    ${(version ?? '(not found)').padEnd(12)} ${site.file}`);
     }
+}
+
+// A place that names a tool version but is not in the table is a place this
+// check cannot see, so it is reported rather than left to drift.
+const unregistered = [];
+
+for (const file of ['compile-service/Dockerfile', 'analyse-service/Dockerfile']) {
+    for (const [, arg] of read(file).matchAll(/^ARG ([A-Z_]*VERSION)=/gm)) {
+        const known = SITES.some(site => site.file === file && site.argName === arg);
+
+        if (!known) unregistered.push(`${file}: ARG ${arg}`);
+    }
+}
+
+for (const file of ['web/web.csproj', 'runner/runner.ghulproj']) {
+    for (const [, id] of read(file).matchAll(/Include="(ghul\.[A-Za-z.]+)"\s+Version=/g)) {
+        const known = SITES.some(site => site.file === file && site.id === id);
+
+        if (!known) unregistered.push(`${file}: ${id}`);
+    }
+}
+
+for (const id of Object.keys(JSON.parse(read('.config/dotnet-tools.json')).tools)) {
+    const known = SITES.some(site => site.file === '.config/dotnet-tools.json' && site.id === id);
+
+    if (!known) unregistered.push(`.config/dotnet-tools.json: ${id}`);
+}
+
+for (const place of unregistered) {
+    failed = true;
+    console.error(`${place} names a version scripts/versions.js does not know`);
+}
+
+if (failed) {
+    console.error('\nEdit versions.json and run node scripts/sync-versions.js.');
 }
 
 process.exit(failed ? 1 : 0);

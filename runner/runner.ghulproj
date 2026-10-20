@@ -16,6 +16,6 @@
   <ItemGroup>
     <PackageReference Include="ghul.runtime" Version="29.1.1" />
     <!-- The interactive session's logic, shared with the terminal REPL. -->
-    <PackageReference Include="ghul.repl" Version="0.39.0" />
+    <PackageReference Include="ghul.repl" Version="9.4.2" />
   </ItemGroup>
 </Project>

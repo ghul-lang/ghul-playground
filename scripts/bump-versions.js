@@ -1,26 +1,23 @@
-// Bumps the compiler, runtime and/or raster version at every site
-// check-versions.js checks, so a bump is one edit instead of several kept in
+// Moves versions.json to new tool versions and writes them everywhere the
+// site names one, so a bump is one command instead of several edits kept in
 // sync by hand - the history this repository has is exactly the other way
 // round, a version landing in all but one site and check-versions.js catching
 // it after the fact.
 //
-//   node scripts/bump-versions.js --compiler 52.2.1
-//   node scripts/bump-versions.js --runtime 18.0.1
-//   node scripts/bump-versions.js --raster 0.4.1
-//   node scripts/bump-versions.js --compiler 52.2.1 --runtime 18.0.1
 //   node scripts/bump-versions.js --latest
+//   node scripts/bump-versions.js --compiler 66.12.7 --llvm 1.5.0
+//   node scripts/bump-versions.js
 //
-// `--latest` resolves each version's current highest listed release on
-// nuget.org and bumps all three; an explicit flag bumps only what it names.
-// Running with neither prints the current versions and does nothing.
+// `--latest` resolves each tool's current highest stable release; an explicit
+// flag sets only the tool it names (and applies after --latest). The flags are
+// the tool names in versions.json: --compiler, --runtime, --raster, --core,
+// --llvm, --language-server, --disassembler, --repl. Running with neither
+// prints the current versions and does nothing.
 
-const fs = require('fs');
-const path = require('path');
 const https = require('https');
-
-const root = path.join(__dirname, '..');
-const read = f => fs.readFileSync(path.join(root, f), 'utf8');
-const write = (f, text) => fs.writeFileSync(path.join(root, f), text);
+const { execFileSync } = require('child_process');
+const path = require('path');
+const { TOOLS, wanted, read, write } = require('./versions');
 
 function fetchJson(url) {
     return new Promise((resolve, reject) => {
@@ -44,152 +41,80 @@ function fetchJson(url) {
     });
 }
 
+const compare = (a, b) => {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+    }
+
+    return 0;
+};
+
 // Highest stable version nuget.org lists for a package - prereleases
 // (anything with a `-`) are never what a routine bump wants.
 async function latestPublished(packageId) {
-    const index = await fetchJson(`https://api.nuget.org/v3-flatcontainer/${packageId}/index.json`);
+    const index = await fetchJson(`https://api.nuget.org/v3-flatcontainer/${packageId.toLowerCase()}/index.json`);
 
-    const stable = index.versions.filter(v => !v.includes('-'));
-
-    stable.sort((a, b) => {
-        const pa = a.split('.').map(Number);
-        const pb = b.split('.').map(Number);
-
-        for (let i = 0; i < 3; i++) {
-            if (pa[i] !== pb[i]) return pa[i] - pb[i];
-        }
-
-        return 0;
-    });
-
-    return stable[stable.length - 1];
+    return index.versions.filter(v => !v.includes('-')).sort(compare).pop();
 }
 
-function bumpCompiler(version) {
-    const manifestFile = '.config/dotnet-tools.json';
-    const original = read(manifestFile);
-    const before = JSON.parse(original).tools['ghul.compiler'].version;
+// The newest release GitHub marks as latest.
+async function latestRelease(repository) {
+    const release = await fetchJson(`https://api.github.com/repos/${repository}/releases/latest`);
 
-    // A regex substitution rather than a parse/stringify round-trip, so a
-    // manifest with no trailing newline (or different indentation) is left
-    // exactly as it was apart from the one field this bump changes.
-    const pin = /("ghul\.compiler":\s*\{\s*"version":\s*")[^"]+(")/;
-
-    if (!pin.test(original)) {
-        throw new Error(`${manifestFile}: no ghul.compiler version to update`);
-    }
-
-    write(manifestFile, original.replace(pin, `$1${version}$2`));
-
-    for (const image of ['compile-service/Dockerfile', 'analyse-service/Dockerfile']) {
-        const text = read(image);
-
-        if (!/^ARG GHUL_COMPILER_VERSION=.+$/m.test(text)) {
-            throw new Error(`${image}: no ARG GHUL_COMPILER_VERSION line to update`);
-        }
-
-        write(image, text.replace(/^ARG GHUL_COMPILER_VERSION=.+$/m, `ARG GHUL_COMPILER_VERSION=${version}`));
-    }
-
-    console.log(`compiler: ${before} -> ${version}`);
+    return release.tag_name.replace(/^v/, '');
 }
 
-// Only the web app references raster and only the images carry its version,
-// so this has fewer sites than the runtime rather than the same ones.
-function bumpRaster(version) {
-    const project = 'web/web.csproj';
-    const text = read(project);
-    const match = text.match(/Include="ghul\.raster"\s+Version="([^"]+)"/);
+const SOURCES = {
+    compiler: () => latestPublished('ghul.compiler'),
+    runtime: () => latestPublished('ghul.runtime'),
+    raster: () => latestPublished('ghul.raster'),
+    repl: () => latestPublished('ghul.repl'),
+    disassembler: () => latestPublished('ilspycmd'),
+    core: () => latestRelease('ghul-lang/ghul-core'),
+    llvm: () => latestRelease('ghul-lang/ghul-llvm'),
+    languageServer: () => latestRelease('ghul-lang/ghul-vsce')
+};
 
-    if (!match) {
-        throw new Error(`${project}: no ghul.raster PackageReference`);
-    }
-
-    write(project, text.replace(/(Include="ghul\.raster"\s+Version=")[^"]+(")/, `$1${version}$2`));
-
-    for (const image of ['compile-service/Dockerfile', 'analyse-service/Dockerfile']) {
-        const text = read(image);
-
-        if (!/^ARG GHUL_RASTER_VERSION=.+$/m.test(text)) {
-            throw new Error(`${image}: no ARG GHUL_RASTER_VERSION line to update`);
-        }
-
-        write(image, text.replace(/^ARG GHUL_RASTER_VERSION=.+$/m, `ARG GHUL_RASTER_VERSION=${version}`));
-    }
-
-    console.log(`raster: ${match[1]} -> ${version}`);
-}
-
-function bumpRuntime(version) {
-    let before;
-
-    for (const project of ['web/web.csproj', 'runner/runner.ghulproj']) {
-        const text = read(project);
-        const match = text.match(/Include="ghul\.runtime"\s+Version="([^"]+)"/);
-
-        if (!match) {
-            throw new Error(`${project}: no ghul.runtime PackageReference`);
-        }
-
-        before = match[1];
-
-        const updated = text.replace(
-            /(Include="ghul\.runtime"\s+Version=")[^"]+(")/,
-            `$1${version}$2`
-        );
-
-        write(project, updated);
-    }
-
-    for (const image of ['compile-service/Dockerfile', 'analyse-service/Dockerfile']) {
-        const text = read(image);
-
-        if (!/^ARG GHUL_RUNTIME_VERSION=.+$/m.test(text)) {
-            throw new Error(`${image}: no ARG GHUL_RUNTIME_VERSION line to update`);
-        }
-
-        write(image, text.replace(/^ARG GHUL_RUNTIME_VERSION=.+$/m, `ARG GHUL_RUNTIME_VERSION=${version}`));
-    }
-
-    console.log(`runtime: ${before} -> ${version}`);
-}
+const FLAGS = { languageServer: '--language-server' };
+const flagOf = tool => FLAGS[tool] ?? `--${tool}`;
 
 async function main() {
     const args = process.argv.slice(2);
-    const wantLatest = args.includes('--latest');
+    const versions = wanted();
 
-    const flagValue = name => {
-        const i = args.indexOf(name);
-        return i === -1 ? null : args[i + 1];
-    };
+    if (args.includes('--latest')) {
+        const latest = await Promise.all(TOOLS.map(tool => SOURCES[tool]()));
 
-    let compilerVersion = flagValue('--compiler');
-    let runtimeVersion = flagValue('--runtime');
-    let rasterVersion = flagValue('--raster');
-
-    if (wantLatest) {
-        [compilerVersion, runtimeVersion, rasterVersion] = await Promise.all([
-            compilerVersion || latestPublished('ghul.compiler'),
-            runtimeVersion || latestPublished('ghul.runtime'),
-            rasterVersion || latestPublished('ghul.raster'),
-        ]);
+        TOOLS.forEach((tool, i) => versions[tool] = latest[i]);
     }
 
-    if (!compilerVersion && !runtimeVersion && !rasterVersion) {
-        const manifest = JSON.parse(read('.config/dotnet-tools.json'));
-        const web = read('web/web.csproj');
-        const version = id => web.match(new RegExp(`Include="${id}"\\s+Version="([^"]+)"`))?.[1] ?? '(not found)';
+    for (const tool of TOOLS) {
+        const i = args.indexOf(flagOf(tool));
 
-        console.log(`compiler: ${manifest.tools['ghul.compiler'].version}`);
-        console.log(`runtime:  ${version('ghul\\.runtime')}`);
-        console.log(`raster:   ${version('ghul\\.raster')}`);
-        console.log('\nNothing to do - pass --compiler/--runtime/--raster/--latest to bump.');
+        if (i !== -1) {
+            versions[tool] = args[i + 1];
+        }
+    }
+
+    const before = wanted();
+    const changed = TOOLS.filter(tool => before[tool] !== versions[tool]);
+
+    if (!args.length) {
+        for (const tool of TOOLS) console.log(`${tool.padEnd(15)} ${before[tool]}`);
+        console.log('\nNothing to do - pass --latest or a tool flag (--compiler 66.12.7) to bump.');
         return;
     }
 
-    if (compilerVersion) bumpCompiler(compilerVersion);
-    if (runtimeVersion) bumpRuntime(runtimeVersion);
-    if (rasterVersion) bumpRaster(rasterVersion);
+    for (const tool of changed) console.log(`${tool}: ${before[tool]} -> ${versions[tool]}`);
+
+    const ordered = Object.fromEntries(TOOLS.map(tool => [tool, versions[tool]]));
+
+    write('versions.json', JSON.stringify(ordered, null, 4) + '\n');
+
+    execFileSync('node', [path.join(__dirname, 'sync-versions.js')], { stdio: 'inherit' });
 }
 
 main().catch(err => {

@@ -7,8 +7,8 @@
 // `--library-source <name>@<version>=<root>` followed by its files, core first,
 // which is the command line ghul-cli writes for `ghul run --target wasm`.
 //
-// The image checks both out at pinned releases (see
-// scripts/check-wasm-pins.js), the same in the compile and analyse images.
+// The image checks both out at the releases versions.json names, the same in
+// the compile and analyse images.
 //
 // ghul-raster is a third, for a program that draws: its sources at the tag of
 // the ghul.raster package the .NET build references, every .ghul file under
