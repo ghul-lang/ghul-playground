@@ -49,7 +49,7 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # The library sources an analyser for the wasm target reads in place of the
 # reference assemblies: the same tags the compile service builds wasm against
 # (scripts/check-wasm-pins.js checks the two images agree).
-ARG GHUL_CORE_VERSION=1.0.1
+ARG GHUL_CORE_VERSION=1.1.0
 
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz

@@ -55,7 +55,7 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # The library sources a --target wasm compile builds against, at the tags
 # ghul-cli pins for this compiler (scripts/check-wasm-pins.js holds the two in
 # step). The runtime's sources are the tag of the runtime package above.
-ARG GHUL_CORE_VERSION=1.0.1
+ARG GHUL_CORE_VERSION=1.1.0
 
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
@@ -74,11 +74,9 @@ RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghu
  && test -f /home/playground/libraries/ghul-runtime/wasm-sources.rsp \
  && test -d /home/playground/libraries/ghul-raster/src
 
-# The optimiser, assembler and linker an llvm build hands its module to,
-# which writes the native views' optimised IR and assembly: the newest release
-# (scripts/check-wasm-pins.js holds it there), checked against the sha256
-# published beside it.
-ARG GHUL_LLVM_VERSION=1.4.0
+# which writes the native views' optimised IR and assembly: a current release,
+# checked against the sha256 published beside it.
+ARG GHUL_LLVM_VERSION=1.5.0
 ARG GHUL_LLVM_TRIPLE=x86_64-unknown-linux-musl
 
 ADD --chown=playground:playground \
