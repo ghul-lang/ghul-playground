@@ -47,7 +47,7 @@ RUN dotnet tool install --tool-path /home/playground/tools \
  && rm -rf /tmp/runtime-probe
 
 # The library sources an analyser for the wasm target reads in place of the
-# reference assemblies: the same tags the compile service builds wasm against
+# reference assemblies: the same ghul-core the compile service builds wasm against
 # (scripts/check-wasm-pins.js checks the two images agree).
 ARG GHUL_CORE_VERSION=1.1.0
 
