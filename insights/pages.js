@@ -28,7 +28,9 @@ export function overview({ visits, before, days, period, query, explore }) {
     const now = report.summary(visits);
     const then = report.summary(before);
     const top = report.pages(visits).slice(0, 8);
-    const problems = report.problems(visits, days).filter(p => p.kind !== 'program').slice(0, 6);
+    const everything = report.problems(visits, days);
+    const problems = everything.filter(p => p.kind === 'fault' || p.kind === 'trouble').slice(0, 6);
+    const notProblems = everything.filter(p => p.kind !== 'fault' && p.kind !== 'trouble').slice(0, 6);
     const [site] = report.funnels(visits);
 
     return html`${intro('Overview', `The last ${period}, against the ${period} before it.`)}
@@ -38,6 +40,9 @@ ${tile('Pages seen', number(now.pageviews), change(now.pageviews, then.pageviews
 ${tile('Left after one page', percent(now.bounced, now.visits), `${number(now.bounced)} visits that did nothing else`)}
 ${tile('Ran some code', percent(now.ranCode, now.visits), `${number(now.ranCode)} visits`)}
 ${tile('Hit a problem', percent(now.troubled, now.visits), `${number(now.troubled)} visits; see Problems`)}
+${tile('Recovered', percent(now.recovered, now.visits), `${number(now.recovered)} visits where the analysis session came back`)}
+${tile('Slow to first output', percent(now.slow, now.visits), `${number(now.slow)} visits waited over 10 seconds`)}
+${tile('Program failed', percent(now.programFailed, now.visits), `${number(now.programFailed)} visits where the reader's own program failed`)}
 </div>
 <section class="card"><h2>Visits per day</h2>${dayBars(report.perDay(visits, days))}</section>
 <div class="grid">
@@ -50,7 +55,11 @@ ${explored(explore)}
 <section class="card"><h2>Problems readers ran into</h2>
 ${table(['What', 'Kind', 'Visits '], problems.map(p =>
         html`<tr>${cell.path(p.key)}${cell.text(badge(p.kind))}${cell.n(p.visits)}</tr>`), 'No problems recorded in this period.')}
-<p class="note"><a href="problems${query}">All problems</a></p></section>`;
+<p class="note"><a href="problems${query}">All problems</a></p></section>
+<section class="card"><h2>Seen, but not counted as problems</h2>
+${table(['What', 'Kind', 'Visits '], notProblems.map(p =>
+        html`<tr>${cell.path(p.key)}${cell.text(badge(p.kind))}${cell.n(p.visits)}</tr>`), 'None in this period.')}
+</section>`;
 }
 
 export function pages({ visits, period, explore }) {
@@ -105,7 +114,10 @@ export function problems({ visits, days, period }) {
     return html`${intro('Problems', `What went wrong for readers in the last ${period}.`)}
 <section class="card"><h2>Every problem</h2>
 <p class="note">${badge('fault')} the page itself failed: a script error, a runtime that would not load, a worker that died.
-${badge('trouble')} the services let the reader down: busy, unreachable, timed out, or slow to first output.
+${badge('trouble')} the services let the reader down: busy, timed out, turned away, or an analysis session lost and not back by the end of the visit.
+These two are the problems, and the only ones counted as such.
+${badge('recovered')} the analysis session was lost or did not come up first time, and was ready again in the same visit.
+${badge('slow')} the first output took over 10 seconds.
 ${badge('program')} the reader's own program did not compile or threw, which is what a mini-IDE is for, but a lot of it on one example is worth a look.</p>
 ${table(['What', 'Kind', 'Times ', 'Visits ', 'Of all visits ', 'Per day'], rows.map(p => html`<tr>
 ${cell.path(p.key)}${cell.text(badge(p.kind))}${cell.n(p.times)}${cell.n(p.visits)}${cell.n(percent(p.visits, total))}<td>${spark(p.byDay)}</td></tr>`), 'No problems recorded in this period.')}

@@ -166,11 +166,13 @@ td.path { word-break: break-all; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 .b0 { background: #cde2fb; } .b1 { background: #86b6ef; } .b2 { background: #3987e5; } .b3 { background: #1c5cab; } .b4 { background: #0d366b; }
 .badge { display: inline-block; font-size: 12px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--ring); color: var(--ink-2); white-space: nowrap; }
-.badge.fault::before, .badge.trouble::before, .badge.program::before {
+.badge.fault::before, .badge.trouble::before, .badge.recovered::before, .badge.slow::before, .badge.program::before {
     content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px;
 }
 .badge.fault::before { background: var(--critical); }
 .badge.trouble::before { background: var(--serious); }
+.badge.recovered::before { background: var(--ink-2); }
+.badge.slow::before { background: var(--ink-2); }
 .badge.program::before { background: var(--muted); }
 .visit { border-bottom: 1px solid var(--grid); padding: 8px 0; }
 .visit:last-child { border-bottom: 0; }
@@ -346,6 +348,8 @@ export const cell = {
 export const KIND_NAMES = {
     fault: 'page fault',
     trouble: 'service trouble',
+    recovered: 'recovered',
+    slow: 'slow',
     program: "reader's program failed",
 };
 

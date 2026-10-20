@@ -206,6 +206,37 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
     check('and is classified by what happened, wherever it was', report.classify('mini-ide-result', 'busy') === 'trouble');
 }
 
+// A problem is a fault or trouble. A lost analysis session that came back in
+// the same visit is recovered, a slow first output is slow, and neither counts
+// as a problem; one that never came back is trouble.
+{
+    const hit = (session, path, event = 1) => ({ session, at: '2026-10-20 10:00:00', path, event, place: '', width: 1280, first: 0, ref: '' });
+    const rows = [
+        hit('a', '/rosetta/x', 0), hit('a', 'mini-ide-analyser/rosetta-task-page/unavailable'),
+        hit('a', 'mini-ide-first-output/rosetta-task-page/under-1s'), hit('a', 'mini-ide-analyser/rosetta-task-page/connected'),
+        hit('b', '/rosetta/x', 0), hit('b', 'mini-ide-analyser/rosetta-task-page/connected'),
+        hit('b', 'mini-ide-analyser/rosetta-task-page/dropped'), hit('b', 'mini-ide-analyser/rosetta-task-page/reconnected'),
+        hit('c', '/rosetta/x', 0), hit('c', 'mini-ide-analyser/rosetta-task-page/unavailable'),
+        hit('d', '/rosetta/x', 0), hit('d', 'mini-ide-first-output/rosetta-task-page/over-10s'),
+        hit('e', '/rosetta/x', 0), hit('e', 'mini-ide-analyser/rosetta-task-page/refused'),
+        hit('f', '/rosetta/x', 0), hit('f', 'mini-ide-result/rosetta-task-page/compile-error'),
+    ];
+    const split = report.visitsOf(rows);
+    const kindOf = id => split.find(v => v.id === id)?.problems.map(p => p.kind).join(',');
+
+    check('a session lost and ready again in the visit is recovered', kindOf('a') === 'recovered', kindOf('a'));
+    check('a session dropped and reconnected is recovered', kindOf('b') === 'recovered', kindOf('b'));
+    check('a session lost and never back is trouble', kindOf('c') === 'trouble', kindOf('c'));
+    check('a first output over 10 seconds is slow', kindOf('d') === 'slow', kindOf('d'));
+    check('a session turned away is trouble', kindOf('e') === 'trouble', kindOf('e'));
+    check('a reader\'s own compile error is the program', kindOf('f') === 'program', kindOf('f'));
+
+    const s = report.summary(split);
+    check('only faults and trouble count as visits that hit a problem',
+        s.troubled === 2 && s.recovered === 2 && s.slow === 1 && s.programFailed === 1,
+        JSON.stringify({ troubled: s.troubled, recovered: s.recovered, slow: s.slow, programFailed: s.programFailed }));
+}
+
 // A period runs back from now, so it touches one more calendar day than it is
 // long: part of its first day, and today so far. Both are shown, marked.
 {
