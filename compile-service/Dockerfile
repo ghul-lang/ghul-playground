@@ -52,9 +52,10 @@ ARG ILSPYCMD_VERSION=11.0.0.9375
 RUN dotnet tool install --tool-path /home/playground/tools \
         ilspycmd --version "${ILSPYCMD_VERSION}"
 
-# The library sources a --target wasm compile builds against, at the tags
-# ghul-cli pins for this compiler (scripts/check-wasm-pins.js holds the two in
-# step). The runtime's sources are the tag of the runtime package above.
+# The library sources a --target wasm compile builds against: a current
+# release of ghul-core, the same one the analyse image takes
+# (scripts/check-wasm-pins.js holds the two in step). The runtime's sources
+# are the tag of the runtime package above.
 ARG GHUL_CORE_VERSION=1.1.0
 
 ADD --chown=playground:playground \
@@ -74,6 +75,7 @@ RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghu
  && test -f /home/playground/libraries/ghul-runtime/wasm-sources.rsp \
  && test -d /home/playground/libraries/ghul-raster/src
 
+# The optimiser, assembler and linker an llvm build hands its module to,
 # which writes the native views' optimised IR and assembly: a current release,
 # checked against the sha256 published beside it.
 ARG GHUL_LLVM_VERSION=1.5.0
