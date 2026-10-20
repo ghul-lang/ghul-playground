@@ -3,7 +3,7 @@
 
 // First, so that the runtime starts its workers from the constructor this
 // module wraps; see errors.js.
-import { countErrors } from './errors.js'
+import { countErrors, setPhase } from './errors.js'
 import { createPlayground, listingKinds, replOffered } from './playground.js'
 import { replPageUrl } from './repl-route.js'
 import { setUpFullscreen, setUpHelp } from './chrome.js'
@@ -691,6 +691,7 @@ const playground = await createPlayground({
     },
 
     onStatus: (state, detail) => {
+        setPhase(state);
         status.textContent = (STATUS_TEXT[state] ?? (() => state))(detail);
 
         compiler.dataset.state =

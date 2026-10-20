@@ -117,6 +117,6 @@ window.addEventListener('message', event => {
 
 // The frame counts nothing itself; the page holding it counts what went wrong
 // here as its own.
-forwardErrors(kind => window.parent.postMessage({ error: kind }, self.origin));
+forwardErrors((kind, detail) => window.parent.postMessage({ error: kind, detail }, self.origin));
 
 window.parent.postMessage({ ready: true }, self.origin);
