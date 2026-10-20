@@ -135,10 +135,9 @@ jobs:
       - name: Check how a disassembly is shaped for the assembly view
         run: node test/assembly-view.mjs
 
-      # A wasm compile builds against library sources at the tags the image
-      # names; ghul-cli pins tags to compiler versions, and the two have to
-      # agree or a program behaves differently here and under `ghul run`.
-      - name: Check the wasm library tags match ghul-cli's pins
+      # The analyse image reads the same ghul-core the compile image builds
+      # wasm programs against, so the editor and the compile agree.
+      - name: Check the two images take the same ghul-core
         run: node scripts/check-wasm-pins.js
 
       - name: Check which analyser events a session's changes produce

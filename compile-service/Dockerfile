@@ -34,9 +34,9 @@ WORKDIR /home/playground
 # owned by this user, before the volume does.
 RUN mkdir -p /home/playground/results /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=65.27.3
-ARG GHUL_RUNTIME_VERSION=27.0.0
-ARG GHUL_RASTER_VERSION=0.13.0
+ARG GHUL_COMPILER_VERSION=66.12.7
+ARG GHUL_RUNTIME_VERSION=29.1.1
+ARG GHUL_RASTER_VERSION=0.13.1
 
 RUN dotnet tool install --tool-path /home/playground/tools \
         ghul.compiler --version "${GHUL_COMPILER_VERSION}" \
@@ -52,10 +52,11 @@ ARG ILSPYCMD_VERSION=11.0.0.9375
 RUN dotnet tool install --tool-path /home/playground/tools \
         ilspycmd --version "${ILSPYCMD_VERSION}"
 
-# The library sources a --target wasm compile builds against, at the tags
-# ghul-cli pins for this compiler (scripts/check-wasm-pins.js holds the two in
-# step). The runtime's sources are the tag of the runtime package above.
-ARG GHUL_CORE_VERSION=0.67.1
+# The library sources a --target wasm compile builds against: a release of
+# ghul-core, which the analyse image has to take too (scripts/check-wasm-pins.js
+# checks that the two agree). The runtime's sources are the tag of the runtime
+# package above; neither pin is otherwise checked.
+ARG GHUL_CORE_VERSION=1.1.0
 
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
@@ -75,10 +76,10 @@ RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghu
  && test -d /home/playground/libraries/ghul-raster/src
 
 # The optimiser, assembler and linker an llvm build hands its module to,
-# which writes the native views' optimised IR and assembly: the release the
-# compiler's build/requirements.json names (scripts/check-wasm-pins.js holds
-# the two in step), checked against the sha256 published beside it.
-ARG GHUL_LLVM_VERSION=0.16.0
+# which writes the native views' optimised IR and assembly: a release pinned
+# here by hand, with nothing else checking it, and verified against the sha256
+# published beside it.
+ARG GHUL_LLVM_VERSION=1.5.0
 ARG GHUL_LLVM_TRIPLE=x86_64-unknown-linux-musl
 
 ADD --chown=playground:playground \

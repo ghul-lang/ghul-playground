@@ -198,7 +198,7 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
     const choice = document.createElement('div');
     choice.className = 'target';
     choice.setAttribute('role', 'group');
-    choice.setAttribute('aria-label', 'Which compiled code to show');
+    choice.setAttribute('aria-label', 'Which generated code to show');
 
     const options = document.createElement('div');
     options.className = 'view-options';
