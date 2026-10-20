@@ -1967,7 +1967,7 @@ chrome.on('error', e => {
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program)}); true`);
 
         check('the compiled-code tab is labelled the same whatever runs',
-            (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'compiled');
+            (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'Generated code');
 
         await ev(`document.getElementById('tab-view').click(); true`);
 
@@ -2079,7 +2079,7 @@ chrome.on('error', e => {
             await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program)}); true`);
 
             check('the compiled-code tab keeps its label on wasm',
-                (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'compiled');
+                (await ev(`document.getElementById('tab-view').textContent.trim()`)) === 'Generated code');
 
             await ev(`document.getElementById('tab-view').click(); true`);
 
