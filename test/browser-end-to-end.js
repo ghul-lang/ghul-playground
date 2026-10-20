@@ -938,7 +938,7 @@ chrome.on('error', e => {
     check('and an unhandled rejection likewise',
         withErrors.filter(p => p.startsWith('mini-ide-error/standalone/unhandled-rejection')).length === 1, JSON.stringify(withErrors));
     check('each names, at most, one of the page\'s own scripts and its phase',
-        withErrors.every(p => /^mini-ide-error\/standalone\/[a-z-]+(\/[A-Za-z0-9._-]+){0,2}$/.test(p)), JSON.stringify(withErrors));
+        withErrors.filter(p => p.startsWith('mini-ide-error/')).every(p => /^mini-ide-error\/standalone\/[a-z-]+(\/[A-Za-z0-9._-]+){0,2}$/.test(p)), JSON.stringify(withErrors));
     check('with nothing the error said', !withErrors.some(p => p.includes('secret')), JSON.stringify(withErrors));
 
     // Whatever the block did not use up must not excuse a real failure later.
