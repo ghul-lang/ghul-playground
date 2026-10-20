@@ -67,7 +67,7 @@ export class CellRuntime {
 
         // A failure in the frame, by class alone.
         if (typeof data.error === 'string' && data.id === undefined) {
-            reportError(data.error);
+            reportError(data.error, typeof data.detail === 'string' ? data.detail : null);
             return;
         }
 

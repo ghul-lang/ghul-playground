@@ -23,8 +23,22 @@ export const TIME_BANDS = ['under-10s', '10-30s', '30s-2m', '2-10m', 'over-10m']
 const TROUBLE = {
     'mini-ide-result': ['busy', 'error', 'timeout', 'too-big'],
     'repl-cell': ['error'],
-    'mini-ide-analyser': ['refused', 'unavailable', 'dropped'],
-    'repl-analyser': ['refused', 'unavailable', 'dropped'],
+    'mini-ide-analyser': ['refused'],
+    'repl-analyser': ['refused'],
+};
+
+// An analysis session that was lost, or never came up at first, and may have
+// come back: it is only trouble if the visit never saw it ready again. The
+// session's own events say which, so a visit settles it (see visitsOf).
+const RECOVERABLE = {
+    'mini-ide-analyser': ['unavailable', 'dropped'],
+    'repl-analyser': ['unavailable', 'dropped'],
+};
+const READY_AGAIN = ['connected', 'reconnected'];
+
+// Not a failure: the first output took long enough to notice. Counted
+// separately so it neither inflates nor hides the real problems.
+const SLOW = {
     'mini-ide-first-output': ['over-10s'],
 };
 
@@ -210,6 +224,8 @@ export function splitEvent(path) {
 export function classify(family, what) {
     if (family.endsWith('-error')) return 'fault';
     if (TROUBLE[family]?.includes(what)) return 'trouble';
+    if (RECOVERABLE[family]?.includes(what)) return 'recovered';
+    if (SLOW[family]?.includes(what)) return 'slow';
     if (PROGRAM_FAILED[family]?.includes(what)) return 'program';
     return null;
 }
@@ -282,7 +298,18 @@ export function visitsOf(rows) {
 
         const kind = classify(family, what);
 
-        if (kind) visit.problems.push({ kind, family, host, detail, what });
+        if (kind) visit.problems.push({ kind, family, host, detail, what, after: visit.events.length });
+    }
+
+    // A lost analysis session is only trouble if the same visit never saw it
+    // ready again.
+    for (const visit of visits.values()) {
+        for (const p of visit.problems) {
+            if (p.kind === 'recovered' &&
+                !visit.events.slice(p.after).some(e => e.family === p.family && e.host === p.host && READY_AGAIN.includes(e.what))) {
+                p.kind = 'trouble';
+            }
+        }
     }
 
     return [...visits.values()];
@@ -474,7 +501,7 @@ export function problems(visits, days) {
         }
     }
 
-    const order = { fault: 0, trouble: 1, program: 2 };
+    const order = { fault: 0, trouble: 1, recovered: 2, slow: 3, program: 4 };
 
     return [...rows.values()]
         .map(row => ({ ...row, visits: row.visits.size, byDay: days.map(d => row.byDay.get(d) ?? 0) }))
@@ -553,7 +580,10 @@ export function summary(visits) {
         visits: withPages.length,
         pageviews: withPages.reduce((n, v) => n + v.pages.length, 0),
         bounced: withPages.filter(v => v.pages.length === 1 && !v.events.length).length,
-        troubled: withPages.filter(v => v.problems.some(p => p.kind !== 'program')).length,
+        troubled: withPages.filter(v => v.problems.some(p => p.kind === 'fault' || p.kind === 'trouble')).length,
+        recovered: withPages.filter(v => v.problems.some(p => p.kind === 'recovered')).length,
+        slow: withPages.filter(v => v.problems.some(p => p.kind === 'slow')).length,
+        programFailed: withPages.filter(v => v.problems.some(p => p.kind === 'program')).length,
         ranCode: withPages.filter(v => v.events.some(e =>
             ['mini-ide-run', 'repl-cell'].includes(e.family))).length,
     };
