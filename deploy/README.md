@@ -704,23 +704,24 @@ the 1,800, which keeps the two targets' results inside the cache together.
 
 ## moving to a new compiler or runtime
 
-Renovate proposes these, so the usual answer is to let it. It knows all five
-places the versions are written, and CI checks that they agree, that the
-examples still compile, and that a program still runs in a browser. A green
-pull request is the whole review.
+`versions.json` names the one version of each tool the whole site runs: the
+compiler, the runtime, raster, ghul-core, ghul-llvm, the language server, the
+disassembler and the REPL library. Every other file that names a version is
+written from it by `node scripts/sync-versions.js`, and CI runs
+`node scripts/check-versions.js`, which fails if any place says anything else
+- the compile service and the analyser on different compilers, say - or if a
+new place names a version that `scripts/versions.js` does not list.
 
-To do it by hand, the five are:
+To move to the latest of everything:
 
-| where | what |
-| --- | --- |
-| `.config/dotnet-tools.json` | the compiler, for local development |
-| `web/web.csproj` | the runtime the browser loads |
-| `runner/runner.ghulproj` | the runtime the runner builds against |
-| `compile-service/Dockerfile` | both, as build arguments |
-| `analyse-service/Dockerfile` | both, and the language server |
+```sh
+node scripts/bump-versions.js --latest
+```
 
-They have to move together. `node scripts/check-versions.js` says so if they
-have not, which is the same check CI runs.
+or name tools: `node scripts/bump-versions.js --compiler 66.12.11 --llvm 1.5.0`.
+Both edit `versions.json` and then write the other files, which are the tool
+manifest, `web/web.csproj`, `runner/runner.ghulproj` and both service
+Dockerfiles.
 
 The runtime is the one to be careful with: the services compile a reader's
 program against one runtime and the browser loads another, so a version left
