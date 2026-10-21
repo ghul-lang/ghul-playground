@@ -34,9 +34,9 @@ WORKDIR /home/playground
 # owned by this user, before the volume does.
 RUN mkdir -p /home/playground/results /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=66.14.0
-ARG GHUL_RUNTIME_VERSION=29.2.0
-ARG GHUL_RASTER_VERSION=0.14.0
+ARG GHUL_COMPILER_VERSION=66.15.0
+ARG GHUL_RUNTIME_VERSION=29.2.1
+ARG GHUL_RASTER_VERSION=0.14.1
 
 RUN dotnet tool install --tool-path /home/playground/tools \
         ghul.compiler --version "${GHUL_COMPILER_VERSION}" \
@@ -56,7 +56,7 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # ghul-core, which the analyse image has to take too (scripts/check-wasm-pins.js
 # checks that the two agree). The runtime's sources are the tag of the runtime
 # package above; neither pin is otherwise checked.
-ARG GHUL_CORE_VERSION=1.3.0
+ARG GHUL_CORE_VERSION=1.4.0
 
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
