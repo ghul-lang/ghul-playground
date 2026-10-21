@@ -209,6 +209,10 @@ export async function createPlayground({
     files = [],
     onOutput = () => { },
     onInput = () => { },
+    // Whether the page has a box to type input into, which is what makes
+    // standard input a terminal to a wasm program. A page that supplies input
+    // another way says false.
+    terminalInput = true,
     onImages = () => { },
     onDiagnostics = () => { },
     onStatus = () => { },
@@ -785,6 +789,7 @@ export async function createPlayground({
             loader: result.loader,
             args: args ?? [],
             files,
+            terminalInput,
             onOutput: text => {
                 live.feed(text.slice(fed));
                 fed = text.length;

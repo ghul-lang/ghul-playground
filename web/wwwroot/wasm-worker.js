@@ -27,7 +27,7 @@ export function wasmWorker() {
     const INPUT_SLOTS = 4;
 
     self.onmessage = async ({ data }) => {
-        const { module, loader, args, files, input } = data;
+        const { module, loader, args, files, input, terminal } = data;
 
         const control = new Int32Array(input, 0, INPUT_SLOTS);
         const text = new Uint16Array(input, INPUT_SLOTS * 4);
@@ -67,6 +67,7 @@ export function wasmWorker() {
                 args,
                 files,
                 env: {},
+                terminal,
                 stdin,
                 stdout: piece => postMessage({ type: 'output', stream: 'stdout', text: piece }),
                 stderr: piece => postMessage({ type: 'output', stream: 'stderr', text: piece }),
