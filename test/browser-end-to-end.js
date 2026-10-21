@@ -402,6 +402,52 @@ chrome.on('error', e => {
     check('what was typed is echoed into the transcript', /^world$/m.test(answered));
     check('the box goes away once the run has finished', !(await boxShowing()));
 
+    // The wait for a line is the reader's, so neither the spinner nor the note
+    // about a slow start is shown while the program waits: the input box is the
+    // signal. The program then goes on running, and the spinner is back.
+    const spinnerShowing = () => ev(`Boolean(document.getElementById('output').querySelector('.spin'))`);
+
+    const thenBusy = [
+        'use IO.Std.write_line;', 'use IO.Std.read_line;', '', 'entry() is',
+        '    let line = read_line();', '', '    System.Threading.Thread.sleep(3000);', '',
+        '    write_line("read {line ?? "nothing"}");', 'si', ''
+    ].join('\n');
+
+    await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(thenBusy)}); true`);
+    await sleep(1000);
+    await ev(`document.getElementById('run').click(); true`);
+
+    let quiet = false;
+    for (let i = 0; i < 180; i++) {
+        quiet = await boxShowing();
+        if (quiet) break;
+        await sleep(500);
+    }
+    check('a program that reads without a prompt asks for a line', quiet);
+    check('a program waiting for a line shows no spinner and no slow-start note',
+        !(await spinnerShowing())
+        && !(await ev(`document.getElementById('output').innerText`)).includes('works silently'));
+
+    await ev(`(() => {
+        document.getElementById('stdin').value = 'x';
+        document.getElementById('input-row')
+            .dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        return true;
+    })()`);
+
+    let spinning = false;
+    for (let i = 0; i < 20; i++) {
+        spinning = await spinnerShowing();
+        if (spinning) break;
+        await sleep(100);
+    }
+    check('the spinner returns once the program carries on', spinning);
+
+    for (let i = 0; i < 180; i++) {
+        if ((await ev(`document.getElementById('output').innerText`)).includes('read x')) break;
+        await sleep(500);
+    }
+
     // Following the output. A program printing more than the pane holds, and
     // then asking for a line: the box appearing takes its height off the pane,
     // so a build that decides whether to follow by measuring the pane when the

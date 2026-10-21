@@ -574,7 +574,14 @@ const waitWords = first_output_ms => {
 const waitNote = document.createElement('span');
 waitNote.className = 'empty note';
 
+// Set while the program has asked for a line and is waiting for the reader to
+// type it: the wait is the reader's, not the program's work, so the spinner
+// and the note about a slow start are not shown; the input box is the signal.
+let awaitingInput = false;
+
 const showSpinner = () => {
+    if (awaitingInput) return;
+
     if (!runShowedOutput && program?.firstOutputMs) {
         waitNote.textContent =
             ` This program works silently for a while before its first output: `
@@ -600,6 +607,11 @@ const hideSpinner = () => {
     spinner.remove();
     waitNote.remove();
 };
+
+// The reader's time spent answering the program is not the program's time to
+// first output, so it is taken off the wait that is counted.
+const inputWaited = () =>
+    (inFlight?.inputWaitedMs ?? 0) + (awaitingInput ? performance.now() - inFlight.inputSince : 0);
 
 const initialSource = program?.source ?? savedSource;
 
@@ -635,6 +647,7 @@ const playground = await createPlayground({
         }
 
         if (runUnderway) showSpinner();
+
         followOutput();
     },
 
@@ -643,6 +656,19 @@ const playground = await createPlayground({
     // behind would take a line nothing is going to read.
     onInput: wanted => {
         inputRow.hidden = !wanted;
+
+        if (wanted && inFlight && !awaitingInput) {
+            awaitingInput = true;
+            inFlight.inputSince = performance.now();
+
+            hideSpinner();
+        } else if (!wanted && awaitingInput) {
+            if (inFlight) inFlight.inputWaitedMs = (inFlight.inputWaitedMs ?? 0) + performance.now() - inFlight.inputSince;
+
+            awaitingInput = false;
+
+            if (runUnderway) showSpinner();
+        }
 
         if (!wanted) return;
 
@@ -1133,7 +1159,7 @@ function countFirstOutput() {
 
     firstOutputCounted = true;
 
-    count('first-output', band(performance.now() - inFlight.at));
+    count('first-output', band(performance.now() - inFlight.at - inputWaited()));
 }
 
 function countOutcome(outcome) {
@@ -1181,7 +1207,8 @@ argumentsRow.addEventListener('submit', event => {
 argumentsInput.addEventListener('input', countArguments);
 
 function runProgram({ automatic = false } = {}) {
-    inFlight = { at: performance.now(), stopped: false, counted: false };
+    inFlight = { at: performance.now(), stopped: false, counted: false, inputWaitedMs: 0, inputSince: 0 };
+    awaitingInput = false;
     runShowedOutput = false;
 
     count('run', `${automatic ? 'automatic' : 'manual'}/${provenance?.name ?? 'editor'}`);
