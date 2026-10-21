@@ -20,7 +20,7 @@ ARG GHUL_LANGUAGE_SERVER_VERSION=1.33.2
 
 # Not published to npm; it ships as an asset on the extension's releases.
 RUN npm install -g --no-audit --no-fund \
-    "https://github.com/degory/ghul-vsce/releases/download/v${GHUL_LANGUAGE_SERVER_VERSION}/ghul-language-server-${GHUL_LANGUAGE_SERVER_VERSION}.tgz"
+    "https://github.com/ghul-lang/ghul-vsce/releases/download/v${GHUL_LANGUAGE_SERVER_VERSION}/ghul-language-server-${GHUL_LANGUAGE_SERVER_VERSION}.tgz"
 
 RUN useradd --create-home --shell /usr/sbin/nologin playground
 

@@ -52,7 +52,7 @@ export function askForToken(container, { message } = {}) {
                 </div>
                 <p class="ghul-token-ask">
                     Don't have one?
-                    <a href="https://github.com/degory/ghul-playground/issues"
+                    <a href="https://github.com/ghul-lang/ghul-playground/issues"
                        target="_blank" rel="noopener">Ask on GitHub</a>.
                 </p>
             </form>`;

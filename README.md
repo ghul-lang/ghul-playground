@@ -48,7 +48,7 @@ or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>.
 To run a service outside a container while working on it, `npm run
 compile-service` and `npm run analyse-service` do that. The analyse service
 needs `ghul-language-server` on `PATH`, which is published as an asset on the
-[extension's releases](https://github.com/degory/ghul-vsce/releases).
+[extension's releases](https://github.com/ghul-lang/ghul-vsce/releases).
 
 ## what works
 
@@ -86,7 +86,7 @@ with end of input rather than left waiting.
 
 ## drawing
 
-[`ghul.raster`](https://github.com/degory/ghul-raster) is on the reference list
+[`ghul.raster`](https://github.com/ghul-lang/ghul-raster) is on the reference list
 beside the runtime, so a program can draw into an image and write a PNG. The
 picture goes to the browser's own in-memory filesystem, which is emptied with
 the tab; calling `show` on it prints the marker that brings it to the page,
@@ -257,4 +257,4 @@ one either way.
 
 ## issues
 
-[View open issues](https://github.com/degory/ghul/issues?q=is%3Aopen+is%3Aissue+label%3Aghul-playground) or [raise a new one](https://github.com/degory/ghul/issues/new?labels=ghul-playground).
+[View open issues](https://github.com/ghul-lang/ghul/issues?q=is%3Aopen+is%3Aissue+label%3Aghul-playground) or [raise a new one](https://github.com/ghul-lang/ghul/issues/new?labels=ghul-playground).
