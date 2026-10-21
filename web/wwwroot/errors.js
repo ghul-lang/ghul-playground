@@ -41,11 +41,13 @@ export function setPhase(status) {
 // name that is not a plain file name, or no name at all.
 function sourceOf(url) {
     try {
+        if (!url) return '';
+
         const parsed = new URL(url, location.href);
 
         if (parsed.protocol === 'blob:') return parsed.origin === location.origin ? 'blob' : '';
         if (parsed.origin !== location.origin) return '';
-        if (url && parsed.pathname === location.pathname) return 'inline';
+        if (parsed.pathname === location.pathname) return 'inline';
 
         const name = parsed.pathname.split('/').pop();
 
