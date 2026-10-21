@@ -575,13 +575,9 @@ const waitNote = document.createElement('span');
 waitNote.className = 'empty note';
 
 // Set while the program has asked for a line and is waiting for the reader to
-// type it: the wait is the reader's, so it is said as that rather than shown
-// as a program that is working.
+// type it: the wait is the reader's, not the program's work, so the spinner
+// and the note about a slow start are not shown; the input box is the signal.
 let awaitingInput = false;
-
-const inputNote = document.createElement('span');
-inputNote.className = 'empty note';
-inputNote.textContent = 'Waiting for input: type a line below and press Enter.';
 
 const showSpinner = () => {
     if (awaitingInput) return;
@@ -650,8 +646,7 @@ const playground = await createPlayground({
             outputPane.textContent = '';
         }
 
-        if (awaitingInput) outputPane.appendChild(inputNote);
-        else if (runUnderway) showSpinner();
+        if (runUnderway) showSpinner();
 
         followOutput();
     },
@@ -667,12 +662,10 @@ const playground = await createPlayground({
             inFlight.inputSince = performance.now();
 
             hideSpinner();
-            outputPane.appendChild(inputNote);
         } else if (!wanted && awaitingInput) {
             if (inFlight) inFlight.inputWaitedMs = (inFlight.inputWaitedMs ?? 0) + performance.now() - inFlight.inputSince;
 
             awaitingInput = false;
-            inputNote.remove();
 
             if (runUnderway) showSpinner();
         }
@@ -1216,7 +1209,6 @@ argumentsInput.addEventListener('input', countArguments);
 function runProgram({ automatic = false } = {}) {
     inFlight = { at: performance.now(), stopped: false, counted: false, inputWaitedMs: 0, inputSince: 0 };
     awaitingInput = false;
-    inputNote.remove();
     runShowedOutput = false;
 
     count('run', `${automatic ? 'automatic' : 'manual'}/${provenance?.name ?? 'editor'}`);
