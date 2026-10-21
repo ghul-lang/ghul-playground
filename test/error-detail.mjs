@@ -14,7 +14,7 @@ const check = (what, ok, detail = '') => {
 const listeners = {};
 const workers = [];
 
-globalThis.location = { href: 'https://ghul.dev/playground/', origin: 'https://ghul.dev' };
+globalThis.location = { href: 'https://ghul.dev/playground/rosetta-code/ludic-numbers', origin: 'https://ghul.dev', pathname: '/playground/rosetta-code/ludic-numbers' };
 globalThis.window = {
     addEventListener: (type, fn) => (listeners[type] ??= []).push(fn),
     Worker: class { constructor(url) { this.url = url; this.handlers = []; workers.push(this); } addEventListener(type, fn) { this.handlers.push(fn); } }
@@ -55,6 +55,9 @@ check('a script from another origin is not named', out.join() === 'f/script', ou
 
 out = await fresh(() => script('https://ghul.dev/play ground/with space.js'));
 check('a name that is not a plain file name is not recorded', out.join() === 'f/script', out.join());
+
+out = await fresh(() => script('https://ghul.dev/playground/rosetta-code/ludic-numbers'));
+check('an error from the page\'s own document is inline, not named by its address', out.join() === 'f/script/inline', out.join());
 
 out = await fresh(() => script(''));
 check('a cross-origin error with no file name has no source', out.join() === 'f/script', out.join());
