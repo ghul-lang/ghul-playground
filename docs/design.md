@@ -286,7 +286,7 @@ ghūl compiler emits records a reference to `System.Runtime 8.0.0.0`, which is
 not a version that exists, and Roslyn rejects the reference with `CS0012` as
 soon as C# names a type from the assembly. Reflection is resolved by the runtime
 rather than by Roslyn, so it is unaffected. When
-[degory/ghul#2709](https://github.com/degory/ghul/issues/2709) is fixed, the
+[ghul-lang/ghul#2709](https://github.com/ghul-lang/ghul/issues/2709) is fixed, the
 reflection can become a direct call.
 
 This is also why `web.csproj` can reference `ghul.runtime` and `ghul.raster`
