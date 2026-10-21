@@ -36,7 +36,12 @@ const filePath = path => path.replace(/^(\.\/)+/, '');
 // the program ends or is stopped, `send(line)` and `end()` answer a program
 // waiting for input, `stop()` ends it, and `readFile(path)` answers the
 // bytes the program last wrote to a file, or null when it wrote none there.
-export function runWasm({ module, loader, args = [], files: inputFiles = [], onOutput = () => { }, onInput = () => { } }) {
+//
+// `terminalInput` says whether standard input is a terminal to the program:
+// true where the page has a box to type into, false for a page that supplies
+// input another way. Standard output and error always are, since the output
+// pane is a display, as a terminal would be.
+export function runWasm({ module, loader, args = [], files: inputFiles = [], terminalInput = true, onOutput = () => { }, onInput = () => { } }) {
     const worker = new Worker(workerScript());
     const input = inputBuffer();
 
@@ -121,7 +126,8 @@ export function runWasm({ module, loader, args = [], files: inputFiles = [], onO
         loader,
         args,
         files: Object.fromEntries(inputFiles.map(({ name, bytes }) => [name, bytes])),
-        input
+        input,
+        terminal: { stdin: terminalInput, stdout: true, stderr: true }
     });
 
     const answer = line => {
