@@ -2082,6 +2082,30 @@ chrome.on('error', e => {
         check('a program that runs on wasm runs there, and the timing says so',
             onWasm.endsWith('on WebAssembly'), JSON.stringify(onWasm));
 
+        // The mini-IDE has a box to type into and a pane to show output, so a
+        // wasm program there reads all three standard streams as terminals.
+        const streams = [
+            'use IO.Std.write_line;', '', 'entry() is',
+            '    write_line("input redirected: {IO.Std.is_input_redirected}");',
+            '    write_line("output redirected: {IO.Std.is_output_redirected}");',
+            '    write_line("error redirected: {IO.Std.is_error_redirected}");',
+            'si', ''
+        ].join('\n');
+
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(streams)}); true`);
+        await sleep(1000);
+
+        await runFor('error redirected');
+        const terminals = await ev(`document.getElementById('output').innerText`);
+        check('a wasm program in the mini-IDE reads all three standard streams as terminals',
+            terminals.includes('input redirected: false')
+            && terminals.includes('output redirected: false')
+            && terminals.includes('error redirected: false'),
+            JSON.stringify(terminals.trim()));
+
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(sixBySeven)}); true`);
+        await sleep(1000);
+
         // The analyser follows the target: a .NET API the wasm target lacks is
         // reported as the program is typed, and not once .NET is chosen.
         const dotnetOnly = ['use IO.Std.write_line;', '', 'entry() is',
