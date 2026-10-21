@@ -860,6 +860,7 @@ export async function createPlayground({
         Atomics.store(control, INPUT_READY, 1);
 
         waiting = false;
+        onInput(false);
     }
 
     // End of input rather than a line, which is what a program reading until
@@ -879,6 +880,7 @@ export async function createPlayground({
         Atomics.store(control, INPUT_READY, 1);
 
         waiting = false;
+        onInput(false);
     }
 
     // The runtime is only started by the first run, so before then there is no
