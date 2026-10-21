@@ -35,7 +35,8 @@ export function setPhase(status) {
     phase = WORD.test(word) ? word.toLowerCase() : '';
 }
 
-// The file name of one of this page's own scripts, `blob` for a script made
+// The file name of one of this page's own scripts, `inline` for code the page's
+// own document holds or has injected into it, `blob` for a script made
 // in the page, and nothing for anything else: a script from another origin, a
 // name that is not a plain file name, or no name at all.
 function sourceOf(url) {
@@ -44,6 +45,7 @@ function sourceOf(url) {
 
         if (parsed.protocol === 'blob:') return parsed.origin === location.origin ? 'blob' : '';
         if (parsed.origin !== location.origin) return '';
+        if (url && parsed.pathname === location.pathname) return 'inline';
 
         const name = parsed.pathname.split('/').pop();
 
