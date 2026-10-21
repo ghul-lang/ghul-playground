@@ -32,7 +32,7 @@ WORKDIR /home/playground
 # and either service may be the first to mount it.
 RUN mkdir -p /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=66.13.2
+ARG GHUL_COMPILER_VERSION=66.14.0
 ARG GHUL_RUNTIME_VERSION=29.2.0
 ARG GHUL_RASTER_VERSION=0.14.0
 
