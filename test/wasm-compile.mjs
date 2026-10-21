@@ -37,6 +37,14 @@ check('library arguments put each library\'s files after its declaration',
         '--library-source', 'runtime@2.0.0=/r', '/r/b.ghul', '/r/c.ghul'
     ]));
 
+check('the core library\'s loader is named before its declaration',
+    JSON.stringify(libraryArguments([
+        { name: 'ghul-core', version: '1.0.0', root: '/c', files: ['/c/a.ghul'] }
+    ])) === JSON.stringify([
+        '--wasm-loader', '/c/host/loader.mjs',
+        '--library-source', 'ghul-core@1.0.0=/c', '/c/a.ghul'
+    ]));
+
 check('a source list skips blank lines and comments',
     JSON.stringify(listedFiles('/r', 'src/a.ghul\n\n# note\n  src/b.ghul  \n'))
         === JSON.stringify(['/r/src/a.ghul', '/r/src/b.ghul']));

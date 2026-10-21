@@ -51,6 +51,11 @@ function libraryArguments(libraries) {
     const args = [];
 
     for (const { name, version, root, files } of libraries) {
+        // The loader that runs a program ships with the core library.
+        if (name === 'ghul-core') {
+            args.push('--wasm-loader', path.join(root, 'host', 'loader.mjs'));
+        }
+
         args.push('--library-source', `${name}@${version}=${root}`, ...files);
     }
 
@@ -80,7 +85,7 @@ async function resolveWasmLibraries(environment = process.env) {
 
     const runtimeList = path.join(runtimeRoot, 'wasm-sources.rsp');
 
-    for (const required of [path.join(coreRoot, 'src'), runtimeList]) {
+    for (const required of [path.join(coreRoot, 'src'), path.join(coreRoot, 'host', 'loader.mjs'), runtimeList]) {
         if (!existsSync(required)) {
             throw new Error(`wasm library sources not found: ${required}`);
         }
