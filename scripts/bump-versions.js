@@ -14,9 +14,9 @@
 // The compiler, runtime and raster are checked against each other by
 // check-versions.js; ghul-core, ghul-llvm, the ghul.repl package, ilspycmd and
 // the language server each have their own flag. `--latest` resolves every one
-// of them to its current release (nuget.org for the packages, the npm registry
-// for the language server, the GitHub release for ghul-core and ghul-llvm) and
-// bumps all of them; an explicit flag bumps only what it names, and wins over
+// of them to its current release (nuget.org for the packages, the GitHub release for
+// ghul-core, ghul-llvm and the language server, whose tarball the image
+// downloads from ghul-vsce's releases) and bumps all of them; an explicit flag bumps only what it names, and wins over
 // `--latest` for that tool. Running with no flags prints the current versions
 // and does nothing.
 
@@ -167,12 +167,6 @@ async function latestRelease(repository) {
     return release.tag_name.replace(/^v/, '');
 }
 
-async function latestNpm(packageName) {
-    const metadata = await fetchJson(`https://registry.npmjs.org/${packageName}/latest`);
-
-    return metadata.version;
-}
-
 // Replaces the value of every `ARG <name>=...` line in the given images.
 function bumpImageArg(label, arg, images, version) {
     let before;
@@ -252,7 +246,7 @@ async function main() {
             llvm: () => latestRelease('ghul-lang/ghul-llvm'),
             repl: () => latestPublished('ghul.repl'),
             ilspy: () => latestPublished('ilspycmd'),
-            languageServer: () => latestNpm('@ghul/language-server'),
+            languageServer: () => latestRelease('ghul-lang/ghul-vsce'),
         };
 
         await Promise.all(Object.keys(latest).map(async key => {
