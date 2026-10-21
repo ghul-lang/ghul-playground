@@ -382,6 +382,11 @@ chrome.on('error', e => {
     check('output arrives before the run has finished',
         (await ev(`document.getElementById('output').innerText`)).includes('what is your name?'));
 
+    // The wait is the reader's, so the pane says so rather than showing a
+    // program that is working.
+    check('a program waiting for a line says it is waiting for input',
+        (await ev(`document.getElementById('output').innerText`)).includes('Waiting for input'));
+
     await ev(`(() => {
         document.getElementById('stdin').value = 'world';
         document.getElementById('input-row')
@@ -396,6 +401,8 @@ chrome.on('error', e => {
         await sleep(500);
     }
     check('the typed line reaches the program', answered.includes('hello, world'),
+        JSON.stringify(answered.trim()));
+    check('the waiting note goes once the line is read', !answered.includes('Waiting for input'),
         JSON.stringify(answered.trim()));
     // A line of its own, so this is the echo rather than the greeting that
     // also contains the word.
