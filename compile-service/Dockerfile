@@ -34,7 +34,7 @@ WORKDIR /home/playground
 # owned by this user, before the volume does.
 RUN mkdir -p /home/playground/results /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=66.16.0
+ARG GHUL_COMPILER_VERSION=66.18.1
 ARG GHUL_RUNTIME_VERSION=29.2.1
 ARG GHUL_RASTER_VERSION=0.14.1
 
