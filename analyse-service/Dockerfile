@@ -16,7 +16,7 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 
-ARG GHUL_LANGUAGE_SERVER_VERSION=1.33.4
+ARG GHUL_LANGUAGE_SERVER_VERSION=1.34.2
 
 # Not published to npm; it ships as an asset on the extension's releases.
 RUN npm install -g --no-audit --no-fund \
@@ -32,8 +32,8 @@ WORKDIR /home/playground
 # and either service may be the first to mount it.
 RUN mkdir -p /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=66.18.1
-ARG GHUL_RUNTIME_VERSION=29.2.1
+ARG GHUL_COMPILER_VERSION=66.18.2
+ARG GHUL_RUNTIME_VERSION=29.3.0
 ARG GHUL_RASTER_VERSION=0.14.1
 
 # Installing as a tool seeds the package cache, which is where the service
@@ -49,7 +49,7 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # The library sources an analyser for the wasm target reads in place of the
 # reference assemblies: the same ghul-core the compile service builds wasm against
 # (scripts/check-wasm-pins.js checks the two images agree).
-ARG GHUL_CORE_VERSION=1.5.0
+ARG GHUL_CORE_VERSION=1.6.1
 
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
