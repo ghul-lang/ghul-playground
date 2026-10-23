@@ -120,6 +120,13 @@ export async function savesTo() {
     return (await currentHandle())?.name ?? null;
 }
 
+// Gives up the file the editor is holding, as New does: the next Save falls
+// through to Save as rather than writing the new program into the old file.
+export async function forget() {
+    try { localStorage.removeItem(NAME_KEY); } catch { }
+    await inStore('readwrite', store => store.delete(HANDLE_KEY));
+}
+
 // Reads a file the reader picks. Returns its name and text, or null if they
 // dismissed the dialog.
 export async function open() {

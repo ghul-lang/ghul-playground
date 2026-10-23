@@ -145,7 +145,7 @@ function registerAsm() {
 // called. Each is what the compiler generates for one target, whatever the
 // program runs on.
 const KINDS = ['il', 'wat', 'llvm-ir', 'x86-asm'];
-const KIND_LABELS = { 'il': 'IL', 'wat': 'WAT', 'llvm-ir': 'LLVM IR', 'x86-asm': 'x86-64' };
+const KIND_LABELS = { 'il': '.NET IL', 'wat': 'WAT', 'llvm-ir': 'LLVM IR', 'x86-asm': 'x86-64' };
 
 // The listing of what a run on `target` executes.
 const runKind = target => target === 'wasm' ? 'wat' : 'il';
@@ -393,6 +393,14 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
 
         const mine = ++request;
 
+        // The old listing is taken away before the new one is asked for: a
+        // listing of another target sitting under "compiling for ..." would
+        // read as though it were the switch's answer.
+        if (shown && shown.kind !== wanted.kind) {
+            host.hidden = true;
+            shown = null;
+        }
+
         say(`compiling for the ${name} listing`, { spinning: true });
 
         let answer;
@@ -455,12 +463,19 @@ export function createAssemblyView({ panel, fetchView, getSource, getTarget, get
         /// Called when the source or target changes while the tab is open: the
         /// listing shown is no longer the program's, which the reader is told
         /// rather than having a compile started on every keystroke. A change of
-        /// target moves only the dot.
+        /// target with the source as it was switches the listing outright -
+        /// what runs is now built another way, so the old listing is cleared
+        /// and the new one asked for.
         changed: () => {
             pressed();
 
             if (same(current(), shown)) {
                 say('');
+                return;
+            }
+
+            if (shown && shown.source === getSource()) {
+                refresh();
                 return;
             }
 

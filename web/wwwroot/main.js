@@ -28,9 +28,9 @@ const count = (what, detail) => countEvent(`mini-ide-${what}/${HOST}${detail ? `
 countErrors(`mini-ide-error/${HOST}`, countEvent);
 
 const runButton = document.getElementById('run');
-// The .NET / WebAssembly choice, offered on the standalone page only: a task
-// or example page framing the mini-IDE runs each program where it is known to
-// run, and offers no choice.
+// The .NET / WebAssembly choice, offered for the reader's own program on the
+// standalone page: a task or example page framing the mini-IDE runs each
+// program where it is known to run, and offers no choice.
 const targetChoice = document.getElementById('target');
 
 // `?wasm` in the address offers wasm for whatever is in the editor, so a
@@ -479,6 +479,11 @@ function forgetProvenance() {
 
     document.title = currentName ? `${currentName} - ghūl playground` : 'ghūl playground';
 
+    // The buffer is the reader's own program now, so which target it runs on
+    // is theirs to choose. The target stays where it is: nothing about the
+    // program changed that would move it.
+    playground.setWasmCapable(true, { prefer: playground.getTarget() });
+
     renderProgram();
 }
 
@@ -618,6 +623,38 @@ const initialSource = program?.source ?? savedSource;
 // The target a run uses now, as the playground last reported it.
 let runTarget = 'dotnet';
 
+// What the playground last said about the targets: whether the program is
+// known to run on wasm, and whether this browser can run it.
+let offeredTargets = { capable: false, supported: false };
+
+// The standalone page showing the reader's own program, rather than one named
+// by its path or a frame around one: the only place the choice of target is
+// theirs.
+const ownProgram = () => HOST === 'standalone' && !provenance;
+
+// Both targets in view, the one the next run uses marked, so the control says
+// what runs now and what a click changes to. Where the browser cannot run
+// wasm, .NET is shown alone - as what runs, rather than as a choice with one
+// option missing.
+function updateTargetChoice() {
+    const offered = ownProgram() && offeredTargets.capable;
+    const wasmButton = targetChoice.querySelector('[data-target="wasm"]');
+
+    targetChoice.hidden = !offered;
+    wasmButton.hidden = !offeredTargets.supported;
+
+    if (offered && !offeredTargets.supported) targetChoice.dataset.solo = '';
+    else delete targetChoice.dataset.solo;
+
+    targetChoice.title = offered && !offeredTargets.supported
+        ? 'This browser cannot run WebAssembly, so .NET is the only target'
+        : '';
+
+    for (const button of targetChoice.querySelectorAll('button')) {
+        button.setAttribute('aria-pressed', String(button.dataset.target === runTarget));
+    }
+}
+
 // What the index says the program builds for, where it knows the program:
 // the compiled-code tab greys out a listing it does not build for.
 const buildsOf = loaded => loaded?.indexed ? { wasm: loaded.wasm === true, native: loaded.native === true } : null;
@@ -684,18 +721,17 @@ const playground = await createPlayground({
 
     onImages: showImages,
 
-    // Where the next run goes is decided for the reader: wasm for a program
-    // known to run there, in a browser that can, and .NET otherwise.
+    // Where the next run goes is the reader's choice for their own program,
+    // with both targets in view and the one the next run uses marked; for a
+    // program named by the page it is decided for them, as where it is known
+    // to run.
     onTargets: ({ capable, supported, target }) => {
         runTarget = target;
+        offeredTargets = { capable, supported };
+
+        updateTargetChoice();
 
         if (!viewPane.hidden) assemblyView?.changed();
-
-        targetChoice.hidden = HOST !== 'standalone' || !(capable && supported);
-
-        for (const button of targetChoice.querySelectorAll('button')) {
-            button.setAttribute('aria-pressed', String(button.dataset.target === target));
-        }
     },
 
     onDiagnostics: list => {
@@ -821,7 +857,12 @@ assemblyView = createAssemblyView({
     runsTitle: HOST === 'rosetta-task-page' ? 'what runs for this solution' : 'what runs for this program'
 });
 
-playground.setWasmCapable(WASM_REQUESTED || program?.wasm === true);
+// The reader's own program starts on .NET with both targets offered - wasm's
+// narrower library is a choice to make, not a default, and this way no casual
+// visitor opens a wasm analyser session (`?wasm` starts it on WebAssembly
+// instead). A program named by the page runs where the corpus knows it runs.
+if (requested) playground.setWasmCapable(WASM_REQUESTED || program?.wasm === true);
+else playground.setWasmCapable(true, { prefer: WASM_REQUESTED ? 'wasm' : 'dotnet' });
 
 for (const button of targetChoice.querySelectorAll('button')) {
     button.addEventListener('click', () => {
@@ -1412,6 +1453,33 @@ function acknowledge(name) {
     clearTimeout(acknowledgement);
     acknowledgement = setTimeout(() => delete fileToggle.dataset.done, 1500);
 }
+
+// A new program: the editor is emptied, and nothing of the old one - its
+// path, its file, its title - is kept. Undo brings the source back within
+// this tab; the confirm stands between the click and losing it for good.
+function newProgram() {
+    closeMenu();
+
+    if (playground.getSource().trim()
+        && !confirm('Start a new program? The source in the editor is discarded.')) return;
+
+    loadedSource = '';
+    playground.setSource('');
+
+    currentName = null;
+    document.title = 'ghūl playground';
+
+    // The opened file is given up too: Save after New must fall through to
+    // Save as rather than write the new program into the old file.
+    files.forget();
+
+    forgetProvenance();
+}
+
+document.getElementById('file-new').addEventListener('click', () => {
+    count('action', 'new');
+    newProgram();
+});
 
 async function openFile() {
     closeMenu();
