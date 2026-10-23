@@ -1469,6 +1469,10 @@ function newProgram() {
     currentName = null;
     document.title = 'ghūl playground';
 
+    // The opened file is given up too: Save after New must fall through to
+    // Save as rather than write the new program into the old file.
+    files.forget();
+
     forgetProvenance();
 }
 
