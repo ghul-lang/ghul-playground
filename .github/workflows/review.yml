@@ -137,4 +137,5 @@ jobs:
         2. GHUL.md - ghūl language reference, consult as needed while reading the diff
     secrets:
       claude-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      zai-auth-token: ${{ secrets.ZAI_API_KEY }}
       gh-app-private-key: ${{ secrets.GHUL_REVIEWER_PRIVATE_KEY }}
