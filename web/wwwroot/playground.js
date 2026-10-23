@@ -454,8 +454,7 @@ export async function createPlayground({
 
     // The target the page has chosen for this program: 'wasm' runs it in the
     // browser's own WebAssembly engine where that engine can, and 'dotnet' on
-    // the .NET runtime. The page offers the choice only for a program known to
-    // run on wasm; anything else stays on .NET.
+    // the .NET runtime. The page decides whether the choice is the reader's.
     let target = 'dotnet';
 
     // Whether the program in the editor is known to run on wasm.
@@ -466,17 +465,26 @@ export async function createPlayground({
         const effective = wasmCapable && supported ? target : 'dotnet';
 
         // The analyser describes the program as the target it will run on
-        // compiles it, so a change of target is a change of session.
-        client.setUrl(effective === 'wasm' ? `${ANALYSE_SERVICE}?target=wasm` : ANALYSE_SERVICE);
+        // compiles it, so a change of target is a change of session. The
+        // session's diagnostics go with it, and the last run's compile
+        // diagnostics were built for the target being left, so they go too
+        // rather than standing in for the new one's until it answers.
+        if (client.setUrl(effective === 'wasm' ? `${ANALYSE_SERVICE}?target=wasm` : ANALYSE_SERVICE)) {
+            monaco.editor.setModelMarkers(editor.getModel(), 'ghul-compile', []);
+            compileDiagnostics = [];
+            reportDiagnostics();
+        }
 
         onTargets({ capable: wasmCapable, supported, target: effective });
     }
 
     // A program known to run on wasm starts out on wasm, and one that is not
-    // runs on .NET, where the reader is offered no choice.
-    function setWasmCapable(capable) {
+    // runs on .NET, where the reader is offered no choice. `prefer` names the
+    // target a program of unknown capability starts on: the page that offers
+    // the choice for the reader's own source starts it on .NET.
+    function setWasmCapable(capable, { prefer } = {}) {
         wasmCapable = capable === true;
-        target = wasmCapable ? 'wasm' : 'dotnet';
+        target = wasmCapable && (prefer === 'dotnet' || prefer === 'wasm') ? prefer : wasmCapable ? 'wasm' : 'dotnet';
         reportTargets();
     }
 

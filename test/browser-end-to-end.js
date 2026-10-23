@@ -743,6 +743,11 @@ chrome.on('error', e => {
         await sleep(500);
     }
 
+    // The program has run, so the page has long since said what it knows
+    // about the targets - and a program named by its path offers no choice.
+    check('a program named by its path offers no choice of target',
+        await ev(`document.getElementById('target').hidden`));
+
     // The path says where the buffer came from, so editing the program leaves
     // it alone - the link still loads what it names - while replacing the
     // buffer wholesale gives it up, along with the name Save would offer.
@@ -755,6 +760,11 @@ chrome.on('error', e => {
     await ev(`monaco.editor.getModels()[0].setValue('entry() is si\\n'); true`);
     await sleep(300);
     check('replacing the buffer gives up the path', await ev(`location.pathname`) === new URL(BASE).pathname);
+
+    // With the buffer their own again, the choice of target is the reader's.
+    await sleep(1000);
+    check('the reader\'s own program offers the choice of target',
+        await ev(`!document.getElementById('target').hidden`));
 
     // A program that reads files it names in playground-files. The collection
     // is served by the test rather than fetched, so this checks the playground
@@ -2012,6 +2022,18 @@ chrome.on('error', e => {
         const program = ['use IO.Std.write_line;', '', 'entry() is', '    write_line("{6 * 7}");', 'si', ''].join('\n');
         const listing = () => ev(`monaco.editor.getModels().map(m => m.getValue()).find(v => v.includes('.method')) ?? ''`);
 
+        // The reader's own program starts on .NET: wasm is a choice to make
+        // rather than a default, so no visitor's first analyser session is a
+        // wasm one.
+        let startsDotnet = null;
+        for (let i = 0; i < 40; i++) {
+            startsDotnet = await ev(`(() => { const t = document.getElementById('target');
+                 return !t.hidden && t.querySelector('[data-target="dotnet"]').getAttribute('aria-pressed') === 'true'; })()`);
+            if (startsDotnet) break;
+            await sleep(250);
+        }
+        check('the reader\'s own program starts on .NET with both targets offered', Boolean(startsDotnet));
+
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program)}); true`);
 
         check('the compiled-code tab is labelled the same whatever runs',
@@ -2034,6 +2056,31 @@ chrome.on('error', e => {
 
         check('an edit says the listing is out of date',
             await ev(`document.querySelector('#view .view-status')?.textContent.includes('changed')`));
+
+        // Switching the target with the tab open takes the old listing away
+        // and asks for the new one, rather than leaving the old one standing
+        // beside a note.
+        await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program)}); true`);
+        await ev(`document.querySelector('#target [data-target="wasm"]')?.click(); true`);
+
+        if (await ev(`!document.querySelector('#target [data-target="wasm"]').hidden`)) {
+            let wat = '';
+            for (let i = 0; i < 120 && !wat; i++) {
+                wat = await ev(`monaco.editor.getModels().map(m => m.getValue()).find(v => v.startsWith('(module')) ?? ''`);
+                if (!wat) await sleep(500);
+            }
+            check('switching target replaces the listing with the other target\'s', wat.includes('$entry'), wat.slice(0, 200));
+        } else {
+            log('skip  listing switch: this browser cannot run a wasm build');
+        }
+
+        // New, in the File menu: the buffer is emptied. The confirm is
+        // answered here rather than clicked through.
+        await ev(`window.confirm = () => true; true`);
+        await ev(`document.getElementById('file-toggle').click(); true`);
+        await ev(`document.getElementById('file-new').click(); true`);
+
+        check('New clears the editor', await ev(`monaco.editor.getModels()[0].getValue()`) === '');
     }
 
     // The wasm target. `?wasm` offers it for whatever is in the editor, which
@@ -2070,7 +2117,11 @@ chrome.on('error', e => {
 
     if (!wasmSupported) {
         log('skip  wasm: this browser or compile service cannot run a wasm build');
-        check('no .NET / WebAssembly choice where wasm cannot run', !(await choiceShowing()));
+        check('where wasm cannot run, .NET is shown as the only target',
+            await ev(`(() => { const t = document.getElementById('target');
+                 return !t.hidden && t.querySelector('[data-target="wasm"]').hidden
+                     && t.querySelector('[data-target="dotnet"]').getAttribute('aria-pressed') === 'true'
+                     && t.dataset.solo !== undefined; })()`));
     } else {
         check('the standalone page offers .NET or WebAssembly beside Run', await choiceShowing());
         const sixBySeven = ['use IO.Std.write_line;', '', 'entry() is', '    write_line("{6 * 7}");', 'si', ''].join('\n');
@@ -2170,7 +2221,7 @@ chrome.on('error', e => {
             const entries = await ev(`JSON.stringify([...document.querySelectorAll('#view .view-kinds .target button')]
                 .map(b => b.textContent + (b.classList.contains('runs') ? '*' : '')))`);
             check('the listings are offered in a fixed order, WAT marked as what runs',
-                /^\["IL","WAT\*"(,"LLVM IR","x86-64")?\]$/.test(entries), entries);
+                /^\["\.NET IL","WAT\*"(,"LLVM IR","x86-64")?\]$/.test(entries), entries);
 
             await ev(`[...document.querySelectorAll('#view .view-option')].find(b => b.textContent === 'show all')?.click(); true`);
 

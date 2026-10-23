@@ -199,11 +199,15 @@ export class GhulLanguageClient {
     // Moves the session to another address - the same service asked for an
     // analyser of another target - dropping the current one, whose answers
     // describe what the program means on the target it was opened for.
+    // Answers whether the address changed, so a caller can tell a real switch
+    // from a no-op.
     setUrl(url) {
-        if (url === this.url) return;
+        if (url === this.url) return false;
 
         this.url = url;
         this.reconnect();
+
+        return true;
     }
 
     connect() {

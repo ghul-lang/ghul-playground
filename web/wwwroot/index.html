@@ -117,8 +117,10 @@
 
     #images-toggle[hidden] { display: none; }
 
-    /* Which target the next run uses, offered only for a program known to run
-       on wasm in a browser that can run it. */
+    /* Which target the next run uses, offered for the reader's own program:
+       both in view, the one that runs marked. Where the browser cannot run
+       wasm, .NET is the only target - shown as what runs rather than as a
+       choice with one option missing. */
     .target[hidden] { display: none; }
 
     .target { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
@@ -133,6 +135,9 @@
     }
 
     .target button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--fg); }
+
+    .target[data-solo] button,
+    .target[data-solo] button:hover { cursor: default; background: none; }
 
     /* Floats over the editor's top-right corner, where the ghul.dev examples
        put theirs, so the two surfaces agree about where copying lives. */
@@ -650,6 +655,7 @@
       </button>
 
       <div id="file-menu" role="menu" hidden>
+        <button id="file-new" role="menuitem">New</button>
         <button id="file-open" role="menuitem">Open<kbd>Ctrl+O</kbd></button>
         <button id="file-save" role="menuitem"><span id="file-save-label">Save</span><kbd>Ctrl+S</kbd></button>
         <button id="file-save-as" role="menuitem">Save as</button>
@@ -854,11 +860,16 @@
 
       <h3>When you run</h3>
       <p>
-        Your code is compiled on the server, and the assembly it produces is
-        sent back and executed <em>in this page</em>, on the .NET WebAssembly
-        runtime. Nothing you write is ever run on the server - which is also why
-        a program here cannot open a file or a socket, having neither a
-        filesystem nor a network underneath it.
+        Your code is compiled on the server, and what the compiler produces is
+        sent back and executed <em>in this page</em>. Nothing you write is
+        ever run on the server - which is also why a program here cannot open
+        a file or a socket, having neither a filesystem nor a network
+        underneath it.
+      </p>
+      <p>
+        Beside the run button is the choice of back end: <strong>.NET</strong>,
+        on the .NET WebAssembly runtime, or <strong>WebAssembly</strong>, on
+        the browser's own engine. Either way the program runs here, not there.
       </p>
 
       <h3>What you can call</h3>
