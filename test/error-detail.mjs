@@ -59,6 +59,33 @@ check('a name that is not a plain file name is not recorded', out.join() === 'f/
 out = await fresh(() => script('https://ghul.dev/playground/rosetta-code/ludic-numbers'));
 check('an error from the page\'s own document is inline, not named by its address', out.join() === 'f/script/inline', out.join());
 
+counted = [];
+script(''); // the page's own document again, already seen this load
+
+const throwing = filename => listeners.error.forEach(fn => fn({ filename, error: { name: 'TypeError' } }));
+
+out = await fresh(() => throwing('https://ghul.dev/playground/main.js'));
+check('a script error carries the error\'s name', out.join() === 'f/script/main.js/TypeError', out.join());
+
+out = await fresh(() => throwing(''));
+check('an error with no file name still carries its name', out.join() === 'f/script/TypeError', out.join());
+
+out = await fresh(() => listeners.error.forEach(fn => fn({ filename: 'https://ghul.dev/playground/main.js', error: { name: 'made up by the reader' } })));
+check('a name outside the list is not recorded', out.join() === 'f/script/main.js', out.join());
+
+out = await fresh(m => {
+    m.setPhase('compiling');
+    listeners.unhandledrejection.forEach(fn => fn({ reason: { name: 'NetworkError' } }));
+});
+check('a rejected promise carries its reason\'s name and the phase', out.join() === 'f/unhandled-rejection/NetworkError/compiling', out.join());
+
+out = await fresh(() => {
+    listeners.pagehide.forEach(fn => fn({}));
+    throwing('https://ghul.dev/playground/main.js');
+    listeners.unhandledrejection.forEach(fn => fn({ reason: { name: 'TypeError' } }));
+});
+check('nothing is counted once the page is on its way out', out.length === 0, out.join());
+
 out = await fresh(() => script(''));
 check('a cross-origin error with no file name has no source', out.join() === 'f/script', out.join());
 
