@@ -4,12 +4,14 @@
 // the URL, which can carry what a reader typed - and at most once per page
 // load, since one fault usually throws more than once.
 //
-// A class alone says little about where to look, so it is followed by two
+// A class alone says little about where to look, so it is followed by a few
 // short words that are never the reader's: the name of one of the page's own
 // scripts when the failure came from one (`main.js`, `editor.worker.js`, or
 // `blob` for the worker a run starts), and the phase the page was in (a status
-// word such as `running`). Anything that is not plainly one of those is left
-// out rather than recorded.
+// word such as `running`). A script error or a rejected promise also carries
+// the error's name, from the list below, which is what says whether the code
+// asked for something missing, used a null, or failed to parse. Anything that
+// is not plainly one of those is left out rather than recorded.
 //
 // Import this before anything that loads the runtime: the runtime starts its
 // own workers, and the constructor it finds has to be the one below. It counts
@@ -26,6 +28,16 @@ const seen = new Set();
 
 // What the page was doing, as one of its own status words.
 let phase = '';
+
+// Set once the page is on its way out, where a promise the teardown cut
+// short can still reject: a fault of the leaving, not of the page.
+let leaving = false;
+
+// The names an error may carry and still be recorded. A closed list, so a
+// name a reader's own code chose cannot be read from what this counts.
+const NAMES = ['Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError', 'AggregateError', 'DOMException', 'AbortError', 'NetworkError'];
+
+const nameOf = error => NAMES.includes(error?.name) ? error.name : '';
 
 const WORD = /^[A-Za-z0-9._-]{1,40}$/;
 
@@ -58,22 +70,33 @@ function sourceOf(url) {
 }
 
 // Words from a frame are checked again here: the page holding it counts them.
-const DETAIL = /^[A-Za-z0-9._-]{1,40}(\/[A-Za-z0-9._-]{1,40})?$/;
+const DETAIL = /^[A-Za-z0-9._-]{1,40}(\/[A-Za-z0-9._-]{1,40}){0,2}$/;
 
-function found(kind, source = '', detail = null) {
+function found(kind, source = '', detail = null, name = '') {
     if (!sink || !ERROR_CLASSES.includes(kind) || seen.has(kind)) return;
 
     seen.add(kind);
 
-    let words = detail ?? [source, phase].filter(Boolean).join('/');
+    let words = detail ?? [source, name, phase].filter(Boolean).join('/');
 
     if (words && !DETAIL.test(words)) words = '';
 
     sink(kind, words);
 }
 
-window.addEventListener('error', event => found('script', sourceOf(event.filename)));
-window.addEventListener('unhandledrejection', () => found('unhandled-rejection'));
+window.addEventListener('error', event => {
+    if (leaving) return;
+
+    found('script', sourceOf(event.filename), null, nameOf(event.error));
+});
+
+window.addEventListener('unhandledrejection', event => {
+    if (leaving) return;
+
+    found('unhandled-rejection', '', null, nameOf(event.reason));
+});
+
+window.addEventListener('pagehide', () => { leaving = true; });
 
 // A worker that throws or fails to load reports it on its own object, never on
 // the window, so the constructor is the only place it can be heard from.

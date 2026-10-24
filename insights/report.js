@@ -252,6 +252,10 @@ export function readHits(file, from, to) {
 // GoatCounter writes `YYYY-MM-DD HH:MM:SS` in UTC, and compares as text.
 export const sqlTime = date => date.toISOString().slice(0, 19).replace('T', ' ');
 
+// Seconds between two of those times, as an absolute number.
+const secondsApart = (a, b) =>
+    Math.abs(Date.parse(`${a.replace(' ', 'T')}Z`) - Date.parse(`${b.replace(' ', 'T')}Z`)) / 1000;
+
 const screen = width =>
     !width ? 'unknown' : width < 600 ? 'phone' : width < 1100 ? 'tablet' : 'desktop';
 
@@ -294,19 +298,29 @@ export function visitsOf(rows) {
             continue;
         }
 
-        visit.events.push({ family, host, detail, what });
+        visit.events.push({ family, host, detail, what, at: row.at });
 
         const kind = classify(family, what);
 
-        if (kind) visit.problems.push({ kind, family, host, detail, what, after: visit.events.length });
+        if (kind) visit.problems.push({ kind, family, host, detail, what, after: visit.events.length, at: row.at });
     }
 
     // A lost analysis session is only trouble if the same visit never saw it
     // ready again.
     for (const visit of visits.values()) {
         for (const p of visit.problems) {
-            if (p.kind === 'recovered' &&
-                !visit.events.slice(p.after).some(e => e.family === p.family && e.host === p.host && READY_AGAIN.includes(e.what))) {
+            if (p.kind !== 'recovered') continue;
+
+            // A session dropped as the visit ends is the reader leaving, not
+            // the site letting them down: the page is torn down mid-session,
+            // and the socket's close can be counted as a fault before the
+            // page knows it is going. Only a dropped session is excused this
+            // way - one that never came up says the service was down however
+            // soon the reader left after it. Times are whole seconds, so the
+            // window is a few of them.
+            if (p.what === 'dropped' && secondsApart(visit.ended, p.at) <= 5) continue;
+
+            if (!visit.events.slice(p.after).some(e => e.family === p.family && e.host === p.host && READY_AGAIN.includes(e.what))) {
                 p.kind = 'trouble';
             }
         }

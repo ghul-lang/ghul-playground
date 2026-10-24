@@ -210,7 +210,7 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
 // the same visit is recovered, a slow first output is slow, and neither counts
 // as a problem; one that never came back is trouble.
 {
-    const hit = (session, path, event = 1) => ({ session, at: '2026-10-20 10:00:00', path, event, place: '', width: 1280, first: 0, ref: '' });
+    const hit = (session, path, event = 1, at = '2026-10-20 10:00:00') => ({ session, at, path, event, place: '', width: 1280, first: 0, ref: '' });
     const rows = [
         hit('a', '/rosetta/x', 0), hit('a', 'mini-ide-analyser/rosetta-task-page/unavailable'),
         hit('a', 'mini-ide-first-output/rosetta-task-page/under-1s'), hit('a', 'mini-ide-analyser/rosetta-task-page/connected'),
@@ -220,6 +220,16 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
         hit('d', '/rosetta/x', 0), hit('d', 'mini-ide-first-output/rosetta-task-page/over-10s'),
         hit('e', '/rosetta/x', 0), hit('e', 'mini-ide-analyser/rosetta-task-page/refused'),
         hit('f', '/rosetta/x', 0), hit('f', 'mini-ide-result/rosetta-task-page/compile-error'),
+        // The reader leaves a minute after the drop, which had time to be the
+        // site's doing.
+        hit('g', '/repl/', 0), hit('g', 'repl-analyser/connected'), hit('g', 'repl-analyser/dropped', 1, '2026-10-20 10:00:30'),
+        hit('g', 'repl-time/10-30s', 1, '2026-10-20 10:00:59'),
+        // The drop lands as the visit ends, which is the page being torn down.
+        hit('h', '/repl/', 0), hit('h', 'repl-analyser/connected'),
+        hit('h', 'repl-analyser/dropped', 1, '2026-10-20 10:01:01'), hit('h', 'repl-time/under-10s', 1, '2026-10-20 10:01:02'),
+        // The service never came up, and the reader left at once: still trouble.
+        hit('i', '/repl/', 0), hit('i', 'repl-analyser/unavailable', 1, '2026-10-20 10:02:01'),
+        hit('i', 'repl-time/under-10s', 1, '2026-10-20 10:02:02'),
     ];
     const split = report.visitsOf(rows);
     const kindOf = id => split.find(v => v.id === id)?.problems.map(p => p.kind).join(',');
@@ -230,10 +240,13 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
     check('a first output over 10 seconds is slow', kindOf('d') === 'slow', kindOf('d'));
     check('a session turned away is trouble', kindOf('e') === 'trouble', kindOf('e'));
     check('a reader\'s own compile error is the program', kindOf('f') === 'program', kindOf('f'));
+    check('a session dropped well before the visit ends is trouble', kindOf('g') === 'trouble', kindOf('g'));
+    check('a session dropped as the visit ends is the reader leaving', kindOf('h') === 'recovered', kindOf('h'));
+    check('a session that never came up is trouble however soon the reader left', kindOf('i') === 'trouble', kindOf('i'));
 
     const s = report.summary(split);
     check('only faults and trouble count as visits that hit a problem',
-        s.troubled === 2 && s.recovered === 2 && s.slow === 1 && s.programFailed === 1,
+        s.troubled === 4 && s.recovered === 3 && s.slow === 1 && s.programFailed === 1,
         JSON.stringify({ troubled: s.troubled, recovered: s.recovered, slow: s.slow, programFailed: s.programFailed }));
 }
 
