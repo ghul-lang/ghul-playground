@@ -35,7 +35,7 @@ WORKDIR /home/playground
 RUN mkdir -p /home/playground/results /home/playground/cells
 
 ARG GHUL_COMPILER_VERSION=66.19.2
-ARG GHUL_RUNTIME_VERSION=31.0.0
+ARG GHUL_RUNTIME_VERSION=31.0.2
 ARG GHUL_RASTER_VERSION=0.14.1
 
 RUN dotnet tool install --tool-path /home/playground/tools \
@@ -72,7 +72,7 @@ RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghu
  && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \
  && tar -xzf /tmp/ghul-raster.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-raster \
  && rm /tmp/ghul-core.tar.gz /tmp/ghul-runtime.tar.gz /tmp/ghul-raster.tar.gz \
- && test -f /home/playground/libraries/ghul-runtime/wasm-sources.rsp \
+ && test -f /home/playground/libraries/ghul-runtime/ghul-runtime/ghul-project.json \
  && test -d /home/playground/libraries/ghul-raster/src
 
 # The optimiser, assembler and linker an llvm build hands its module to,

@@ -19,7 +19,7 @@ const { tmpdir } = await import('os');
 const path = await import('path');
 const { fileURLToPath } = await import('url');
 
-const { libraryArguments, listedFiles, usesRaster } = await import('../shared/wasm-libraries.js');
+const { libraryArguments, usesRaster } = await import('../shared/wasm-libraries.js');
 
 let failures = 0;
 const check = (what, ok, detail = '') => {
@@ -44,10 +44,6 @@ check('the core library\'s loader is named before its declaration',
         '--wasm-loader', '/c/host/loader.mjs',
         '--library-source', 'ghul-core@1.0.0=/c', '/c/a.ghul'
     ]));
-
-check('a source list skips blank lines and comments',
-    JSON.stringify(listedFiles('/r', 'src/a.ghul\n\n# note\n  src/b.ghul  \n'))
-        === JSON.stringify(['/r/src/a.ghul', '/r/src/b.ghul']));
 
 check('a program naming Raster uses it', usesRaster('use Raster.IMAGE\n') && usesRaster('let i = Raster.IMAGE(1, 1)'));
 check('a program that does not name it does not',

@@ -37,15 +37,6 @@ async function ghulFilesUnder(directory) {
     return found.sort();
 }
 
-// The files a response file lists, one relative path a line, resolved against
-// the directory it is in. Blank lines and `#` comments are skipped.
-function listedFiles(root, text) {
-    return text.split('\n')
-        .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#'))
-        .map(line => path.join(root, line));
-}
-
 // The compiler arguments for a set of source libraries, in order.
 function libraryArguments(libraries) {
     const args = [];
@@ -68,8 +59,8 @@ function usesRaster(source) {
     return /\bRaster\b/.test(source);
 }
 
-// The core library's sources are its manifest's `src/**/*.ghul`; the runtime
-// lists the subset that builds for wasm in `wasm-sources.rsp`. Answers null
+// Both libraries' sources are their trees' `src/**/*.ghul`, the file-level
+// IF pragmas deciding what a wasm build compiles. Answers null
 // where the image carries no libraries, which leaves the wasm target off.
 //
 // Answers the libraries and their compiler arguments, and `withRaster`, the
@@ -83,9 +74,7 @@ async function resolveWasmLibraries(environment = process.env) {
         return null;
     }
 
-    const runtimeList = path.join(runtimeRoot, 'wasm-sources.rsp');
-
-    for (const required of [path.join(coreRoot, 'src'), path.join(coreRoot, 'host', 'loader.mjs'), runtimeList]) {
+    for (const required of [path.join(coreRoot, 'src'), path.join(coreRoot, 'host', 'loader.mjs'), path.join(runtimeRoot, 'ghul-runtime', 'src')]) {
         if (!existsSync(required)) {
             throw new Error(`wasm library sources not found: ${required}`);
         }
@@ -102,7 +91,7 @@ async function resolveWasmLibraries(environment = process.env) {
             name: 'ghul-runtime',
             version: environment.GHUL_RUNTIME_SOURCE_VERSION,
             root: runtimeRoot,
-            files: listedFiles(runtimeRoot, await readFile(runtimeList, 'utf8'))
+            files: await ghulFilesUnder(path.join(runtimeRoot, 'ghul-runtime', 'src'))
         }
     ];
 
@@ -136,4 +125,4 @@ async function resolveWasmLibraries(environment = process.env) {
     return { libraries, args: libraryArguments(libraries), withRaster };
 }
 
-module.exports = { ghulFilesUnder, listedFiles, libraryArguments, resolveWasmLibraries, usesRaster };
+module.exports = { ghulFilesUnder, libraryArguments, resolveWasmLibraries, usesRaster };
