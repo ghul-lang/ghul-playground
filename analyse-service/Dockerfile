@@ -65,7 +65,7 @@ RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghu
  && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \
  && tar -xzf /tmp/ghul-raster.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-raster \
  && rm /tmp/ghul-core.tar.gz /tmp/ghul-runtime.tar.gz /tmp/ghul-raster.tar.gz \
- && test -f /home/playground/libraries/ghul-runtime/wasm-sources.rsp \
+ && test -f /home/playground/libraries/ghul-runtime/ghul-runtime/ghul-project.json \
  && test -d /home/playground/libraries/ghul-raster/src
 
 ENV GHUL_COMPILER_DLL=/home/playground/tools/.store/ghul.compiler/${GHUL_COMPILER_VERSION}/ghul.compiler/${GHUL_COMPILER_VERSION}/tools/net10.0/any/ghul.dll \
