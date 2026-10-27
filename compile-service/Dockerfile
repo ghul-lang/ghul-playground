@@ -35,7 +35,7 @@ WORKDIR /home/playground
 RUN mkdir -p /home/playground/results /home/playground/cells
 
 ARG GHUL_COMPILER_VERSION=66.24.1
-ARG GHUL_RUNTIME_VERSION=31.3.0
+ARG GHUL_RUNTIME_VERSION=31.4.0
 ARG GHUL_RASTER_VERSION=0.14.1
 
 RUN dotnet tool install --tool-path /home/playground/tools \
@@ -47,7 +47,7 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 
 # The disassembler the assembly view runs over a compiled program, pinned like
 # the compiler: a new version can change the listing a reader is shown.
-ARG ILSPYCMD_VERSION=11.1.0.9782
+ARG ILSPYCMD_VERSION=11.2.0.10050
 
 RUN dotnet tool install --tool-path /home/playground/tools \
         ilspycmd --version "${ILSPYCMD_VERSION}"
