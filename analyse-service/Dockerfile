@@ -33,7 +33,7 @@ WORKDIR /home/playground
 RUN mkdir -p /home/playground/cells
 
 ARG GHUL_COMPILER_VERSION=66.24.1
-ARG GHUL_RUNTIME_VERSION=31.3.0
+ARG GHUL_RUNTIME_VERSION=31.4.0
 ARG GHUL_RASTER_VERSION=0.14.1
 
 # Installing as a tool seeds the package cache, which is where the service
