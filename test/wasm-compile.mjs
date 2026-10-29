@@ -7,8 +7,7 @@
 // build is the program's WAT, marked with its source lines.
 //
 // Needs the compiler (GHUL_COMPILER_DLL, or the newest in the NuGet cache) and
-// the library sources: GHUL_CORE_DIR, GHUL_CORE_VERSION, GHUL_RUNTIME_SOURCE_DIR
-// and GHUL_RUNTIME_SOURCE_VERSION. The drawing is checked where
+// the library sources: GHUL_RUNTIME_SOURCE_DIR and GHUL_RUNTIME_SOURCE_VERSION. The drawing is checked where
 // GHUL_RASTER_SOURCE_DIR and GHUL_RASTER_SOURCE_VERSION name raster's sources.
 //
 //   node test/wasm-compile.mjs
@@ -37,12 +36,12 @@ check('library arguments put each library\'s files after its declaration',
         '--library-source', 'runtime@2.0.0=/r', '/r/b.ghul', '/r/c.ghul'
     ]));
 
-check('the core library\'s loader is named before its declaration',
+check('the runtime\'s loader is named before its declaration',
     JSON.stringify(libraryArguments([
-        { name: 'ghul-core', version: '1.0.0', root: '/c', files: ['/c/a.ghul'] }
+        { name: 'ghul-runtime', version: '1.0.0', root: '/r', files: ['/r/ghul-core/src/a.ghul'] }
     ])) === JSON.stringify([
-        '--wasm-loader', '/c/host/loader.mjs',
-        '--library-source', 'ghul-core@1.0.0=/c', '/c/a.ghul'
+        '--wasm-loader', '/r/ghul-core/host/loader.mjs',
+        '--library-source', 'ghul-runtime@1.0.0=/r', '/r/ghul-core/src/a.ghul'
     ]));
 
 check('a program naming Raster uses it', usesRaster('use Raster.IMAGE\n') && usesRaster('let i = Raster.IMAGE(1, 1)'));

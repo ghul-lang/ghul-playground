@@ -150,7 +150,7 @@ const shim = `
 async function compileAndRun(name, source, lines = [], needs = null, startFiles = {}) {
     const [compiler, wasm] = await Promise.all([resolveCompiler(), resolveWasmLibraries()]);
 
-    if (!wasm) throw new Error('set GHUL_CORE_DIR and GHUL_RUNTIME_SOURCE_DIR');
+    if (!wasm) throw new Error('set GHUL_RUNTIME_SOURCE_DIR');
 
     writeFileSync(path.join(work, `${name}.ghul`), source);
 
@@ -253,8 +253,8 @@ try {
     // A program starts with the files it is given, which it reads by name,
     // and what it writes over one is its own. Needs a loader that hands the
     // files to the program and a core library that takes them.
-    const core = (await resolveWasmLibraries()).libraries.find(l => l.name === 'ghul-core');
-    const coreTakesFiles = readFileSync(path.join(core.root, 'src/file_system.ghul'), 'utf8').includes('input_file_count');
+    const runtime = (await resolveWasmLibraries()).libraries.find(l => l.name === 'ghul-runtime');
+    const coreTakesFiles = readFileSync(path.join(runtime.root, 'ghul-core/src/file_system.ghul'), 'utf8').includes('input_file_count');
 
     const read = coreTakesFiles
         ? await compileAndRun('files', FILES_SOURCE, [], 'input_file_count', {

@@ -32,8 +32,8 @@ WORKDIR /home/playground
 # and either service may be the first to mount it.
 RUN mkdir -p /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=67.2.0
-ARG GHUL_RUNTIME_VERSION=34.0.0
+ARG GHUL_COMPILER_VERSION=67.3.0
+ARG GHUL_RUNTIME_VERSION=34.1.0
 ARG GHUL_RASTER_VERSION=0.14.1
 
 # Installing as a tool seeds the package cache, which is where the service
@@ -47,12 +47,8 @@ RUN dotnet tool install --tool-path /home/playground/tools \
  && rm -rf /tmp/runtime-probe
 
 # The library sources an analyser for the wasm target reads in place of the
-# reference assemblies: the same ghul-core the compile service builds wasm against
-# (scripts/check-wasm-pins.js checks the two images agree).
-ARG GHUL_CORE_VERSION=1.6.1
-
-ADD --chown=playground:playground \
-    https://github.com/ghul-lang/ghul-core/archive/refs/tags/v${GHUL_CORE_VERSION}.tar.gz /tmp/ghul-core.tar.gz
+# reference assemblies: ghul-runtime at the tag of the runtime package above,
+# the same the compile service builds wasm against.
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v${GHUL_RUNTIME_VERSION}.tar.gz /tmp/ghul-runtime.tar.gz
 # ghul.raster's sources at the tag of the package above, for a wasm program
@@ -60,23 +56,21 @@ ADD --chown=playground:playground \
 ADD --chown=playground:playground \
     https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v${GHUL_RASTER_VERSION}.tar.gz /tmp/ghul-raster.tar.gz
 
-RUN mkdir -p /home/playground/libraries/ghul-core /home/playground/libraries/ghul-runtime /home/playground/libraries/ghul-raster \
- && tar -xzf /tmp/ghul-core.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-core \
+RUN mkdir -p /home/playground/libraries/ghul-runtime /home/playground/libraries/ghul-raster \
  && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \
  && tar -xzf /tmp/ghul-raster.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-raster \
- && rm /tmp/ghul-core.tar.gz /tmp/ghul-runtime.tar.gz /tmp/ghul-raster.tar.gz \
+ && rm /tmp/ghul-runtime.tar.gz /tmp/ghul-raster.tar.gz \
  && test -f /home/playground/libraries/ghul-runtime/ghul-runtime/ghul-project.json \
+ && test -f /home/playground/libraries/ghul-runtime/ghul-core/host/loader.mjs \
  && test -d /home/playground/libraries/ghul-raster/src
 
 ENV GHUL_COMPILER_DLL=/home/playground/tools/.store/ghul.compiler/${GHUL_COMPILER_VERSION}/ghul.compiler/${GHUL_COMPILER_VERSION}/tools/net10.0/any/ghul.dll \
     GHUL_RUNTIME_DLL=/home/playground/.nuget/packages/ghul.runtime/${GHUL_RUNTIME_VERSION}/lib/net10.0/ghul-runtime.dll \
     GHUL_RASTER_DLL=/home/playground/.nuget/packages/ghul.raster/${GHUL_RASTER_VERSION}/lib/net10.0/ghul-raster.dll \
-    GHUL_CORE_DIR=/home/playground/libraries/ghul-core \
     GHUL_RUNTIME_SOURCE_DIR=/home/playground/libraries/ghul-runtime \
     GHUL_RUNTIME_SOURCE_VERSION=${GHUL_RUNTIME_VERSION} \
     GHUL_RASTER_SOURCE_DIR=/home/playground/libraries/ghul-raster \
-    GHUL_RASTER_SOURCE_VERSION=${GHUL_RASTER_VERSION} \
-    GHUL_CORE_VERSION=${GHUL_CORE_VERSION}
+    GHUL_RASTER_SOURCE_VERSION=${GHUL_RASTER_VERSION}
 
 COPY --chown=playground:playground shared /home/playground/service/shared
 COPY --chown=playground:playground analyse-service/*.js /home/playground/service/analyse-service/
