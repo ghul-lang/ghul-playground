@@ -7,15 +7,15 @@
 //   node scripts/bump-versions.js --runtime 18.0.1
 //   node scripts/bump-versions.js --raster 0.4.1
 //   node scripts/bump-versions.js --compiler 52.2.1 --runtime 18.0.1
-//   node scripts/bump-versions.js --core 1.3.0 --llvm 1.6.0
+//   node scripts/bump-versions.js --llvm 1.6.0
 //   node scripts/bump-versions.js --repl 9.4.2 --ilspy 11.1.0.9782 --language-server 1.33.2
 //   node scripts/bump-versions.js --latest
 //
 // The compiler, runtime and raster are checked against each other by
-// check-versions.js; ghul-core, ghul-llvm, the ghul.repl package, ilspycmd and
+// check-versions.js; ghul-llvm, the ghul.repl package, ilspycmd and
 // the language server each have their own flag. `--latest` resolves every one
 // of them to its current release (nuget.org for the packages, the GitHub release for
-// ghul-core, ghul-llvm and the language server, whose tarball the image
+// ghul-llvm and the language server, whose tarball the image
 // downloads from ghul-vsce's releases) and bumps all of them; an explicit flag bumps only what it names, and wins over
 // `--latest` for that tool. Running with no flags prints the current versions
 // and does nothing.
@@ -187,10 +187,6 @@ function bumpImageArg(label, arg, images, version) {
     console.log(`${label}: ${before} -> ${version}`);
 }
 
-function bumpCore(version) {
-    bumpImageArg('ghul-core', 'GHUL_CORE_VERSION', ['compile-service/Dockerfile', 'analyse-service/Dockerfile'], version);
-}
-
 function bumpLlvm(version) {
     bumpImageArg('ghul-llvm', 'GHUL_LLVM_VERSION', ['compile-service/Dockerfile'], version);
 }
@@ -230,7 +226,6 @@ async function main() {
         compiler: flagValue('--compiler'),
         runtime: flagValue('--runtime'),
         raster: flagValue('--raster'),
-        core: flagValue('--core'),
         llvm: flagValue('--llvm'),
         repl: flagValue('--repl'),
         ilspy: flagValue('--ilspy'),
@@ -242,7 +237,6 @@ async function main() {
             compiler: () => latestPublished('ghul.compiler'),
             runtime: () => latestPublished('ghul.runtime'),
             raster: () => latestPublished('ghul.raster'),
-            core: () => latestRelease('ghul-lang/ghul-core'),
             llvm: () => latestRelease('ghul-lang/ghul-llvm'),
             repl: () => latestPublished('ghul.repl'),
             ilspy: () => latestPublished('ilspycmd'),
@@ -266,7 +260,6 @@ async function main() {
         console.log(`compiler:        ${manifest.tools['ghul.compiler'].version}`);
         console.log(`runtime:         ${reference(web, 'ghul\\.runtime')}`);
         console.log(`raster:          ${reference(web, 'ghul\\.raster')}`);
-        console.log(`ghul-core:       ${arg(compile, 'GHUL_CORE_VERSION')}`);
         console.log(`ghul-llvm:       ${arg(compile, 'GHUL_LLVM_VERSION')}`);
         console.log(`ghul.repl:       ${reference(runner, 'ghul\\.repl')}`);
         console.log(`ilspycmd:        ${arg(compile, 'ILSPYCMD_VERSION')}`);
@@ -278,7 +271,6 @@ async function main() {
     if (wanted.compiler) bumpCompiler(wanted.compiler);
     if (wanted.runtime) bumpRuntime(wanted.runtime);
     if (wanted.raster) bumpRaster(wanted.raster);
-    if (wanted.core) bumpCore(wanted.core);
     if (wanted.llvm) bumpLlvm(wanted.llvm);
     if (wanted.repl) bumpRepl(wanted.repl);
     if (wanted.ilspy) bumpIlspy(wanted.ilspy);
