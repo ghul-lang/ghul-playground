@@ -43,7 +43,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: '26'
 
       # Monaco is staged by `npm install`, and the publish fails without it.
       - name: Install node dependencies and stage Monaco
