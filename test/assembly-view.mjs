@@ -68,7 +68,7 @@ const wat = [
     '    return',
     '  )',
     '  (func $helper (type 2)',
-    '    ;; /libraries/ghul-core/src/x.ghul:40',
+    '    ;; /libraries/ghul-runtime/ghul-core/src/x.ghul:40',
     '    i32.const 0',
     '  )',
     '  ;; 3 more functions not shown',
