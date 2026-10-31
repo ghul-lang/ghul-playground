@@ -34,9 +34,9 @@ WORKDIR /home/playground
 # owned by this user, before the volume does.
 RUN mkdir -p /home/playground/results /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=67.3.0
-ARG GHUL_RUNTIME_VERSION=34.1.0
-ARG GHUL_RASTER_VERSION=0.14.1
+ARG GHUL_COMPILER_VERSION=67.4.15
+ARG GHUL_RUNTIME_VERSION=35.0.0
+ARG GHUL_RASTER_VERSION=0.14.2
 
 RUN dotnet tool install --tool-path /home/playground/tools \
         ghul.compiler --version "${GHUL_COMPILER_VERSION}" \
@@ -66,7 +66,7 @@ RUN mkdir -p /home/playground/libraries/ghul-runtime /home/playground/libraries/
  && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \
  && tar -xzf /tmp/ghul-raster.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-raster \
  && rm /tmp/ghul-runtime.tar.gz /tmp/ghul-raster.tar.gz \
- && test -f /home/playground/libraries/ghul-runtime/ghul-runtime/ghul-project.json \
+ && test -f /home/playground/libraries/ghul-runtime/ghul-project.json \
  && test -f /home/playground/libraries/ghul-runtime/ghul-core/host/loader.mjs \
  && test -d /home/playground/libraries/ghul-raster/src
 
