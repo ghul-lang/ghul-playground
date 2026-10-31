@@ -66,7 +66,7 @@ RUN mkdir -p /home/playground/libraries/ghul-runtime /home/playground/libraries/
  && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \
  && tar -xzf /tmp/ghul-raster.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-raster \
  && rm /tmp/ghul-runtime.tar.gz /tmp/ghul-raster.tar.gz \
- && test -f /home/playground/libraries/ghul-runtime/ghul-runtime/ghul-project.json \
+ && test -f /home/playground/libraries/ghul-runtime/ghul-project.json \
  && test -f /home/playground/libraries/ghul-runtime/ghul-core/host/loader.mjs \
  && test -d /home/playground/libraries/ghul-raster/src
 
