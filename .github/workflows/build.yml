@@ -285,14 +285,19 @@ jobs:
             sleep 1
           done
 
-          source='{"source":"use IO.Std.write_line;\n\nentry() is\n    write_line(\"hello\");\nsi\n"}'
+          # Each request gets a source of its own: the service caches compiled
+          # results on disk, and a cache hit returns before the gate is reached.
+          unique="$(date +%s%N)"
+          source_for() {
+            printf '{"source":"use IO.Std.write_line;\\n\\nentry() is\\n    write_line(\\"%s\\");\\nsi\\n"}' "$1"
+          }
 
           # Wait on the curls by pid. A bare `wait` would also wait for the
           # service started above, which never exits.
           bursts=""
-          for _ in $(seq 1 6); do
+          for i in $(seq 1 6); do
             curl -s -o /dev/null -w '%{http_code}\n' -m 60 -X POST http://127.0.0.1:5098/compile \
-              -H 'content-type: application/json' -d "$source" >> codes.txt &
+              -H 'content-type: application/json' -d "$(source_for "$unique-$i")" >> codes.txt &
             bursts="$bursts $!"
           done
           wait $bursts
@@ -303,7 +308,7 @@ jobs:
           # One more compile, to show the gate released every slot it took
           # rather than leaking them and wedging the service.
           after=$(curl -s -o /dev/null -w '%{http_code}' -m 60 -X POST http://127.0.0.1:5098/compile \
-            -H 'content-type: application/json' -d "$source")
+            -H 'content-type: application/json' -d "$(source_for "$unique-after")")
 
           kill $service
 
