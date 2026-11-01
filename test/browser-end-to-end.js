@@ -1860,7 +1860,7 @@ chrome.on('error', e => {
             await submit([
                 'class MARKUP: Ghul.Renderable is',
                 '    init() is si',
-                '    representations() -> Collections.Iterable[(mime: string, content: ubyte[])] pure =>',
+                '    representations() -> Collections.Iterable[(mime: string, content: ARRAY[ubyte])] pure =>',
                 '        [(mime = "text/html", content = System.Text.Encoding.utf8.get_bytes("<img src=x onerror=alert(1)>"))]',
                 '    to_string() -> string => "markup as text"',
                 'si'
@@ -1874,8 +1874,8 @@ chrome.on('error', e => {
             await submit([
                 'class HUGE: Ghul.Renderable is',
                 '    init() is si',
-                '    representations() -> Collections.Iterable[(mime: string, content: ubyte[])] pure =>',
-                '        [(mime = "image/png", content = cast ubyte[](System.Array.create_instance(typeof ubyte, 5_000_000)))]',
+                '    representations() -> Collections.Iterable[(mime: string, content: ARRAY[ubyte])] pure =>',
+                '        [(mime = "image/png", content = cast ARRAY[ubyte](System.Array.create_instance(typeof ubyte, 5_000_000)))]',
                 '    to_string() -> string => "huge"',
                 'si'
             ].join('\n'));
