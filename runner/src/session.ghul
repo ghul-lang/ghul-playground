@@ -17,7 +17,7 @@ namespace Playground is
             _cells = Collections.MAP[string, Assembly]();
         si
 
-        add(bytes: ubyte[]) -> Assembly is
+        add(bytes: ARRAY[ubyte]) -> Assembly is
             let assembly = load_from_stream(IO.MemoryStream(bytes));
 
             _cells[assembly.get_name().name ?? ""] = assembly;

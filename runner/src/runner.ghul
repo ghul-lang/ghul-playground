@@ -53,9 +53,9 @@ namespace Playground is
                 fi
 
                 // A ghūl `entry()` takes no arguments, but the emitted entry
-                // point is free to declare the string[] form, so match what
+                // point is free to declare the ARRAY[string] form, so match what
                 // is there.
-                let parameters: object[]? =
+                let parameters: ARRAY[object]? =
                     if entry.get_parameters().count > 0 then
                         [cast object(_command_line(arguments))]
                     else
@@ -86,7 +86,7 @@ namespace Playground is
         // one empty argument, which joining would render alike. Anything
         // richer would be a second quoting rule to keep in step with the
         // field's own.
-        _command_line(arguments: string) -> string[] static is
+        _command_line(arguments: string) -> ARRAY[string] static is
             if arguments.length == 0 then
                 return System.Array.empty[string]();
             fi

@@ -39,7 +39,7 @@ namespace Playground is
             _emit("{value}");
         si
 
-        write(buffer: char[], index: int, count: int) is
+        write(buffer: ARRAY[char], index: int, count: int) is
             _emit(string(buffer, index, count));
         si
 
