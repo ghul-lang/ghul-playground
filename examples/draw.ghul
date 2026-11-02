@@ -1,5 +1,6 @@
 use IO.Std.write_line;
 use Raster.IMAGE;
+use Ghul.Math;
 
 entry() is
     write_line("drawing sin x");
@@ -17,7 +18,7 @@ entry() is
         let x0 = cast double(i) * 6.3D / cast double(steps);
         let x1 = cast double(i + 1) * 6.3D / cast double(steps);
 
-        image.line(x0, System.Math.sin(x0), x1, System.Math.sin(x1));
+        image.line(x0, sin(x0), x1, sin(x1));
     od
 
     image.colour(0ub, 0ub, 0ub);

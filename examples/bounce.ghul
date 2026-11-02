@@ -1,5 +1,6 @@
 use IO.Std.write_line;
 use Raster.IMAGE;
+use Ghul.Math;
 
 // A ball bouncing under gravity, shown as an animation: each frame is written
 // to the same file and shown under the same name, which the playground takes
@@ -59,7 +60,7 @@ circle(x: double, y: double, r: double) -> Collections.List[(x: double, y: doubl
     for i in 0..32 do
         let a = cast double(i) * System.Math.`pi / 16.0D
 
-        points.add((x = x + r * System.Math.cos(a), y = y + r * System.Math.sin(a)))
+        points.add((x = x + r * cos(a), y = y + r * sin(a)))
     od
 
     points
