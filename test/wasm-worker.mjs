@@ -65,6 +65,12 @@ if (dataFilePaths) {
     check('a shared file is named by its last segment, and a task\'s own by its path there',
         JSON.stringify(named) === JSON.stringify(['words.txt', 'notes.txt', 'maths/square.ghi']), JSON.stringify(named));
 
+    const fixture = dataFilePaths('fixture/input.txt\nfixture/docs/.keep\n',
+        `${root}tasks/t/playground-files`, root).map(f => f.name);
+
+    check('a file in the task\'s fixture is named as if the fixture were the working directory',
+        JSON.stringify(fixture) === JSON.stringify(['input.txt', 'docs/.keep']), JSON.stringify(fixture));
+
     let refused = false;
 
     try {

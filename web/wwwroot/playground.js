@@ -188,7 +188,9 @@ function cached(readFile) {
 // Written before every run rather than once, so a program that changes one of
 // its inputs is handed the original again next time, as it would be run from
 // a fresh checkout. Each goes in the working directory, which is where a bare
-// name like unixdict.txt is looked for, under the folders its name has.
+// name like unixdict.txt is looked for, under the folders its name has. A
+// `.keep`, which stands for an empty directory in a task's fixture, makes
+// the directory and is not written.
 function writeFiles(fs, files) {
     const directory = fs.cwd().replace(/\/$/, '');
 
@@ -197,6 +199,8 @@ function writeFiles(fs, files) {
         const parent = path.slice(0, path.lastIndexOf('/'));
 
         if (parent !== directory) fs.mkdirTree(parent);
+
+        if (path.endsWith('/.keep')) continue;
 
         fs.writeFile(path, bytes);
     }
