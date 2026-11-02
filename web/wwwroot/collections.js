@@ -282,8 +282,10 @@ export function nativeFlag(index, id) {
 // under its own last segment, beside it in the working directory, which is
 // where a task run from its own directory finds it. A file in the task's own
 // directory keeps the folders it is under there, so `maths/square.ghi` is
-// opened as `maths/square.ghi`. A path reaching outside the collection's
-// repository is refused rather than fetched.
+// opened as `maths/square.ghi`. A file under the task's `fixture/` is opened as
+// though the fixture were the working directory, as the test runner runs it,
+// so `fixture/docs/.keep` is `docs/.keep`. A path reaching outside the
+// collection's repository is refused rather than fetched.
 export function dataFilePaths(text, manifestUrl, root) {
     return text.split('\n')
         .map(line => line.trim())
@@ -294,7 +296,8 @@ export function dataFilePaths(text, manifestUrl, root) {
             if (!url.startsWith(root)) throw new Error(`${path} is outside the repository`);
 
             const own = new URL('.', manifestUrl).toString();
+            const name = url.startsWith(own) ? url.slice(own.length) : url.slice(url.lastIndexOf('/') + 1);
 
-            return { name: url.startsWith(own) ? url.slice(own.length) : url.slice(url.lastIndexOf('/') + 1), url };
+            return { name: name.startsWith('fixture/') ? name.slice('fixture/'.length) : name, url };
         });
 }
