@@ -58,7 +58,7 @@ circle(x: double, y: double, r: double) -> Collections.List[(x: double, y: doubl
     let points = Collections.LIST[(x: double, y: double)]()
 
     for i in 0..32 do
-        let a = cast double(i) * System.Math.`pi / 16.0D
+        let a = cast double(i) * pi / 16.0D
 
         points.add((x = x + r * cos(a), y = y + r * sin(a)))
     od
