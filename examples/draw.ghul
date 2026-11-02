@@ -9,7 +9,7 @@ entry() is
 
     image.view(-0.5D, -1.4D, 6.8D, 1.4D);
 
-    image.colour(20ub, 60ub, 200ub);
+    image.color(20ub, 60ub, 200ub);
     image.stroke(2.0D);
 
     let steps = 200;
@@ -21,7 +21,7 @@ entry() is
         image.line(x0, sin(x0), x1, sin(x1));
     od
 
-    image.colour(0ub, 0ub, 0ub);
+    image.color(0ub, 0ub, 0ub);
     image.text(0.1D, 1.15D, 18.0D, "sin x");
 
     image.write("plot.png");

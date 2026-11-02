@@ -25,11 +25,11 @@ entry() is
 
         image.view(0.0D, 0.0D, 4.0D / 3.0D, 1.0D)
 
-        image.colour(40ub, 40ub, 40ub)
+        image.color(40ub, 40ub, 40ub)
         image.stroke(2.0D)
         image.line(0.0D, 0.01D, 4.0D / 3.0D, 0.01D)
 
-        image.colour(200ub, 40ub, 40ub)
+        image.color(200ub, 40ub, 40ub)
         image.fill(circle(x, y, radius))
 
         image.write("bounce.png")

@@ -71,7 +71,7 @@ async function post(body, route = '/compile') {
 const HELLO = 'use IO.Std.write_line\n\nentry() is\n    write_line("hello {6 * 7}")\nsi\n';
 const BROKEN = 'use IO.Std.write_line\n\nentry() is\n    write_line(no_such_thing)\nsi\n';
 const DRAWING = 'use Raster.IMAGE\n\nentry() is\n    let image = IMAGE(40, 30)\n\n' +
-    '    image.colour(200ub, 40ub, 40ub)\n    image.stroke(3.0D)\n    image.line(0.0D, 0.0D, 40.0D, 30.0D)\n\n' +
+    '    image.color(200ub, 40ub, 40ub)\n    image.stroke(3.0D)\n    image.line(0.0D, 0.0D, 40.0D, 30.0D)\n\n' +
     '    image.write("dot.png")\n    image.show("dot.png")\nsi\n';
 
 try {
