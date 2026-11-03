@@ -34,8 +34,8 @@ WORKDIR /home/playground
 # owned by this user, before the volume does.
 RUN mkdir -p /home/playground/results /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=69.4.0
-ARG GHUL_RUNTIME_VERSION=37.1.0
+ARG GHUL_COMPILER_VERSION=69.7.0
+ARG GHUL_RUNTIME_VERSION=37.2.0
 ARG GHUL_RASTER_VERSION=1.0.0
 
 RUN dotnet tool install --tool-path /home/playground/tools \
