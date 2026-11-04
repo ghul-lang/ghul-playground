@@ -126,8 +126,10 @@ export function countPageview(path) {
 // cannot carry: it sends an image request, and a browser tearing a page down
 // abandons those. sendBeacon is the one request a browser promises to finish,
 // and GoatCounter accepts a POST to its count endpoint for exactly this.
+// A page that was never visible counts nothing, as for record; what it would
+// have sent is dropped rather than held, since the page is going away.
 function beacon(path, title) {
-    if (suppressed || !navigator.sendBeacon) return;
+    if (suppressed || !seen || !navigator.sendBeacon) return;
 
     const endpoint = document.getElementById('goatcounter')?.dataset.goatcounter;
 
