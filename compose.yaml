@@ -86,7 +86,7 @@ services:
       # 125 KB, so about 400 MB; the cap leaves room for readers' own programs
       # beside it without evicting the corpus.
       RESULT_CACHE_DIR: "/home/playground/results"
-      RESULT_CACHE_BYTES: "2147483648"
+      RESULT_CACHE_BYTES: "4294967296"
 
     # Bound to loopback: these sit behind a reverse proxy that terminates TLS,
     # rather than facing the internet themselves.
