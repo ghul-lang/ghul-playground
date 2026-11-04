@@ -202,6 +202,11 @@ chrome.on('error', e => {
         await ev(`document.getElementById('analyser')?.innerText`));
 
     // Diagnostics as you type: break the program and wait for a marker.
+    // The reader's own program starts on WebAssembly where the browser can run
+    // it. The checks from here to the target checks are about .NET's runtime
+    // (threads, standard input), so they run on .NET.
+    await ev(`document.querySelector('#target [data-target="dotnet"]')?.click(); true`);
+
     const broken = [
         'use IO.Std.write_line;', '', 'entry() is',
         '    let squares = [1, 2, 3] | .map(n => n * n) | .collect_mutable();',
