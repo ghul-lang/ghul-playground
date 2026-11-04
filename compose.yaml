@@ -133,9 +133,10 @@ services:
     environment:
       PLAYGROUND_TOKENS: "${PLAYGROUND_TOKENS:-}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
-      # Measured against the trimmed reference set and a single file, an
-      # analyser costs around 70 MB rather than the 260 MB a full project
-      # needs. The worst case is MAX_SESSIONS + POOL_SIZE of them, since the
+      # Measured live (2026-11-04), a .NET session's compiler holds 100-125 MB
+      # and a wasm session's about 215 MB, since it holds the library sources,
+      # each beside a language server of about 55 MB. The pool's analysers are
+      # wasm ones. The worst case is MAX_SESSIONS + POOL_SIZE of them, since the
       # pool tops up alongside the sessions in use rather than instead of them.
       MAX_SESSIONS: "24"
       POOL_SIZE: "6"
@@ -162,13 +163,13 @@ services:
     volumes:
       - cell-cache:/home/playground/cells:ro
 
-    # Well above what the sessions above can hold - a measured analyser is
-    # around 90 MB, so a full house is under 3 GB. The limit is here to make a
+    # Above what the sessions above can hold - at about 270 MB a wasm session,
+    # a full house of 30 is about 8 GB. The limit is here to make a
     # runaway allocation fail rather than to ration memory the host has spare,
     # and it is set high enough that the per-analyser figure drifting upward
     # between compiler releases cannot quietly turn it into a real ceiling.
-    mem_limit: 6g
-    memswap_limit: 6g
+    mem_limit: 8g
+    memswap_limit: 8g
     # Fewer than MAX_SESSIONS on purpose. An analyser is single threaded and a
     # session spends nearly all of its life idle between keystrokes, so this is
     # the number of requests that can be served at once rather than the number

@@ -2022,17 +2022,21 @@ chrome.on('error', e => {
         const program = ['use IO.Std.write_line;', '', 'entry() is', '    write_line("{6 * 7}");', 'si', ''].join('\n');
         const listing = () => ev(`monaco.editor.getModels().map(m => m.getValue()).find(v => v.includes('.method')) ?? ''`);
 
-        // The reader's own program starts on .NET: wasm is a choice to make
-        // rather than a default, so no visitor's first analyser session is a
-        // wasm one.
-        let startsDotnet = null;
+        // The reader's own program starts on WebAssembly with both targets
+        // offered, where this browser can run it, and on .NET where it can't.
+        let startsRight = null;
         for (let i = 0; i < 40; i++) {
-            startsDotnet = await ev(`(() => { const t = document.getElementById('target');
-                 return !t.hidden && t.querySelector('[data-target="dotnet"]').getAttribute('aria-pressed') === 'true'; })()`);
-            if (startsDotnet) break;
+            startsRight = await ev(`(() => { const t = document.getElementById('target');
+                 const wasm = t.querySelector('[data-target="wasm"]');
+                 const expected = wasm && !wasm.hidden ? 'wasm' : 'dotnet';
+                 return !t.hidden && t.querySelector(\`[data-target="\${expected}"]\`).getAttribute('aria-pressed') === 'true'; })()`);
+            if (startsRight) break;
             await sleep(250);
         }
-        check('the reader\'s own program starts on .NET with both targets offered', Boolean(startsDotnet));
+        check('the reader\'s own program starts on WebAssembly where it can, with both targets offered', Boolean(startsRight));
+
+        // The listing checks below start from .NET's IL.
+        await ev(`document.querySelector('#target [data-target="dotnet"]')?.click(); true`);
 
         await ev(`monaco.editor.getModels()[0].setValue(${JSON.stringify(program)}); true`);
 
