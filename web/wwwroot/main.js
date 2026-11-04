@@ -854,7 +854,7 @@ assemblyView = createAssemblyView({
     getSource: () => playground.getSource(),
     getTarget: () => runTarget,
     getBuilds: () => builds,
-    runsTitle: HOST === 'rosetta-task-page' ? 'what runs for this solution' : 'what runs for this program'
+    runsTitle: HOST === 'rosetta-task-page' ? 'this is what your browser is running' : 'what runs for this program'
 });
 
 // The reader's own program starts on WebAssembly with both targets offered,
