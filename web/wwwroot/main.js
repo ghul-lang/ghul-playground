@@ -857,12 +857,11 @@ assemblyView = createAssemblyView({
     runsTitle: HOST === 'rosetta-task-page' ? 'what runs for this solution' : 'what runs for this program'
 });
 
-// The reader's own program starts on .NET with both targets offered - wasm's
-// narrower library is a choice to make, not a default, and this way no casual
-// visitor opens a wasm analyser session (`?wasm` starts it on WebAssembly
-// instead). A program named by the page runs where the corpus knows it runs.
+// The reader's own program starts on WebAssembly with both targets offered,
+// where the browser can run it, and on .NET where it can't. A program named by
+// the page runs where the corpus knows it runs.
 if (requested) playground.setWasmCapable(WASM_REQUESTED || program?.wasm === true);
-else playground.setWasmCapable(true, { prefer: WASM_REQUESTED ? 'wasm' : 'dotnet' });
+else playground.setWasmCapable(true, { prefer: 'wasm' });
 
 for (const button of targetChoice.querySelectorAll('button')) {
     button.addEventListener('click', () => {

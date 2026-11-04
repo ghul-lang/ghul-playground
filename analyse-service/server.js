@@ -115,11 +115,20 @@ function poolState() {
     return { idle: idle.length, warming };
 }
 
+// The pool's analysers are for the wasm target wherever the image carries the
+// library sources, since most programs and most browsers run on WebAssembly,
+// and for .NET otherwise. A session for the other target is started cold.
+const poolIsWasm = () => wasm !== null;
+const poolFlags = () => poolIsWasm() ? wasmFlags() : [];
+const poolReferences = () => poolIsWasm() ? [] : references;
+
 function replenish() {
     while (idle.length + warming < POOL_SIZE) {
         warming++;
 
-        const analyser = new Analyser({ command: SERVER_COMMAND, compiler, references, log });
+        const analyser = new Analyser({
+            command: SERVER_COMMAND, compiler, references: poolReferences(), log, otherFlags: poolFlags()
+        });
 
         (async () => {
             try {
@@ -204,7 +213,7 @@ function acquire() {
 
             log('pool empty, starting a cold analyser');
 
-            hand(await startCold());
+            hand(await startCold(poolFlags(), poolReferences()));
         }, ACQUIRE_TIMEOUT_MS);
     });
 }
@@ -535,7 +544,7 @@ function isRepl(request) {
 
 // A connection asking for its program to be analysed as the wasm target would
 // compile it. Honoured only where the image carries the library sources; an
-// analyser for .NET answers otherwise, as every one did before.
+// analyser for .NET answers otherwise.
 function isWasm(request) {
     return wasm !== null &&
         new URL(request.url, 'http://localhost').searchParams.get('target') === 'wasm';
@@ -543,9 +552,7 @@ function isWasm(request) {
 
 // What a wasm analyser is started with: the target, and the library sources
 // named on its command line in place of reference assemblies, exactly as the
-// compile service compiles for wasm. Started for the client rather than taken
-// from the pool, like a REPL session's: about two seconds to a first answer.
-// The session outlives any one version of the program, so it carries raster
+// compile service compiles for wasm. The session outlives any one version of the program, so it carries raster
 // whether or not the program uses it yet.
 const wasmFlags = () => ['--target', 'wasm', ...(wasm.withRaster ?? wasm).args];
 
@@ -642,19 +649,25 @@ wss.on('connection', async (socket, request) => {
     sessions.add(placeholder);
 
     const repl = isRepl(request);
+    const target = isWasm(request) ? 'wasm' : 'dotnet';
+    const pooled = !repl && (target === 'wasm') === poolIsWasm();
 
     // A REPL session's analyser runs in submission mode, which the pool's
-    // analysers do not, so it is started for the client.
+    // analysers do not, so it is started for the client, as is one for the
+    // target the pool is not for.
+    const acquiring = Date.now();
     let analyser;
     try {
         analyser = repl ? await startCold(REPL_FLAGS)
-            : isWasm(request) ? await startCold(wasmFlags(), [])
-                : await acquire();
+            : pooled ? await acquire()
+                : await startCold(target === 'wasm' ? wasmFlags() : [], target === 'wasm' ? [] : references);
     } finally {
         sessions.delete(placeholder);
     }
 
     if (!analyser || socket.readyState !== socket.OPEN) {
+        log(`refusing connection: ${analyser ? 'client gone before an analyser was ready' : 'no analyser'}, ` +
+            `${repl ? 'repl' : target}, ${pooled ? 'pooled' : 'cold'}, after ${Date.now() - acquiring} ms`);
         analyser?.kill();
         try { socket.close(1011, 'no analyser available'); } catch { }
         outcome(repl, { event: 'refused', result: 'no-analyser', status: 1011 });
@@ -695,7 +708,7 @@ wss.on('connection', async (socket, request) => {
     server.listen(PORT, HOST, () => {
         log(`analyse service on ws://${HOST}:${PORT}/analyse ` +
             `(max ${MAX_SESSIONS} sessions, ${MAX_SESSIONS_PER_ADDRESS} per address, ` +
-            `pool ${POOL_SIZE}, idle ${IDLE_TIMEOUT_MS / 1000}s, evictable after ${EVICT_QUIET_MS / 1000}s)`);
+            `pool ${POOL_SIZE} ${poolIsWasm() ? 'wasm' : 'dotnet'}, idle ${IDLE_TIMEOUT_MS / 1000}s, evictable after ${EVICT_QUIET_MS / 1000}s)`);
         log(tokens.describe());
         log(origins.describe());
 
