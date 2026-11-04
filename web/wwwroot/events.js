@@ -52,9 +52,34 @@ function send(event) {
     }
 }
 
+// GoatCounter counts a page's own view only once the page has been visible, so
+// a page rendered where nobody sees it, as a crawler renders one, counts
+// nothing. Everything this page counts follows the same rule: it waits until
+// the page has first been visible, and is dropped if it never is.
+let seen = typeof document === 'undefined' || !('visibilityState' in document) || document.visibilityState === 'visible';
+const unseen = [];
+
+if (!seen) {
+    const shown = () => {
+        if (document.visibilityState !== 'visible') return;
+
+        document.removeEventListener('visibilitychange', shown);
+        seen = true;
+
+        while (unseen.length) record(unseen.shift());
+    };
+
+    document.addEventListener('visibilitychange', shown);
+}
+
 // One thing to count, sent now or once the counter has loaded.
 function record(entry) {
     if (suppressed) return;
+
+    if (!seen) {
+        unseen.push(entry);
+        return;
+    }
 
     if (window.goatcounter?.count) {
         send(entry);
