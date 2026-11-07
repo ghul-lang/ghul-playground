@@ -94,6 +94,16 @@ for (const page of pages) {
 
     check(`${page} sends events and loads the counter`, counts,
         'no element with id="goatcounter", so every event it sends goes nowhere');
+
+    // A page that counts a view has to tell the counter not to count it when
+    // the browser is automated, or the pageview lands while events.js holds
+    // its events back and the two disagree. embed.html is exempt: it sends no
+    // pageview at all, so there is nothing to disagree with.
+    if (!NO_PAGEVIEW.includes(page)) {
+        check(`${page} does not pageview an automated browser`,
+            /navigator\.webdriver/.test(markup.slice(0, markup.search(/id=['"]goatcounter['"]/))),
+            'the counter is not told no_onload for an automated browser before it loads');
+    }
 }
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');

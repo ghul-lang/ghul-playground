@@ -138,6 +138,9 @@ jobs:
       - name: Check which analyser events a session's changes produce
         run: node test/analyser-outcomes.mjs
 
+      - name: Check that an automated browser is not counted
+        run: node test/events-suppression.mjs
+
       - name: Check how a command line is written and read back
         run: node test/arguments.mjs
 
