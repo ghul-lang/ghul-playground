@@ -116,7 +116,13 @@
 
        Readers who do not want to be counted can visit /#toggle-goatcounter once
        per browser; the flag is per-origin and this page shares ghul.dev's
-       origin, so setting it there covers this page too. -->
+       origin, so setting it there covers this page too. An automated browser
+       is not counted at all, in pageview or in events. -->
+  <script>
+    if (typeof navigator !== 'undefined' && navigator.webdriver) {
+      window.goatcounter = { no_onload: true };
+    }
+  </script>
   <script id="goatcounter" data-goatcounter="/stats/count"
           async src="/stats/count.js"></script>
 </head>

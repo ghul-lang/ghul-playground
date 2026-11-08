@@ -630,10 +630,14 @@
   <!-- Framed as a panel, the page sits inside one that counts its own view,
        so the counter leaves the pageview on load to it. The counter also
        ignores everything from inside a frame unless told otherwise, which would
-       drop the runs and results that only this page can see. -->
+       drop the runs and results that only this page can see. An automated
+       browser is not counted at all, in pageview or in events: the counter is
+       told not to count the view on load, and events.js sends it nothing. -->
   <script>
     if (new URLSearchParams(location.search).has('panel')) {
       window.goatcounter = { allow_frame: true, no_onload: true };
+    } else if (typeof navigator !== 'undefined' && navigator.webdriver) {
+      window.goatcounter = { no_onload: true };
     }
   </script>
   <script id="goatcounter" data-goatcounter="/stats/count"

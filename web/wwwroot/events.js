@@ -17,7 +17,7 @@ const queued = [];
 
 let listening = false;
 
-// Two ways to not be counted, and both are the reader's rather than ours.
+// Three ways to not be counted. Two are the reader's rather than ours.
 //
 // `skipgc` is GoatCounter's own opt-out, set by visiting #toggle-goatcounter,
 // and count.js honours it by itself - this is only so that nothing is queued
@@ -26,7 +26,15 @@ let listening = false;
 // `?notrack` on the URL is for the end-to-end tests, which drive a real browser
 // against the real site and would otherwise count themselves. It is a page-load
 // decision, so it is read once.
+//
+// An automated browser is not a reader: `navigator.webdriver` is set in a
+// browser that is being driven rather than used, and never in one a person is
+// sitting at, so what it does is not counted at all. A driver that clears the
+// flag gets around this, as it gets around every such check; this only keeps
+// the default headless browsers out of the figures.
 const suppressed = (() => {
+    if (typeof navigator !== 'undefined' && navigator.webdriver) return true;
+
     try {
         if (new URLSearchParams(location.search).has('notrack')) return true;
     } catch {
