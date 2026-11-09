@@ -102,7 +102,7 @@ window.addEventListener('message', async event => {
             source: message.source ?? DEFAULT_SOURCE,
             theme: message.theme ?? 'vs',
 
-            onOutput: text => post('output', { text }),
+            onOutput: (text, screen) => post('output', screen ? { text, screen } : { text }),
 
             // A program that reads a line has nowhere to read it from here:
             // the box is part of the standalone page's chrome, and an

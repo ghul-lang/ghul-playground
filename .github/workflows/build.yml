@@ -109,13 +109,17 @@ jobs:
                    scripts/*.js web/wwwroot/main.js web/wwwroot/lsp.js web/wwwroot/embed.js \
                    web/wwwroot/playground.js web/wwwroot/token.js web/wwwroot/theme.js \
                    web/wwwroot/collections.js web/wwwroot/files.js \
-                   web/wwwroot/ghul-language.js web/wwwroot/live-output.js; do
+                   web/wwwroot/ghul-language.js web/wwwroot/live-output.js \
+                   web/wwwroot/terminal.js web/wwwroot/terminal-view.js; do
             node --check "$f" || exit 1
           done
           echo "all sources parse"
 
       - name: Check the image-marker handling
         run: node test/live-output.mjs
+
+      - name: Check the output panel's terminal
+        run: node test/terminal.mjs
 
       - name: Check the page works out where it is served from
         run: node test/base-path.mjs

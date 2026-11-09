@@ -1,0 +1,22 @@
+{
+    "matrix-digital-rain": {
+        "rows": 13,
+        "columns": 32
+    },
+    "terminal-control-coloured-text": {
+        "rows": 6,
+        "columns": 80
+    },
+    "terminal-control-cursor-positioning": {
+        "rows": 8,
+        "columns": 20
+    },
+    "terminal-control-inverse-video": {
+        "rows": 2,
+        "columns": 40
+    },
+    "terminal-control-preserve-screen": {
+        "rows": 3,
+        "columns": 50
+    }
+}

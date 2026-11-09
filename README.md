@@ -219,6 +219,7 @@ node test/analyser-stress.js        # can broken source stop the analyser answer
 node test/analyse-eviction.js      # does an address at its cap give up its quietest session? (see the file for the service settings)
 node test/browser-end-to-end.js     # editor, analyser, compile and run, in a real browser
 node test/live-output.mjs           # the image-marker handling on its own
+node test/terminal.mjs              # the output panel's terminal, against the Rosetta Code tools' one
 ```
 
 Both take `ANALYSE_URL` / `BASE` and `TOKEN` to run against a deployment rather
@@ -246,6 +247,8 @@ one either way.
 | `web/wwwroot/token.js` | the access token, and asking for one |
 | `web/wwwroot/files.js` | opening and saving a `.ghul` file, and saving a drawing |
 | `web/wwwroot/live-output.js` | the program's output as the page shows it: image markers turned into pictures as they arrive |
+| `web/wwwroot/terminal.js` | output that uses escape sequences, played onto a screen of styled character cells |
+| `web/wwwroot/terminal-view.js` | drawing that screen in the output panel |
 | `analyse-service/` | a WebSocket in front of one language server per editor |
 | `compile-service/` | compiles posted source, returns an assembly, or a WebAssembly module and its loader when the request asks for `"target": "wasm"` |
 | `shared/toolchain.js` | where the toolchain is, and the reference set |

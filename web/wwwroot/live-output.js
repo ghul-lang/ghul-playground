@@ -12,6 +12,10 @@
 // the same code serves the live output and the complete text the run answers
 // with at the end, and a test can drive it with no runtime at all.
 
+import { Terminal } from './terminal.js';
+
+const ESC = '\x1b';
+
 export const MARKER_OPEN = '<<image ';
 export const MARKER_CLOSE = '>>';
 
@@ -110,6 +114,9 @@ export class LiveOutput {
         this._total = 0;
         this._dropped = 0;
         this._changed = false;
+
+        // Made at the first escape sequence the output holds.
+        this._terminal = null;
     }
 
     // Takes the next piece of output. Only whole lines are decided on, since a
@@ -118,7 +125,11 @@ export class LiveOutput {
     // Called with nothing, it looks again at the pictures whose files were not
     // yet complete.
     feed(text = '') {
+        if (text && !this._terminal && text.includes(ESC)) this._startTerminal();
+
         if (text) {
+            this._terminal?.feed(text);
+
             const lines = (this._partial + text).split('\n');
 
             this._partial = lines.pop();
@@ -138,19 +149,34 @@ export class LiveOutput {
 
         if (last) this._line(last, true);
 
+        this._terminal?.finish();
+
         this._retry(true);
     }
 
+    // The output drawn on a terminal's screen, as rows of styled runs, once
+    // the output has used an escape sequence; null for output that has not,
+    // which is shown as the text it is.
+    get screen() {
+        return this._terminal ? this._terminal.lines : null;
+    }
+
     // The text as it stands, marker lines taken out and carriage returns
-    // applied.
+    // applied, or once there is a screen, the screen as plain text.
     get text() {
-        const lines = this._lines.map(overprint);
+        let text;
 
-        let text = lines.join('\n');
+        if (this._terminal) {
+            text = this._terminal.text;
+        } else {
+            const lines = this._lines.map(overprint);
 
-        if (this._lines.length) text += '\n';
+            text = lines.join('\n');
 
-        text += overprint(this._partial);
+            if (this._lines.length) text += '\n';
+
+            text += overprint(this._partial);
+        }
 
         if (this._dropped > 0) {
             text += `[${this._dropped} image(s) not shown: this run drew more than ` +
@@ -175,6 +201,16 @@ export class LiveOutput {
         this._changed = false;
 
         return changed;
+    }
+
+    // The terminal starts with what was shown before it, so the screen picks
+    // up where the text left off.
+    _startTerminal() {
+        this._terminal = new Terminal();
+
+        const before = this._lines.join('\n');
+
+        this._terminal.feed(this._lines.length ? `${before}\n${this._partial}` : this._partial);
     }
 
     _line(line, last = false) {
