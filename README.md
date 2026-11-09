@@ -249,6 +249,7 @@ one either way.
 | `web/wwwroot/live-output.js` | the program's output as the page shows it: image markers turned into pictures as they arrive |
 | `web/wwwroot/terminal.js` | output that uses escape sequences, played onto a screen of styled character cells |
 | `web/wwwroot/terminal-view.js` | drawing that screen in the output panel |
+| `web/wwwroot/fonts/` | the face a terminal screen is drawn in, a subset of Noto Sans Mono CJK JP under the OFL |
 | `analyse-service/` | a WebSocket in front of one language server per editor |
 | `compile-service/` | compiles posted source, returns an assembly, or a WebAssembly module and its loader when the request asks for `"target": "wasm"` |
 | `shared/toolchain.js` | where the toolchain is, and the reference set |

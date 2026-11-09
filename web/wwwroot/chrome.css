@@ -248,6 +248,20 @@ button.indicator:is([data-state="ready"], [data-state="connecting"]):hover { bac
   padding: 1.25rem 1.5rem 1.5rem;
 }
 
+/* A terminal screen is a grid of equal columns, which Fira Code's ASCII and
+   the half-width katakana programs draw rain with cannot make together: this
+   face draws ASCII, box drawing and half-width katakana all half an em wide.
+   Only a terminal screen uses it, so it is fetched only when one is shown. */
+@font-face {
+  font-family: 'ghul terminal';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/ghul-terminal.woff2') format('woff2');
+}
+
+.terminal-screen { font-family: 'ghul terminal', var(--mono); }
+
 #help h2 { margin: 0 0 0.75rem; font-size: 1.05rem; }
 #help h3 { margin: 1.25rem 0 0.4rem; font-size: 0.9rem; }
 #help p, #help li { line-height: 1.55; color: var(--fg); margin: 0.5rem 0; }
