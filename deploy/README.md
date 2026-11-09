@@ -485,7 +485,18 @@ rather than in the pages means no query has to know, and that what is
 excluded - which describes whoever runs the site rather than the service - stays
 off a public repository.
 
-One line, rules separated by `;`, each rule's own fields by `|`:
+The rules are read from two places, and both apply:
+
+- **`/etc/ghul-playground/snapshot/exclude.rules`**, one rule a line, with a line
+  starting `#` a comment and blank lines ignored. The directory is mounted
+  read-only into the snapshot service, and the file is read again on every
+  pass, so a rule added there applies to the next copy with nothing restarted.
+  It is optional: a missing file is no rules. It has to be readable by the
+  service's user (uid 1000); mode 644 is enough.
+- **`SNAPSHOT_EXCLUDE`** in `.env`, the same rules on one line separated by `;`,
+  which applies from the next start of the service.
+
+Each rule's own fields are separated by `|`:
 
 | rule | removes |
 | --- | --- |
@@ -505,7 +516,7 @@ its browser and system but always gives the same referrer.
 A rule naming nothing removes nothing, and a rule of an unknown kind is
 reported and skipped, so a mistake costs a snapshot rather than data. The next
 copy is five minutes away regardless, so changing the rules needs no more than
-editing `.env` and restarting the one service.
+editing the file, or editing `.env` and restarting the one service.
 
 `test/snapshot-rules.sh` checks what each kind of rule removes and that the
 source database is untouched; `test/insights.mjs` reads a snapshot built with

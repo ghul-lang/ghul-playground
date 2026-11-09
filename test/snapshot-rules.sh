@@ -70,16 +70,29 @@ insert into hits (hit_id, path_id, location, created_at, session, ref_id) values
  (15, 1, 'GB', '2019-04-01 10:00:00', 'm', 1),
  (16, 3, 'GB', '2019-04-01 10:00:05', 'm', null),
  (17, 1, 'GB', '2019-04-01 10:00:00', 'n', 2);
+-- Rules from the host's file: a place it names goes, one only its comment
+-- names stays.
+insert into hits (hit_id, path_id, location, created_at, session) values
+ (18, 1, 'ZZ', '2019-04-01 10:00:00', 'o'),
+ (19, 1, 'WW', '2019-04-01 10:00:00', 'p');
 insert into users values (1, x'deadbeef');
 insert into api_tokens values (1, 'secret');
 insert into store values ('k');
 SQL
+
+cat > "$work/exclude.rules" <<'RULES'
+# Comments and blank lines are not rules.
+#   location|WW
+
+location|ZZ
+RULES
 
 # One pass rather than the loop: the script is a loop around this, and a test
 # that waited for a second pass would be timing rather than behaviour.
 SNAPSHOT_SOURCE="$work/data/db.sqlite3" \
 SNAPSHOT_TARGET="$work/out/analytics.sqlite3" \
 SNAPSHOT_INTERVAL=3600 \
+SNAPSHOT_EXCLUDE_FILE="$work/exclude.rules" \
 SNAPSHOT_EXCLUDE="location|XX; location-window|YY|2019-04-02 10:30:00|2019-04-02 13:30:00; path|/deploy-probe; agent|Chrome|150|Linux|1920; agent|Firefox||||2019-04-06 00:00:00|2019-04-07 00:00:00; ref|automated.example; nonsense|whatever" \
     timeout 60 sh "$here/../deploy/snapshot/snapshot.sh" >"$work/log" 2>&1 &
 
@@ -111,10 +124,10 @@ fi
 kept=$(sqlite3 "$work/out/analytics.sqlite3" 'select group_concat(hit_id) from (select hit_id from hits order by hit_id)')
 
 check "each rule drops what it names, and only that" \
-    "$kept" "2,5,6,9,10,12,13,17"
+    "$kept" "2,5,6,9,10,12,13,17,19"
 
 check "the live database is not touched" \
-    "$(sqlite3 "$work/data/db.sqlite3" 'select count(*) from hits')" "17"
+    "$(sqlite3 "$work/data/db.sqlite3" 'select count(*) from hits')" "19"
 
 check "the login and its tokens are not in the snapshot" \
     "$(sqlite3 "$work/out/analytics.sqlite3" "select count(*) from sqlite_master where type='table' and name in ('users','api_tokens','store')")" "0"

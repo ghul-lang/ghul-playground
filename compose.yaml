@@ -232,12 +232,16 @@ services:
     volumes:
       - goatcounter-data:/data
       - goatcounter-snapshot:/snapshot
+      # The host's exclusion rules, as a directory so that a file edited there
+      # by renaming over it is still the one the container reads.
+      - /etc/ghul-playground/snapshot:/config:ro
 
     environment:
       # The name goatcounter gives it, which is not the name of the service.
       SNAPSHOT_SOURCE: /data/db.sqlite3
       SNAPSHOT_TARGET: /snapshot/analytics.sqlite3
       SNAPSHOT_INTERVAL: "300"
+      SNAPSHOT_EXCLUDE_FILE: /config/exclude.rules
       # Which visits are the site's own rather than a visitor's. Set on the
       # host, never here: it describes the people running the site rather than
       # the service. deploy/README.md has the format - one line, rules
