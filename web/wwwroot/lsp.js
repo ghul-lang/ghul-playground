@@ -79,6 +79,9 @@ export class GhulLanguageClient {
         this.reconnectDelay = 1000;
         this.disposed = false;
 
+        // Set while a socket the page closed itself, to reconnect, is closing.
+        this.replacing = false;
+
         // Set when the service closed the session for idleness. Reconnecting
         // straight away would defeat the reaping entirely: the slot would be
         // handed back to the same idle editor, and a couple of forgotten tabs
@@ -188,7 +191,9 @@ export class GhulLanguageClient {
         this.reconnectDelay = 1000;
 
         if (this.socket && this.socket.readyState !== WebSocket.CLOSED) {
-            // The close handler schedules the retry.
+            // The close handler connects again. This close is the page's own
+            // choice, so it is no failure of the service's.
+            this.replacing = true;
             this.socket.close();
             return;
         }
@@ -286,6 +291,14 @@ export class GhulLanguageClient {
             // Any in-flight request will never be answered now.
             for (const resolve of this.pending.values()) resolve(null);
             this.pending.clear();
+
+            if (this.replacing) {
+                this.replacing = false;
+
+                if (!this.disposed && this.socket === socket) this.connect();
+
+                return;
+            }
 
             // Report every failure, including one that never got as far as
             // being ready. Reporting only the ready-then-lost case leaves a

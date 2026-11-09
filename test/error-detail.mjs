@@ -31,7 +31,7 @@ setPhase('running');
 script('https://ghul.dev/playground/main.js?token=secret#x');
 
 check('a script error names the page\'s own script and the phase',
-    counted.join() === 'mini-ide-error/standalone/script/main.js/running', counted.join());
+    counted.join() === 'mini-ide-error/standalone/script/main.js/none/running', counted.join());
 
 counted = [];
 script('https://ghul.dev/playground/main.js');
@@ -51,13 +51,19 @@ let out = await fresh(m => { m.setPhase('starting runtime'); listeners.unhandled
 check('a status with a space is read as one word', out.join() === 'f/unhandled-rejection/starting-runtime', out.join());
 
 out = await fresh(() => script('https://evil.example/x.js'));
-check('a script from another origin is not named', out.join() === 'f/script', out.join());
+check('a script from another origin is not named', out.join() === 'f/script/none', out.join());
 
 out = await fresh(() => script('https://ghul.dev/play ground/with space.js'));
-check('a name that is not a plain file name is not recorded', out.join() === 'f/script', out.join());
+check('a name that is not a plain file name is not recorded', out.join() === 'f/script/none', out.join());
 
 out = await fresh(() => script('https://ghul.dev/playground/rosetta-code/ludic-numbers'));
-check('an error from the page\'s own document is inline, not named by its address', out.join() === 'f/script/inline', out.join());
+check('an error from the page\'s own document is inline, not named by its address', out.join() === 'f/script/inline/none', out.join());
+
+out = await fresh(() => listeners.error.forEach(fn => fn({ filename: 'https://ghul.dev/playground/rosetta-code/ludic-numbers', lineno: 18 })));
+check('an inline error names the line it failed on', out.join() === 'f/script/inline-18/none', out.join());
+
+out = await fresh(() => listeners.error.forEach(fn => fn({ filename: 'https://ghul.dev/playground/main.js', lineno: 18 })));
+check('a named script\'s line is not recorded', out.join() === 'f/script/main.js/none', out.join());
 
 counted = [];
 script(''); // the page's own document again, already seen this load
@@ -71,7 +77,7 @@ out = await fresh(() => throwing(''));
 check('an error with no file name still carries its name', out.join() === 'f/script/TypeError', out.join());
 
 out = await fresh(() => listeners.error.forEach(fn => fn({ filename: 'https://ghul.dev/playground/main.js', error: { name: 'made up by the reader' } })));
-check('a name outside the list is not recorded', out.join() === 'f/script/main.js', out.join());
+check('a name outside the list is recorded as other', out.join() === 'f/script/main.js/other', out.join());
 
 out = await fresh(m => {
     m.setPhase('compiling');
@@ -87,7 +93,7 @@ out = await fresh(() => {
 check('nothing is counted once the page is on its way out', out.length === 0, out.join());
 
 out = await fresh(() => script(''));
-check('a cross-origin error with no file name has no source', out.join() === 'f/script', out.join());
+check('a cross-origin error with no file name has no source', out.join() === 'f/script/none', out.join());
 
 out = await fresh(() => {
     new window.Worker('blob:https://ghul.dev/0e1f');

@@ -138,6 +138,9 @@ jobs:
       - name: Check which analyser events a session's changes produce
         run: node test/analyser-outcomes.mjs
 
+      - name: Check that the page closing its own analyser socket is not a failure
+        run: node test/analyser-reconnect.mjs
+
       - name: Check that an automated browser is not counted
         run: node test/events-suppression.mjs
 
