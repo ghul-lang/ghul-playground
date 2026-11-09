@@ -17,14 +17,18 @@
 # below name, and a dashboard reading it then needs no filters and holds no
 # opinion about who is excluded. Change the rules and the next copy has them.
 #
-# The rules come from the environment rather than from this repository, which is
+# The rules come from the host rather than from this repository, which is
 # public: which networks and places the site's own people browse from describes
-# them rather than the service. See deploy/README.md for the format.
+# them rather than the service. They are read from a file on the host, again on
+# every pass, so a rule added there applies to the next copy with nothing
+# restarted, and from the environment, for rules set when the service starts.
+# See deploy/README.md for the format.
 set -eu
 
 SOURCE="${SNAPSHOT_SOURCE:-/data/db.sqlite3}"
 TARGET="${SNAPSHOT_TARGET:-/snapshot/analytics.sqlite3}"
 INTERVAL="${SNAPSHOT_INTERVAL:-300}"
+RULES_FILE="${SNAPSHOT_EXCLUDE_FILE:-/config/exclude.rules}"
 
 # Tables the pages have no business holding. `users` carries the dashboard login's
 # password hash and `api_tokens` its tokens; `store` is upstream's own scratch
@@ -62,6 +66,16 @@ agent_hits() {
             where %s' "$conditions"
 }
 
+# Every rule in force: the environment's, then the file's, one a line, with a
+# line starting `#` a comment. A missing file is no rules rather than an error.
+rules() {
+    printf '%s\n' "${SNAPSHOT_EXCLUDE:-}" | tr ';' '\n'
+
+    if [ -r "$RULES_FILE" ]; then
+        grep -v '^[[:space:]]*#' "$RULES_FILE" | tr ';' '\n' || true
+    fi
+}
+
 snapshot() {
     working="${TARGET}.new"
 
@@ -78,7 +92,7 @@ snapshot() {
 
     # One rule per line or separated by `;`, whichever the host finds easier to
     # write - a compose environment file cannot carry a value spanning lines, so
-    # `;` is what it will be in practice. Each rule's own fields are separated
+    # `;` is what it will be there, and a line each in the file. Each rule's own fields are separated
     # by `|`, which is not a character any of them can contain; a space is,
     # since a timestamp has one.
     #
@@ -99,7 +113,7 @@ snapshot() {
     #
     # A rule that names nothing removes nothing, so a wrong one is quiet rather
     # than destructive - and the next snapshot is five minutes away regardless.
-    printf '%s\n' "${SNAPSHOT_EXCLUDE:-}" | tr ';' '\n' | while IFS= read -r rule; do
+    rules | while IFS= read -r rule; do
         rule=$(printf '%s' "$rule" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
         [ -n "$rule" ] || continue
