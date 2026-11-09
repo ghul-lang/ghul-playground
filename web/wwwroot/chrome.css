@@ -21,6 +21,15 @@
   --bad: #cf222e;
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
   --mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* The 16 terminal colors output drawn with escape sequences is shown in,
+     with the page's own text and background as its defaults. */
+  --terminal-foreground: var(--fg);
+  --terminal-background: var(--bg);
+  --terminal-0: #000000; --terminal-1: #cd3131; --terminal-2: #00bc00; --terminal-3: #949800;
+  --terminal-4: #0451a5; --terminal-5: #bc05bc; --terminal-6: #0598bc; --terminal-7: #555555;
+  --terminal-8: #666666; --terminal-9: #cd3131; --terminal-10: #14ce14; --terminal-11: #b5ba00;
+  --terminal-12: #0451a5; --terminal-13: #bc05bc; --terminal-14: #0598bc; --terminal-15: #a5a5a5;
 }
 
 :root[data-theme="light"] { color-scheme: light; }
@@ -40,6 +49,10 @@
     --warn: #d29922;
     --bad: #f85149;
     --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    --terminal-0: #000000; --terminal-1: #cd3131; --terminal-2: #0dbc79; --terminal-3: #e5e510;
+    --terminal-4: #2472c8; --terminal-5: #bc3fbc; --terminal-6: #11a8cd; --terminal-7: #e5e5e5;
+    --terminal-8: #666666; --terminal-9: #f14c4c; --terminal-10: #23d18b; --terminal-11: #f5f543;
+    --terminal-12: #3b8eea; --terminal-13: #d670d6; --terminal-14: #29b8db; --terminal-15: #ffffff;
   }
 }
 
@@ -54,6 +67,10 @@
   --warn: #d29922;
   --bad: #f85149;
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --terminal-0: #000000; --terminal-1: #cd3131; --terminal-2: #0dbc79; --terminal-3: #e5e510;
+  --terminal-4: #2472c8; --terminal-5: #bc3fbc; --terminal-6: #11a8cd; --terminal-7: #e5e5e5;
+  --terminal-8: #666666; --terminal-9: #f14c4c; --terminal-10: #23d18b; --terminal-11: #f5f543;
+  --terminal-12: #3b8eea; --terminal-13: #d670d6; --terminal-14: #29b8db; --terminal-15: #ffffff;
 }
 
 * { box-sizing: border-box; }

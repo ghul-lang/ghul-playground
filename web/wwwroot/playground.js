@@ -206,6 +206,17 @@ function writeFiles(fs, files) {
     }
 }
 
+const TRUNCATED = '\n[output stopped here: this program printed more than the playground shows]';
+
+// What a page draws for output that used escape sequences: the run's note,
+// the screen's rows, and anything said after them. Null for any other output,
+// which is shown as its text.
+function screenOf(live, before, after = '') {
+    const lines = live.screen;
+
+    return lines ? { before, lines, after } : null;
+}
+
 export async function createPlayground({
     container,
     source = DEFAULT_SOURCE,
@@ -692,7 +703,7 @@ export async function createPlayground({
                 if (written > shown) {
                     live.feed(readOutput(output, shown, written));
                     shown = written;
-                    onOutput(note + live.text);
+                    onOutput(note + live.text, screenOf(live, note));
                 } else {
                     live.feed();
                 }
@@ -744,13 +755,11 @@ export async function createPlayground({
             final.feed(produced.text);
             final.finish();
 
-            let text = final.text;
+            const text = final.text;
 
-            if (Atomics.load(views().control, OUTPUT_TRUNCATED) === 1) {
-                text += '\n[output stopped here: this program printed more than the playground shows]';
-            }
+            const after = Atomics.load(views().control, OUTPUT_TRUNCATED) === 1 ? TRUNCATED : '';
 
-            onOutput(note + text);
+            onOutput(note + text + after, screenOf(final, note, after));
             onImages(final.images);
 
             // The filesystem lives as long as the tab, so what one run wrote
@@ -805,7 +814,7 @@ export async function createPlayground({
             onOutput: text => {
                 live.feed(text.slice(fed));
                 fed = text.length;
-                onOutput(note + live.text);
+                onOutput(note + live.text, screenOf(live, note));
 
                 if (live.takeChanged()) onImages(live.images);
             },
@@ -827,13 +836,11 @@ export async function createPlayground({
             final.feed(produced.text);
             final.finish();
 
-            let text = final.text;
+            const text = final.text;
 
-            if (produced.truncated) {
-                text += '\n[output stopped here: this program printed more than the playground shows]';
-            }
+            const after = produced.truncated ? TRUNCATED : '';
 
-            onOutput(note + text);
+            onOutput(note + text + after, screenOf(final, note, after));
             onImages(final.images);
 
             onStatus('done', {
