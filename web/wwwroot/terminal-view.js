@@ -44,5 +44,12 @@ export function showScreen(element, { before = '', lines, after = '' }) {
 
     if (after) fragment.append(after);
 
+    element.classList.add('terminal-screen');
     element.replaceChildren(fragment);
+}
+
+// Replaces what `element` shows with plain `text`, in the element's own face.
+export function showText(element, text) {
+    element.classList.remove('terminal-screen');
+    element.textContent = text;
 }

@@ -14,7 +14,7 @@ import { countEvent, countPageview, band, countTimeOnPage } from './events.js'
 import { isAheadOfWiki, loadIndex, suggestions as suggest, taskFor } from './rosetta-index.js'
 import { whenReader } from './engagement.js'
 import { createAssemblyView } from './assembly-view.js'
-import { showScreen } from './terminal-view.js'
+import { showScreen, showText } from './terminal-view.js'
 
 // Where this mini-IDE is: its own page, or framed on an example page or a
 // Rosetta task page, which the framing page says in the address. Every event
@@ -680,13 +680,13 @@ const playground = await createPlayground({
             if (screen) {
                 showScreen(outputPane, screen);
             } else {
-                outputPane.textContent = text;
+                showText(outputPane, text);
             }
         } else {
             // An empty call is only ever the run clearing the pane: the
             // no-output verdict is decided at the run's terminal state, from
             // whether output ever arrived, and never here.
-            outputPane.textContent = '';
+            showText(outputPane, '');
         }
 
         if (runUnderway) showSpinner();
