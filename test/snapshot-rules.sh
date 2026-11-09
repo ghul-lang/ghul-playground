@@ -28,7 +28,10 @@ sqlite3 "$work/data/db.sqlite3" > /dev/null <<'SQL'
 pragma journal_mode=wal;
 create table paths (path_id integer primary key, path text, event int);
 create table hits (hit_id integer primary key, path_id int, location text, created_at text, session text,
-                   browser_id int not null default 1, system_id int not null default 1, width smallint);
+                   browser_id int not null default 1, system_id int not null default 1, width smallint,
+                   ref_id int);
+create table refs (ref_id integer primary key, ref text, ref_scheme text);
+insert into refs values (1, 'automated.example', 'o'), (2, 'reader.example', 'o');
 create table browsers (browser_id integer primary key, name text, version text);
 create table systems (system_id integer primary key, name text, version text);
 insert into browsers values (1, 'Firefox', '120'), (2, 'Chrome', '150'), (3, 'Chrome', '149');
@@ -61,6 +64,12 @@ insert into hits (hit_id, path_id, location, created_at, session, browser_id, sy
  (12, 1, 'GB', '2019-04-01 10:00:00', 'j', 2, 2, 1920),
  (13, 1, 'GB', '2019-04-05 10:00:00', 'k', 1, 1, 800),
  (14, 1, 'GB', '2019-04-06 10:00:00', 'l', 1, 1, 800);
+-- The ref rule: a visit whose landing hit came from the named referrer goes
+-- with its event, which carries none; a visit from another referrer stays.
+insert into hits (hit_id, path_id, location, created_at, session, ref_id) values
+ (15, 1, 'GB', '2019-04-01 10:00:00', 'm', 1),
+ (16, 3, 'GB', '2019-04-01 10:00:05', 'm', null),
+ (17, 1, 'GB', '2019-04-01 10:00:00', 'n', 2);
 insert into users values (1, x'deadbeef');
 insert into api_tokens values (1, 'secret');
 insert into store values ('k');
@@ -71,7 +80,7 @@ SQL
 SNAPSHOT_SOURCE="$work/data/db.sqlite3" \
 SNAPSHOT_TARGET="$work/out/analytics.sqlite3" \
 SNAPSHOT_INTERVAL=3600 \
-SNAPSHOT_EXCLUDE="location|XX; location-window|YY|2019-04-02 10:30:00|2019-04-02 13:30:00; path|/deploy-probe; agent|Chrome|150|Linux|1920; agent|Firefox||||2019-04-06 00:00:00|2019-04-07 00:00:00; nonsense|whatever" \
+SNAPSHOT_EXCLUDE="location|XX; location-window|YY|2019-04-02 10:30:00|2019-04-02 13:30:00; path|/deploy-probe; agent|Chrome|150|Linux|1920; agent|Firefox||||2019-04-06 00:00:00|2019-04-07 00:00:00; ref|automated.example; nonsense|whatever" \
     timeout 60 sh "$here/../deploy/snapshot/snapshot.sh" >"$work/log" 2>&1 &
 
 for _ in $(seq 1 60); do
@@ -102,10 +111,10 @@ fi
 kept=$(sqlite3 "$work/out/analytics.sqlite3" 'select group_concat(hit_id) from (select hit_id from hits order by hit_id)')
 
 check "each rule drops what it names, and only that" \
-    "$kept" "2,5,6,9,10,12,13"
+    "$kept" "2,5,6,9,10,12,13,17"
 
 check "the live database is not touched" \
-    "$(sqlite3 "$work/data/db.sqlite3" 'select count(*) from hits')" "14"
+    "$(sqlite3 "$work/data/db.sqlite3" 'select count(*) from hits')" "17"
 
 check "the login and its tokens are not in the snapshot" \
     "$(sqlite3 "$work/out/analytics.sqlite3" "select count(*) from sqlite_master where type='table' and name in ('users','api_tokens','store')")" "0"

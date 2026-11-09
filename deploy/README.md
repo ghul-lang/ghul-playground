@@ -494,10 +494,13 @@ One line, rules separated by `;`, each rule's own fields by `|`:
 | `path\|<pattern>` | paths matching a SQL `LIKE` pattern |
 | `agent\|<browser>\|<version>\|<system>\|<width>` | every visit with a hit from that browser, browser version, system and screen width |
 | `agent\|...\|<width>\|<from>\|<to>` | the same, where that hit falls between two timestamps |
+| `ref\|<pattern>` | every visit with a hit whose referrer matches a SQL `LIKE` pattern |
 
 In an `agent` rule an empty field matches anything, so `agent|Chrome||Linux|` names
-every version of Chrome on Linux at any width. It removes whole visits: every hit
-of a session with a matching hit goes, the visit's events with its page views.
+every version of Chrome on Linux at any width. An `agent` or `ref` rule removes
+whole visits: every hit of a session with a matching hit goes, the visit's events
+with its page views. A `ref` rule suits an automated visitor that keeps changing
+its browser and system but always gives the same referrer.
 
 A rule naming nothing removes nothing, and a rule of an unknown kind is
 reported and skipped, so a mistake costs a snapshot rather than data. The next

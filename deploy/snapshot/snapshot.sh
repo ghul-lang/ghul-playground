@@ -91,8 +91,10 @@ snapshot() {
     #                                          and screen width, optionally only
     #                                          where that hit falls between two
     #                                          times; an empty field matches any
+    #   ref|<pattern>                          every visit with a hit whose
+    #                                          referrer matches a LIKE pattern
     #
-    # An agent rule removes whole visits: every hit of a session with a
+    # An agent or ref rule removes whole visits: every hit of a session with a
     # matching hit goes, so a visit's events leave with its page views.
     #
     # A rule that names nothing removes nothing, so a wrong one is quiet rather
@@ -119,6 +121,12 @@ snapshot() {
                 sqlite3 "$working" "delete from hits where hit_id in ($(agent_hits "$rule"))
                      or session in (select session from hits where session is not null
                                     and hit_id in ($(agent_hits "$rule")))" ;;
+            ref)
+                matching="select h.hit_id from hits h join refs r on r.ref_id = h.ref_id
+                          where r.ref like '$first'"
+                sqlite3 "$working" "delete from hits where hit_id in ($matching)
+                     or session in (select session from hits where session is not null
+                                    and hit_id in ($matching))" ;;
             path)
                 sqlite3 "$working" \
                     "delete from hits where path_id in

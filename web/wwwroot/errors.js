@@ -10,8 +10,11 @@
 // `blob` for the worker a run starts), and the phase the page was in (a status
 // word such as `running`). A script error or a rejected promise also carries
 // the error's name, from the list below, which is what says whether the code
-// asked for something missing, used a null, or failed to parse. Anything that
-// is not plainly one of those is left out rather than recorded.
+// asked for something missing, used a null, or failed to parse; a script
+// error whose name is not on the list says `other`, and one with no error
+// at all says `none`. An error in code the page's document holds names the
+// line it failed on (`inline-12`). Anything else is left out rather than
+// recorded.
 //
 // Import this before anything that loads the runtime: the runtime starts its
 // own workers, and the constructor it finds has to be the one below. It counts
@@ -38,6 +41,17 @@ let leaving = false;
 const NAMES = ['Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError', 'AggregateError', 'DOMException', 'AbortError', 'NetworkError'];
 
 const nameOf = error => NAMES.includes(error?.name) ? error.name : '';
+
+// A script error's name, or what stands in for one: `other` for an error
+// whose name is not in the list, `none` where the event carries no error at
+// all, as one from a script the browser will not describe does not.
+const scriptErrorName = error => error == null ? 'none' : nameOf(error) || 'other';
+
+// Code the page's own document holds is told apart by the line it failed on:
+// the document's own scripts are at known lines, and a script something else
+// injected counts its lines from its own start.
+const lineOf = (source, line) =>
+    source === 'inline' && Number.isInteger(line) && line > 0 && line < 100000 ? `inline-${line}` : source;
 
 const WORD = /^[A-Za-z0-9._-]{1,40}$/;
 
@@ -87,7 +101,7 @@ function found(kind, source = '', detail = null, name = '') {
 window.addEventListener('error', event => {
     if (leaving) return;
 
-    found('script', sourceOf(event.filename), null, nameOf(event.error));
+    found('script', lineOf(sourceOf(event.filename), event.lineno), null, scriptErrorName(event.error));
 });
 
 window.addEventListener('unhandledrejection', event => {
