@@ -122,7 +122,7 @@ done
 # The programs a page runs on wasm: those the Rosetta index and the ghul.dev
 # example data flag. Nothing else is posted for the wasm target, since nothing
 # else is run there unedited.
-curl -sf -m 60 "$ROSETTA_INDEX" \
+curl -sf -m 60 --retry 5 --retry-all-errors --retry-delay 5 "$ROSETTA_INDEX" \
     | jq -r '.tasks[].parts[] | select(.wasm == true) | .id' \
     | while read -r id; do
         file="$work/ghul-rosetta-code/tasks/$id/$(basename "$id").ghul"

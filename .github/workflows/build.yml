@@ -197,10 +197,15 @@ jobs:
           libraries="$RUNNER_TEMP/wasm-libraries"
 
           mkdir -p "$libraries/ghul-runtime" "$libraries/ghul-raster"
-          curl -sfL "https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v$runtime.tar.gz" \
-            | tar -xz --strip-components=1 -C "$libraries/ghul-runtime"
-          curl -sfL "https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v$raster.tar.gz" \
-            | tar -xz --strip-components=1 -C "$libraries/ghul-raster"
+          # Each archive is downloaded to a file and then extracted, retried
+          # where GitHub answers with an error, so a failed download fails
+          # here and says so rather than handing tar an empty stream.
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/ghul-runtime.tar.gz" \
+            "https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v$runtime.tar.gz"
+          tar -xzf "$RUNNER_TEMP/ghul-runtime.tar.gz" --strip-components=1 -C "$libraries/ghul-runtime"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/ghul-raster.tar.gz" \
+            "https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v$raster.tar.gz"
+          tar -xzf "$RUNNER_TEMP/ghul-raster.tar.gz" --strip-components=1 -C "$libraries/ghul-raster"
 
           export GHUL_RASTER_SOURCE_DIR="$libraries/ghul-raster" GHUL_RASTER_SOURCE_VERSION="$raster"
 
@@ -508,8 +513,12 @@ jobs:
         run: |
           version=$(grep -oP '^ARG GHUL_LANGUAGE_SERVER_VERSION=\K.+' analyse-service/Dockerfile)
 
-          npm install -g --no-audit --no-fund \
+          # Downloaded with retries, then installed from the file: npm
+          # fetching the release asset itself gives up on the first error.
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/ghul-language-server.tgz" \
             "https://github.com/ghul-lang/ghul-vsce/releases/download/v${version}/ghul-language-server-${version}.tgz"
+
+          npm install -g --no-audit --no-fund "$RUNNER_TEMP/ghul-language-server.tgz"
 
           server="$(npm prefix -g)/bin/ghul-language-server"
 
@@ -553,10 +562,12 @@ jobs:
           export GHUL_RASTER_SOURCE_DIR="$RUNNER_TEMP/wasm-libraries/ghul-raster"
 
           mkdir -p "$GHUL_RUNTIME_SOURCE_DIR" "$GHUL_RASTER_SOURCE_DIR"
-          curl -sfL "https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v$GHUL_RUNTIME_SOURCE_VERSION.tar.gz" \
-            | tar -xz --strip-components=1 -C "$GHUL_RUNTIME_SOURCE_DIR"
-          curl -sfL "https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v$GHUL_RASTER_SOURCE_VERSION.tar.gz" \
-            | tar -xz --strip-components=1 -C "$GHUL_RASTER_SOURCE_DIR"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/ghul-runtime-source.tar.gz" \
+            "https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v$GHUL_RUNTIME_SOURCE_VERSION.tar.gz"
+          tar -xzf "$RUNNER_TEMP/ghul-runtime-source.tar.gz" --strip-components=1 -C "$GHUL_RUNTIME_SOURCE_DIR"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/ghul-raster-source.tar.gz" \
+            "https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v$GHUL_RASTER_SOURCE_VERSION.tar.gz"
+          tar -xzf "$RUNNER_TEMP/ghul-raster-source.tar.gz" --strip-components=1 -C "$GHUL_RASTER_SOURCE_DIR"
 
           node compile-service/server.js > /tmp/compile.log 2>&1 &
           node analyse-service/server.js > /tmp/analyse.log 2>&1 &
