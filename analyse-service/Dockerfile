@@ -19,8 +19,12 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
 ARG GHUL_LANGUAGE_SERVER_VERSION=1.35.0
 
 # Not published to npm; it ships as an asset on the extension's releases.
-RUN npm install -g --no-audit --no-fund \
-    "https://github.com/ghul-lang/ghul-vsce/releases/download/v${GHUL_LANGUAGE_SERVER_VERSION}/ghul-language-server-${GHUL_LANGUAGE_SERVER_VERSION}.tgz"
+# Downloaded with retries, then installed from the file, since npm fetching
+# the asset itself gives up on the first error.
+RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/ghul-language-server.tgz \
+        "https://github.com/ghul-lang/ghul-vsce/releases/download/v${GHUL_LANGUAGE_SERVER_VERSION}/ghul-language-server-${GHUL_LANGUAGE_SERVER_VERSION}.tgz" \
+ && npm install -g --no-audit --no-fund /tmp/ghul-language-server.tgz \
+ && rm /tmp/ghul-language-server.tgz
 
 RUN useradd --create-home --shell /usr/sbin/nologin playground
 
@@ -49,12 +53,12 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # The library sources an analyser for the wasm target reads in place of the
 # reference assemblies: ghul-runtime at the tag of the runtime package above,
 # the same the compile service builds wasm against.
-ADD --chown=playground:playground \
-    https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v${GHUL_RUNTIME_VERSION}.tar.gz /tmp/ghul-runtime.tar.gz
 # ghul.raster's sources at the tag of the package above, for a wasm program
-# that draws.
-ADD --chown=playground:playground \
-    https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v${GHUL_RASTER_VERSION}.tar.gz /tmp/ghul-raster.tar.gz
+# that draws. Fetched with retries, where ADD gives up on the first error.
+RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/ghul-runtime.tar.gz \
+        https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v${GHUL_RUNTIME_VERSION}.tar.gz \
+ && curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/ghul-raster.tar.gz \
+        https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v${GHUL_RASTER_VERSION}.tar.gz
 
 RUN mkdir -p /home/playground/libraries/ghul-runtime /home/playground/libraries/ghul-raster \
  && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \

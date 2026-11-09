@@ -55,12 +55,12 @@ RUN dotnet tool install --tool-path /home/playground/tools \
 # The library sources a --target wasm compile builds against: ghul-runtime at
 # the tag of the runtime package above, both its trees. The tag is not
 # otherwise checked.
-ADD --chown=playground:playground \
-    https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v${GHUL_RUNTIME_VERSION}.tar.gz /tmp/ghul-runtime.tar.gz
 # ghul.raster's sources at the tag of the package above, for a wasm program
-# that draws.
-ADD --chown=playground:playground \
-    https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v${GHUL_RASTER_VERSION}.tar.gz /tmp/ghul-raster.tar.gz
+# that draws. Fetched with retries, where ADD gives up on the first error.
+RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/ghul-runtime.tar.gz \
+        https://github.com/ghul-lang/ghul-runtime/archive/refs/tags/v${GHUL_RUNTIME_VERSION}.tar.gz \
+ && curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/ghul-raster.tar.gz \
+        https://github.com/ghul-lang/ghul-raster/archive/refs/tags/v${GHUL_RASTER_VERSION}.tar.gz
 
 RUN mkdir -p /home/playground/libraries/ghul-runtime /home/playground/libraries/ghul-raster \
  && tar -xzf /tmp/ghul-runtime.tar.gz --strip-components=1 -C /home/playground/libraries/ghul-runtime \
@@ -77,12 +77,12 @@ RUN mkdir -p /home/playground/libraries/ghul-runtime /home/playground/libraries/
 ARG GHUL_LLVM_VERSION=1.6.2
 ARG GHUL_LLVM_TRIPLE=x86_64-unknown-linux-musl
 
-ADD --chown=playground:playground \
-    https://github.com/ghul-lang/ghul-llvm/releases/download/v${GHUL_LLVM_VERSION}/ghul-llvm-${GHUL_LLVM_TRIPLE}.tar.gz /tmp/ghul-llvm/
-ADD --chown=playground:playground \
-    https://github.com/ghul-lang/ghul-llvm/releases/download/v${GHUL_LLVM_VERSION}/ghul-llvm-${GHUL_LLVM_TRIPLE}.tar.gz.sha256 /tmp/ghul-llvm/
-
-RUN cd /tmp/ghul-llvm \
+RUN mkdir -p /tmp/ghul-llvm \
+ && cd /tmp/ghul-llvm \
+ && curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -O \
+        https://github.com/ghul-lang/ghul-llvm/releases/download/v${GHUL_LLVM_VERSION}/ghul-llvm-${GHUL_LLVM_TRIPLE}.tar.gz \
+ && curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -O \
+        https://github.com/ghul-lang/ghul-llvm/releases/download/v${GHUL_LLVM_VERSION}/ghul-llvm-${GHUL_LLVM_TRIPLE}.tar.gz.sha256 \
  && sha256sum --check --quiet ghul-llvm-${GHUL_LLVM_TRIPLE}.tar.gz.sha256 \
  && mkdir -p /home/playground/tools/ghul-llvm \
  && tar -xzf ghul-llvm-${GHUL_LLVM_TRIPLE}.tar.gz -C /home/playground/tools/ghul-llvm \
