@@ -36,8 +36,8 @@ WORKDIR /home/playground
 # and either service may be the first to mount it.
 RUN mkdir -p /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=71.2.0
-ARG GHUL_RUNTIME_VERSION=38.4.2
+ARG GHUL_COMPILER_VERSION=71.6.0
+ARG GHUL_RUNTIME_VERSION=38.9.0
 ARG GHUL_RASTER_VERSION=1.1.0
 
 # Installing as a tool seeds the package cache, which is where the service
