@@ -34,9 +34,9 @@ WORKDIR /home/playground
 # owned by this user, before the volume does.
 RUN mkdir -p /home/playground/results /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=71.11.10
-ARG GHUL_RUNTIME_VERSION=38.12.0
-ARG GHUL_RASTER_VERSION=1.1.0
+ARG GHUL_COMPILER_VERSION=72.0.3
+ARG GHUL_RUNTIME_VERSION=40.4.0
+ARG GHUL_RASTER_VERSION=1.1.3
 
 RUN dotnet tool install --tool-path /home/playground/tools \
         ghul.compiler --version "${GHUL_COMPILER_VERSION}" \
@@ -74,7 +74,7 @@ RUN mkdir -p /home/playground/libraries/ghul-runtime /home/playground/libraries/
 # which writes the native views' optimised IR and assembly: a release pinned
 # here by hand, with nothing else checking it, and verified against the sha256
 # published beside it.
-ARG GHUL_LLVM_VERSION=1.6.2
+ARG GHUL_LLVM_VERSION=1.10.0
 ARG GHUL_LLVM_TRIPLE=x86_64-unknown-linux-musl
 
 RUN mkdir -p /tmp/ghul-llvm \

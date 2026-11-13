@@ -71,6 +71,9 @@ const REFERENCES = [
     'System.Diagnostics.StackTrace',
     'System.Reflection.Primitives',
     'System.Runtime.InteropServices',
+    // closure of ghul-runtime, whose pipe functions read a TextReader or a
+    // Stream: the surface is already reachable through System.Runtime
+    'System.IO',
     // closure of System.Text.Json
     'System.IO.Pipelines',
     'System.Text.Encodings.Web',
@@ -149,9 +152,14 @@ async function resolveReferencePack() {
         const packs = path.join(root, 'packs', 'Microsoft.NETCore.App.Ref');
         if (!existsSync(packs)) continue;
 
-        const version = highestVersion(await readdir(packs));
+        // A newer SDK beside this one brings a pack for a later framework,
+        // with no net10.0 directory in it, so take the highest that has one.
+        const versions = (await readdir(packs))
+            .filter(v => existsSync(path.join(packs, v, 'ref', 'net10.0')));
 
-        return path.join(packs, version, 'ref', 'net10.0');
+        if (versions.length === 0) continue;
+
+        return path.join(packs, highestVersion(versions), 'ref', 'net10.0');
     }
 
     throw new Error('could not find Microsoft.NETCore.App.Ref; set GHUL_REFERENCE_PACK');
