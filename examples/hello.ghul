@@ -4,7 +4,7 @@ use Ghul.Pipes;
 entry() is
     write_line("hello from ghūl, running in your browser");
 
-    let squares = [1, 2, 3, 4, 5] |> map(n => n * n) |> collect_mutable();
+    let squares = [1, 2, 3, 4, 5] |> map(n => n * n) |> Collections.LIST();
 
     for s in squares do
         write_line("square: {s}");

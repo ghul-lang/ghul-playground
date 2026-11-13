@@ -38,7 +38,7 @@ const WARM_UP_SOURCE = `use IO.Std.write_line;
 use Ghul.Pipes;
 
 entry() is
-    let warm = [1, 2, 3] |> map(n => n * n) |> collect_mutable();
+    let warm = [1, 2, 3] |> map(n => n * n) |> Collections.LIST();
 
     write_line("{warm.count}");
 si
