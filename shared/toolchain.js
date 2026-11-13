@@ -71,6 +71,9 @@ const REFERENCES = [
     'System.Diagnostics.StackTrace',
     'System.Reflection.Primitives',
     'System.Runtime.InteropServices',
+    // closure of ghul-runtime, whose pipe functions read a TextReader or a
+    // Stream: the surface is already reachable through System.Runtime
+    'System.IO',
     // closure of System.Text.Json
     'System.IO.Pipelines',
     'System.Text.Encodings.Web',
