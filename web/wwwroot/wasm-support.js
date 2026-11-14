@@ -76,5 +76,5 @@ export function unhandledException(text) {
 export function needsDotnet(diagnostics) {
     const errors = (diagnostics ?? []).filter(d => d.severity === 'error');
 
-    return errors.length > 0 && errors.every(d => /not supported on the wasm target|not found in|symbol not found/.test(d.message));
+    return errors.length > 0 && errors.every(d => /not supported on the '?wasm'? target|not found in|symbol not found/.test(d.message));
 }

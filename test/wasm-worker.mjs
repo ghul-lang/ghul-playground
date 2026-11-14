@@ -40,7 +40,9 @@ check('ordinary standard error is not an exception', unhandledException('warning
 check('a construct wasm cannot compile falls back to .NET',
     needsDotnet([{ severity: 'error', message: 'code generation for a decimal literal is not supported on the wasm target' }]));
 check('a .NET API the core library lacks falls back to .NET',
-    needsDotnet([{ severity: 'error', message: 'member File not found in IO' }]));
+    needsDotnet([{ severity: 'error', message: "member 'File' not found in 'IO'" }]));
+check('a feature the wasm target lacks falls back to .NET',
+    needsDotnet([{ severity: 'error', message: "pointer types not supported on the 'wasm' target" }]));
 check('a type error does not fall back',
     !needsDotnet([{ severity: 'error', message: 'cannot assign string to int' }]));
 check('warnings alone do not fall back',
