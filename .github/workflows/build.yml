@@ -24,7 +24,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.403'
+          dotnet-version: '10.0.404'
 
       # The multithreaded wasm runtime pack, which the browser runtime needs so
       # that a program can block reading a line. It ships with this workload
@@ -386,7 +386,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.403'
+          dotnet-version: '10.0.404'
 
       - uses: actions/setup-node@v7
         with:
@@ -461,7 +461,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.403'
+          dotnet-version: '10.0.404'
 
       - uses: actions/setup-node@v7
         with:
