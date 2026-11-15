@@ -81,10 +81,10 @@ export const PERIODS = [1, 7, 30, 90];
 // off, so a bare address shows the folded rows.
 export const GROUPINGS = [['tasks', 'Rosetta tasks'], ['examples', 'Examples']];
 
-export function queryFor(days, groups) {
+export function queryFor(days, groups, likely = false) {
     const off = GROUPINGS.filter(([key]) => !groups[key]).map(([key]) => `&${key}=each`);
 
-    return `?days=${days}${off.join('')}`;
+    return `?days=${days}${off.join('')}${likely ? '&people=likely' : ''}`;
 }
 
 const STYLE = `
@@ -189,8 +189,8 @@ td.path { word-break: break-all; }
 a { color: var(--series-1); }
 `;
 
-export function layout({ title, current, days, groups, generated, body }) {
-    const query = queryFor(days, groups);
+export function layout({ title, current, days, groups, likely = false, generated, body }) {
+    const query = queryFor(days, groups, likely);
     const href = page => (page ? page : './') + query;
     const here = current || './';
 
@@ -210,9 +210,10 @@ export function layout({ title, current, days, groups, generated, body }) {
 <nav>${PAGES.map(([page, name]) =>
         html`<a href="${href(page)}"${new Html(page === current ? ' aria-current="page"' : '')}>${name}</a>`)}</nav>
 <div class="periods">${PERIODS.map(n =>
-        html`<a href="${here + queryFor(n, groups)}"${new Html(n === days ? ' aria-current="true"' : '')}>${n === 1 ? '24h' : `${n}d`}</a>`)}</div>
+        html`<a href="${here + queryFor(n, groups, likely)}"${new Html(n === days ? ' aria-current="true"' : '')}>${n === 1 ? '24h' : `${n}d`}</a>`)}</div>
 ${current === 'system' ? '' : html`<div class="groups">${GROUPINGS.map(([key, name]) => html`<span>${name}:</span>${[true, false].map(on =>
-        html`<a href="${here + queryFor(days, { ...groups, [key]: on })}"${new Html(groups[key] === on ? ' aria-current="true"' : '')}>${on ? 'one row' : 'each'}</a>`)}`)}</div>`}
+        html`<a href="${here + queryFor(days, { ...groups, [key]: on }, likely)}"${new Html(groups[key] === on ? ' aria-current="true"' : '')}>${on ? 'one row' : 'each'}</a>`)}`)}<span>Visits:</span>${[[false, 'all'], [true, 'likely people']].map(([on, name]) =>
+        html`<a href="${here + queryFor(days, groups, on)}"${new Html(likely === on ? ' aria-current="true"' : '')}>${name}</a>`)}</div>`}
 </div></header>
 <main>
 ${body}

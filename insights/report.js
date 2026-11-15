@@ -259,6 +259,34 @@ const secondsApart = (a, b) =>
 const screen = width =>
     !width ? 'unknown' : width < 600 ? 'phone' : width < 1100 ? 'tablet' : 'desktop';
 
+// Where a reader is sent from when it is a person choosing to come: a search
+// engine, Rosetta Code (which links to the solutions) or GitHub. Automated
+// visitors arrive with no referrer or with one of their own.
+const PERSON_REFERRER = /^(google|bing|duckduckgo|ecosia|yahoo|brave|kagi|startpage|yandex|baidu|rosettacode\.org|github\.com)/i;
+
+// Events only a reader does: run code by hand, use the page's controls, copy,
+// follow a link out, or move around the Rosetta tasks. The mini-IDE opens and
+// runs itself on load, so those events say nothing.
+const PERSON_FAMILIES = ['mini-ide-action', 'mini-ide-nav', 'code-copy', 'outbound', 'rosetta-more', 'repl-cell'];
+const LONG_STAY = ['30s-2m', '2-10m', 'over-10m'];
+
+// Why a visit looks like a person's, as short phrases: empty when nothing
+// about it does. Most automated visits are a page and its own automatic run,
+// at the same screen width, so nothing here is a proof either way - it is the
+// standard for showing only the visits that clear it.
+export function signsOfPerson(visit) {
+    const signs = [];
+
+    if (PERSON_REFERRER.test(visit.ref ?? '')) signs.push(`from ${visit.ref}`);
+    if (visit.events.some(e => e.family === 'mini-ide-run' && e.what.startsWith('manual/'))) signs.push('ran code by hand');
+    if (visit.events.some(e => PERSON_FAMILIES.includes(e.family))) signs.push('used the page');
+    if (visit.time.some(t => LONG_STAY.includes(t.band))) signs.push('stayed 30s or more');
+
+    return signs;
+}
+
+export const likelyPeople = visits => visits.filter(v => v.signs.length);
+
 // The rows, gathered into visits in the order each was made.
 export function visitsOf(rows) {
     const visits = new Map();
@@ -325,6 +353,8 @@ export function visitsOf(rows) {
             }
         }
     }
+
+    for (const visit of visits.values()) visit.signs = signsOfPerson(visit);
 
     return [...visits.values()];
 }

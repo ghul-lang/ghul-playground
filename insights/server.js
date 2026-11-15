@@ -17,7 +17,7 @@ import { existsSync, statSync } from 'node:fs';
 
 import * as report from './report.js';
 import * as body from './pages.js';
-import { layout, queryFor, GROUPINGS, PAGES, PERIODS } from './render.js';
+import { html, layout, queryFor, GROUPINGS, PAGES, PERIODS } from './render.js';
 import { system } from './system.js';
 
 const PORT = Number(process.env.PORT ?? 5094);
@@ -58,25 +58,30 @@ function send(response, status, text, extra = {}) {
 
 const periodName = days => days === 1 ? '24 hours' : `${days} days`;
 
-async function page(name, days, groups) {
+async function page(name, days, groups, likely) {
     const to = new Date();
     const from = new Date(to.getTime() - days * 86400000);
     const earlier = new Date(from.getTime() - days * 86400000);
 
-    const context = { period: periodName(days), days: report.daysBetween(from, to), query: queryFor(days, groups) };
+    const context = { period: periodName(days), days: report.daysBetween(from, to), query: queryFor(days, groups, likely), hidden: 0 };
 
     if (name === 'system') {
         context.system = await system(PROMETHEUS, from, to);
     } else {
         if (!existsSync(SNAPSHOT)) throw new Error(`no analytics snapshot at ${SNAPSHOT} yet`);
 
-        const each = report.visitsOf(report.readHits(SNAPSHOT, from, to));
+        const all = report.visitsOf(report.readHits(SNAPSHOT, from, to));
+        const each = likely ? report.likelyPeople(all) : all;
+
+        context.hidden = all.length - each.length;
 
         context.visits = report.groupVisits(each, groups);
         context.explore = report.explored(each);
 
         if (name === 'overview') {
-            context.before = report.groupVisits(report.visitsOf(report.readHits(SNAPSHOT, earlier, from)), groups);
+            const earlierVisits = report.visitsOf(report.readHits(SNAPSHOT, earlier, from));
+
+            context.before = report.groupVisits(likely ? report.likelyPeople(earlierVisits) : earlierVisits, groups);
         }
     }
 
@@ -95,8 +100,9 @@ async function page(name, days, groups) {
         current: name === 'overview' ? '' : name,
         days,
         groups,
+        likely,
         generated: `${to.toISOString().slice(0, 16).replace('T', ' ')}${snapshotAge}`,
-        body: body[name](context),
+        body: html`${likely && name !== 'system' ? html`<p class="note">Showing only the ${context.visits.length} visits that look like a person's; ${context.hidden} others are hidden. A visit counts if it came from a search engine, Rosetta Code or GitHub, ran code by hand, used the page's controls, or stayed 30 seconds or more.</p>` : ''}${body[name](context)}`,
     });
 }
 
@@ -126,8 +132,10 @@ export const server = http.createServer(async (request, response) => {
     const days = PERIODS.includes(asked) ? asked : 7;
     const groups = Object.fromEntries(GROUPINGS.map(([key]) => [key, url.searchParams.get(key) !== 'each']));
 
+    const likely = url.searchParams.get('people') === 'likely';
+
     try {
-        send(response, 200, request.method === 'HEAD' ? '' : await page(name, days, groups));
+        send(response, 200, request.method === 'HEAD' ? '' : await page(name, days, groups, likely));
     } catch (e) {
         console.error(`insights: ${name}: ${e.stack ?? e}`);
         send(response, 500, `Could not build this page: ${e.message ?? e}`, { 'content-type': 'text/plain' });

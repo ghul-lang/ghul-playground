@@ -141,7 +141,7 @@ export function visits({ visits, period }) {
 <section class="card">
 <p class="note">A visit's id is GoatCounter's own: random, and it lasts one visit, so two visits can never be joined. No address is stored anywhere.</p>
 ${recent.length ? recent.map(v => html`<div class="visit">
-<div class="meta"><span>${v.started.slice(5, 16)}</span><span>${v.place || 'unknown place'}</span><span>${v.screen}</span>${v.ref ? html`<span>from ${short(v.ref)}</span>` : ''}<span>${v.id}</span></div>
+<div class="meta"><span>${v.started.slice(5, 16)}</span><span>${v.place || 'unknown place'}</span><span>${v.screen}</span>${v.ref ? html`<span>from ${short(v.ref)}</span>` : ''}<span>${v.id}</span>${v.signs.length ? html`<span title="${v.signs.join(', ')}">● likely a person: ${v.signs.join(', ')}</span>` : ''}</div>
 <div class="trail">${v.pages.map((p, i) => html`${i ? html`<span class="arrow"> → </span>` : ''}<span title="${p}">${short(p)}</span>`)}</div>
 <div class="meta">${v.time.map(t => html`<span>${t.family.replace(/-time$/, '')} ${t.band}</span>`)}${[...new Set(v.problems.map(p => `${p.kind}\u0000${p.family}/${p.detail}`))].map(k => {
         const [kind, what] = k.split('\u0000');
