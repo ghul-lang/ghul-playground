@@ -125,7 +125,6 @@ jobs:
       gh-app-id: ${{ vars.GHUL_REVIEWER_APP_ID }}
       ghul-reference: true
       require-description-section: false
-      dependency-fast-path: false
       maintainer-review: true
       prompt: |
         Review pull request #${{ inputs.pull-request-number || github.event.pull_request.number }} on ${{ github.repository }}.
