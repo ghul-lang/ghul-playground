@@ -250,6 +250,24 @@ check('a page counts entries and exits', landing?.entries === 1 && landing?.exit
         JSON.stringify({ troubled: s.troubled, recovered: s.recovered, slow: s.slow, programFailed: s.programFailed }));
 }
 
+// Which visits look like a person's, and what the toggle hides.
+{
+    const mk = over => ({ ref: '', events: [], time: [], ...over });
+    const signs = v => report.signsOfPerson(mk(v)).join(',');
+
+    check('a bare visit shows no sign of a person', signs({}) === '');
+    check('an automatic run and a short stay are not signs',
+        signs({ events: [{ family: 'mini-ide-run', what: 'automatic/rosetta-code/x' }, { family: 'mini-ide-open' }], time: [{ band: 'under-10s' }] }) === '');
+    check('a search or Rosetta Code referrer is a sign', signs({ ref: 'Google' }) !== '' && signs({ ref: 'rosettacode.org' }) !== '' && signs({ ref: 'github.com' }) !== '');
+    check('an internal referrer is not', signs({ ref: 'ghul.dev/rosetta/fizzbuzz' }) === '');
+    check('a manual run is a sign', signs({ events: [{ family: 'mini-ide-run', what: 'manual/rosetta-code/x' }] }) !== '');
+    check('copying is a sign', signs({ events: [{ family: 'code-copy', what: '' }] }) !== '');
+    check('thirty seconds on the page is a sign', signs({ time: [{ band: '30s-2m' }] }) !== '' && signs({ time: [{ band: '10-30s' }] }) === '');
+
+    const mixed = [mk({ signs: [] }), mk({ signs: ['x'] })];
+    check('likelyPeople keeps only visits with a sign', report.likelyPeople(mixed).length === 1);
+}
+
 // A period runs back from now, so it touches one more calendar day than it is
 // long: part of its first day, and today so far. Both are shown, marked.
 {
@@ -362,6 +380,10 @@ try {
     check('and can be turned back on', off.includes('href="pages?days=30"'));
     check('each grouping has its own switch', off.includes('href="pages?days=30&amp;tasks=each&amp;examples=each"'));
     check('tasks per visit is shown with folding off', off.includes('Tasks and examples per visit'));
+    const likelyPage = await (await get(`${open.base}/visits?days=30&people=likely`, 'right-password')).text();
+    check('the likely-people view says what it hides', likelyPage.includes('look like a person') && likelyPage.includes('others are hidden'));
+    check('the toggle and the period links carry the choice', likelyPage.includes('people=likely') && likelyPage.includes('likely people'));
+    check('the default view hides nothing', !(await (await get(`${open.base}/visits?days=30`, 'right-password')).text()).includes('others are hidden'));
     check('and on the overview', (await (await get(`${open.base}/?days=7`, 'right-password')).text()).includes('Tasks and examples per visit'));
 
     const missing = await get(`${open.base}/nothing-here`, 'right-password');
