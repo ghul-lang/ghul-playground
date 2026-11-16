@@ -46,6 +46,9 @@ function corpus() {
         // Project-backed examples reference ASP.NET and are not single-file
         // programs, so they are not something this service can be asked for.
         .filter(name => !fs.readdirSync(path.join(CORPUS, name)).some(f => f.endsWith('.ghulproj')))
+        // A native example is a ghul-cli project for the llvm target, which
+        // the service doesn't compile for, and the site never sends here.
+        .filter(name => !fs.existsSync(path.join(CORPUS, name, 'ghul-project.json')))
         .sort();
 }
 
