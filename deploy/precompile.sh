@@ -10,9 +10,10 @@
 # example's fullSource from the site's example data. An edit misses and
 # compiles as it always did.
 #
-# The cache lives on a tmpfs inside the compile container and is lost when the
-# container restarts, so this runs after every deploy and on a timer
-# (deploy/systemd/playground-precompile.timer). It posts to the service on the
+# The cache is the `results` volume, on disk, so it survives a restart; its
+# entries are keyed by the toolchain, so a deploy that changes the compiler or
+# the libraries starts it empty for the new one. So this runs after every
+# deploy and on a timer (deploy/systemd/playground-precompile.timer). It posts to the service on the
 # host's loopback port, through the same queue and caps as any reader, with at
 # most PRECOMPILE_PARALLEL compiles of its own in flight so readers keep the
 # rest of the service's slots.
