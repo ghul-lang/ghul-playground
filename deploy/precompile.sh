@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Compiles every program a ghul.dev page offers to run, so the reader who first
-# presses Run on one is answered from the compile service's result cache rather
+# Compiles every program a ghul.dev page offers to run, and the playground's own
+# programs, so the reader who first presses Run on one is answered from the compile service's result cache rather
 # than waiting for a compile.
 #
 # The cache is keyed on the toolchain and the exact source text, so a program
@@ -104,6 +104,25 @@ programs() {
     programs "$work/ghul-rosetta-code/tasks"
     programs "$work/ghul-examples/examples"
 } > "$sources/files.txt"
+
+# The playground's own programs: the one its editor opens with, which a reader
+# runs unedited, and the small programs under examples/. The editor posts its
+# opening program as the template literal holds it, so that text is taken
+# verbatim, and only where the literal has no substitution or escape that would
+# make the posted text differ from the file.
+playground="$(cd "$(dirname "$0")/.." && pwd)"
+mkdir -p "$sources/playground"
+
+perl -0ne 'print $1 if /export const DEFAULT_SOURCE = `([^`]*)`;/' "$playground/web/wwwroot/playground.js" \
+    > "$sources/playground/default.ghul"
+
+if [ -s "$sources/playground/default.ghul" ] && ! grep -q -e '\${' -e '\\' "$sources/playground/default.ghul"; then
+    echo "$sources/playground/default.ghul" >> "$sources/files.txt"
+fi
+
+for file in "$playground"/examples/*.ghul; do
+    [ -f "$file" ] && echo "$file" >> "$sources/files.txt"
+done
 
 # A ghul.dev example runs its fullSource; a snippet does not run at all.
 examples="$sources/ghul-dev"

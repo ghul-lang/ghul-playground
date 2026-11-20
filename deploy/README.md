@@ -689,7 +689,9 @@ The compile service keeps a result cache keyed on the toolchain and the exact
 source text, so a program compiled once is answered without compiling again.
 `deploy/precompile.sh` fills it with every program a ghul.dev page offers to
 run: each Rosetta task and ghul-examples program the playground runs, as
-raw.githubusercontent.com serves it, and each ghul.dev example's `fullSource`.
+raw.githubusercontent.com serves it, each ghul.dev example's `fullSource`, and
+the playground's own: the program its editor opens with and those under
+`examples/`.
 Those are the bytes a page posts unedited, so the reader who first presses Run
 on one gets a cached answer. An edited program misses and compiles as before.
 
