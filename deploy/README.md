@@ -691,7 +691,8 @@ source text, so a program compiled once is answered without compiling again.
 run: each Rosetta task and ghul-examples program the playground runs, as
 raw.githubusercontent.com serves it, each ghul.dev example's `fullSource`, and
 the playground's own: the program its editor opens with and those under
-`examples/`.
+`examples/`. The playground's own are compiled first, the opening program on
+wasm leading, since every new visitor to the editor posts it.
 Those are the bytes a page posts unedited, so the reader who first presses Run
 on one gets a cached answer. An edited program misses and compiles as before.
 

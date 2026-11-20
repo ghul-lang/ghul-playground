@@ -19,7 +19,8 @@
 #
 # Usage: deploy/precompile.sh [--list]
 #
-#   --list   print the source files that would be compiled, and compile none
+#   --list   print the source files that would be compiled, in order, and
+#            compile none
 #
 # Environment:
 #   PRECOMPILE_SERVICE   the compile endpoint (http://127.0.0.1:5090/compile)
@@ -107,7 +108,10 @@ programs() {
 
 # The playground's own programs: the one its editor opens with, which a reader
 # runs unedited, on wasm where the browser can run it and on .NET where it
-# can't, and the small programs under examples/, run by hand on .NET. The
+# can't, and the small programs under examples/, run by hand on .NET. Every
+# new visitor to the editor posts the opening program, so these are compiled
+# before anything else, each as "<target> <file>" in first.txt, the opening
+# program on wasm leading. The
 # editor posts its opening program as the template literal holds it, so that
 # text is taken verbatim, and only where the literal has no substitution or
 # escape that would make the posted text differ from the file.
@@ -118,12 +122,12 @@ perl -0ne 'print $1 if /export const DEFAULT_SOURCE = `([^`]*)`;/' "$playground/
     > "$sources/playground/default.ghul"
 
 if [ -s "$sources/playground/default.ghul" ] && ! grep -q -e '\${' -e '\\' "$sources/playground/default.ghul"; then
-    echo "$sources/playground/default.ghul" >> "$sources/files.txt"
-    echo "$sources/playground/default.ghul" >> "$sources/wasm.txt"
-fi
+    echo "wasm $sources/playground/default.ghul"
+    echo "dotnet $sources/playground/default.ghul"
+fi > "$sources/first.txt"
 
 for file in "$playground"/examples/*.ghul; do
-    [ -f "$file" ] && echo "$file" >> "$sources/files.txt"
+    [ -f "$file" ] && echo "dotnet $file" >> "$sources/first.txt"
 done
 
 # A ghul.dev example runs its fullSource; a snippet does not run at all.
@@ -160,8 +164,9 @@ if [ -n "${PRECOMPILE_LIMIT:-}" ]; then
 fi
 
 if $list_only; then
+    cut -d " " -f 2- "$sources/first.txt"
     cat "$sources/files.txt"
-    echo "$(wc -l < "$sources/files.txt") programs, $(wc -l < "$sources/wasm.txt") of them flagged for wasm" >&2
+    echo "$(wc -l < "$sources/first.txt") of the playground's own compiles first, then $(wc -l < "$sources/files.txt") programs, $(wc -l < "$sources/wasm.txt") of them flagged for wasm" >&2
     exit 0
 fi
 
@@ -197,6 +202,12 @@ done
 curl -sf -o /dev/null -m 30 "$health" || { echo "the compile service is not healthy at $health" >&2; exit 1; }
 
 started=$(date +%s)
+
+while read -r target file; do
+    case ",$targets," in
+        *",$target,"*) echo "first: $target $file status $(compile_one "$file" "$target")" ;;
+    esac
+done < "$sources/first.txt"
 
 for target in ${targets//,/ }; do
     list="$sources/files.txt"
