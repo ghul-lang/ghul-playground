@@ -70,7 +70,7 @@ services:
       # never any one compile faster, and it should not exceed the cpus below.
       MAX_CONCURRENT_COMPILES: "6"
       MAX_QUEUED_COMPILES: "12"
-      COMPILE_TIMEOUT_MS: "10000"
+      COMPILE_TIMEOUT_MS: "15000"
       # The cells of an interactive session: off unless REPL_ENABLED is 1 in
       # the environment, in which case /compile/cell exists at all. Its cache
       # of built cell assemblies is the `cell-cache` volume below.
