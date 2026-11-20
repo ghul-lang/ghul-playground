@@ -106,10 +106,11 @@ programs() {
 } > "$sources/files.txt"
 
 # The playground's own programs: the one its editor opens with, which a reader
-# runs unedited, and the small programs under examples/. The editor posts its
-# opening program as the template literal holds it, so that text is taken
-# verbatim, and only where the literal has no substitution or escape that would
-# make the posted text differ from the file.
+# runs unedited, on wasm where the browser can run it and on .NET where it
+# can't, and the small programs under examples/, run by hand on .NET. The
+# editor posts its opening program as the template literal holds it, so that
+# text is taken verbatim, and only where the literal has no substitution or
+# escape that would make the posted text differ from the file.
 playground="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$sources/playground"
 
@@ -118,6 +119,7 @@ perl -0ne 'print $1 if /export const DEFAULT_SOURCE = `([^`]*)`;/' "$playground/
 
 if [ -s "$sources/playground/default.ghul" ] && ! grep -q -e '\${' -e '\\' "$sources/playground/default.ghul"; then
     echo "$sources/playground/default.ghul" >> "$sources/files.txt"
+    echo "$sources/playground/default.ghul" >> "$sources/wasm.txt"
 fi
 
 for file in "$playground"/examples/*.ghul; do
