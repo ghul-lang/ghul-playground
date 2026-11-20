@@ -31,7 +31,7 @@ namespace Playground is
     class REPL_SESSION is
         _core: REPL_CORE static;
         _context: SESSION static;
-        _assemblies: Collections.MAP[string, System.Reflection.Assembly] static;
+        _assemblies: Collections.MAP[string, Ghul.Reflection.Assembly] static;
         _pending: CELL_REQUEST? static;
         _pending_text: string static;
         _dropped: Collections.LIST[string] static;
@@ -46,7 +46,7 @@ namespace Playground is
             _core.bind("update_display", "use Ghul.update_display");
 
             _context = SESSION();
-            _assemblies = Collections.MAP[string, System.Reflection.Assembly]();
+            _assemblies = Collections.MAP[string, Ghul.Reflection.Assembly]();
             _pending_text = "";
             _dropped = Collections.LIST[string]();
 
@@ -82,7 +82,7 @@ namespace Playground is
             json.write_end_object();
             json.flush();
 
-            return System.Text.Encoding.utf8.get_string(buffer.to_array());
+            return Text.Encoding.utf8.get_string(buffer.to_array());
         si
 
         _chain(request: CELL_REQUEST) -> string static is
@@ -106,7 +106,7 @@ namespace Playground is
             json.write_end_object();
             json.flush();
 
-            return System.Text.Encoding.utf8.get_string(buffer.to_array());
+            return Text.Encoding.utf8.get_string(buffer.to_array());
         si
 
         _write_cell(json: Utf8JsonWriter, name: string, source: string) static is
@@ -135,7 +135,7 @@ namespace Playground is
             let diagnostics = _diagnostics(reply, request.name);
 
             let loaded: LOADED_CELL? mut = null;
-            let assembly: System.Reflection.Assembly? mut = null;
+            let assembly: Ghul.Reflection.Assembly? mut = null;
 
             let assembly_text: JsonElement mut = _;
 
@@ -312,7 +312,7 @@ namespace Playground is
             json.write_end_object();
             json.flush();
 
-            return System.Text.Encoding.utf8.get_string(buffer.to_array());
+            return Text.Encoding.utf8.get_string(buffer.to_array());
         si
     si
 si

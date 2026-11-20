@@ -48,7 +48,7 @@ entry() is
             dx = -dx
         fi
 
-        System.Threading.Thread.sleep(delay)
+        Tasks.Thread.sleep(delay)
     od
 
     write_line("done")

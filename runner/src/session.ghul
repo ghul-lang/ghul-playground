@@ -1,5 +1,5 @@
 namespace Playground is
-    use System.Reflection.Assembly;
+    use Ghul.Reflection.Assembly;
     use System.Reflection.AssemblyName;
 
     // The load context every cell of an interactive session goes into. A cell

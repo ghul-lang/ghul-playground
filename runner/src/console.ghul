@@ -29,7 +29,7 @@ namespace Playground is
             _framed = framed;
         si
 
-        encoding: System.Text.Encoding => System.Text.Encoding.utf8;
+        encoding: Text.Encoding => Text.Encoding.utf8;
 
         // All three matter. TextWriter.Write(char) is an empty virtual, so
         // anything routed through it is silently dropped rather than failing -

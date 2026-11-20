@@ -35,7 +35,7 @@ namespace Playground is
                             return PICTURE(mime, bytes.count, System.Convert.to_base64_string(bytes));
                         fi
                     od
-                catch e: System.Exception
+                catch e: Ghul.Exception
                     // A value that cannot say what it looks like is shown as
                     // its text, as one that offers nothing is.
                 yrt

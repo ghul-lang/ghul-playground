@@ -75,7 +75,7 @@ namespace Playground is
             json.write_end_object();
             json.flush();
 
-            return "{OPEN}{System.Text.Encoding.utf8.get_string(buffer.to_array())}{CLOSE}";
+            return "{OPEN}{Text.Encoding.utf8.get_string(buffer.to_array())}{CLOSE}";
         si
     si
 si
