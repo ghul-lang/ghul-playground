@@ -43,7 +43,7 @@ namespace Playground is
         run(base64: string, arguments: string) -> string static is
             try
                 let assembly =
-                    System.Reflection.Assembly.load(
+                    Ghul.Reflection.Assembly.load(
                         System.Convert.from_base64_string(base64));
 
                 let entry = assembly.entry_point;
@@ -71,7 +71,7 @@ namespace Playground is
                 fi
 
                 return _respond(outcome.text, null, outcome.error);
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return _respond(
                     "host error: {e.get_type().name}: {e.message}", null, null);
             yrt
@@ -134,9 +134,9 @@ namespace Playground is
 
                 let entry = globals.get_method(
                     "_entry",
-                    System.Reflection.BindingFlags.PUBLIC |
-                    System.Reflection.BindingFlags.NON_PUBLIC |
-                    System.Reflection.BindingFlags.STATIC);
+                    Ghul.Reflection.BindingFlags.PUBLIC |
+                    Ghul.Reflection.BindingFlags.NON_PUBLIC |
+                    Ghul.Reflection.BindingFlags.STATIC);
 
                 if !entry? then
                     return _respond("", null, null);
@@ -149,7 +149,7 @@ namespace Playground is
 
                 return _respond(
                     outcome.text, outcome.value?.to_string(), outcome.error);
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return _respond(
                     "host error: {e.get_type().name}: {e.message}", null, null);
             yrt
@@ -216,7 +216,7 @@ namespace Playground is
         // hint why. A program that never read standard input can hit the same
         // exception for an unrelated reason, so the stack trace rather than
         // the type is what tells the two apart.
-        _describe(e: System.Exception) -> string static is
+        _describe(e: Ghul.Exception) -> string static is
             if isa System.PlatformNotSupportedException(e) /\ (e.stack_trace ?? "").contains("Console") then
                 return "[unhandled: this program reads from standard input, which the playground does not support]";
             fi
@@ -248,7 +248,7 @@ namespace Playground is
             json.flush();
             json.dispose();
 
-            System.Text.Encoding.utf8.get_string(buffer.to_array())
+            Text.Encoding.utf8.get_string(buffer.to_array())
         si
     si
 si

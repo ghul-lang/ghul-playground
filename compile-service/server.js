@@ -54,7 +54,7 @@ const view = require('./view');
 const PORT = Number(process.env.PORT ?? 5090);
 const HOST = process.env.HOST ?? '127.0.0.1';
 
-const COMPILE_TIMEOUT_MS = Number(process.env.COMPILE_TIMEOUT_MS ?? 10000);
+const COMPILE_TIMEOUT_MS = Number(process.env.COMPILE_TIMEOUT_MS ?? 15000);
 
 // A compile costs about a CPU-second and peaks near 200 MB, so the number that
 // may run at once is the service's real resource limit. Without one, enough

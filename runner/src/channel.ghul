@@ -123,7 +123,7 @@ namespace Playground is
             _set(INPUT_TURN, _get(INPUT_TURN) + 1);
 
             while _get(INPUT_READY) == 0 do
-                System.Threading.Thread.sleep(POLL_MS);
+                Tasks.Thread.sleep(POLL_MS);
             od
 
             let length = _get(INPUT_LENGTH);
