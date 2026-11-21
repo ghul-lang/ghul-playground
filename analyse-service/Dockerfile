@@ -16,7 +16,7 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 
-ARG GHUL_LANGUAGE_SERVER_VERSION=1.37.3
+ARG GHUL_LANGUAGE_SERVER_VERSION=1.37.4
 
 # Not published to npm; it ships as an asset on the extension's releases.
 # Downloaded with retries, then installed from the file, since npm fetching
@@ -36,8 +36,8 @@ WORKDIR /home/playground
 # and either service may be the first to mount it.
 RUN mkdir -p /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=81.1.3
-ARG GHUL_RUNTIME_VERSION=52.0.2
+ARG GHUL_COMPILER_VERSION=82.0.0
+ARG GHUL_RUNTIME_VERSION=52.2.0
 ARG GHUL_RASTER_VERSION=1.1.10
 
 # Installing as a tool seeds the package cache, which is where the service
