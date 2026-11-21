@@ -951,6 +951,17 @@ chrome.on('error', e => {
     check('and the row is visible without being asked for',
         await ev(`document.getElementById('arguments-row').offsetParent !== null`));
 
+    // The output can arrive before the run is reported finished, and a click
+    // on Run while it is still running stops it rather than starting again.
+    let settled = false;
+    for (let i = 0; i < 120; i++) {
+        settled = await ev(`document.getElementById('run-label').textContent !== 'Stop'`);
+        if (settled) break;
+        await sleep(500);
+    }
+
+    check('and the run finishes', settled);
+
     // What the reader types is what the program gets, including a space inside
     // one argument and a quote inside another.
     await ev(`(() => {
