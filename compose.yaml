@@ -321,7 +321,7 @@ services:
   node-exporter:
     <<: *hardening
     cgroup_parent: playground-node-exporter.slice
-    image: prom/node-exporter:v1.12.1
+    image: prom/node-exporter:v1.13.1
 
     command:
       - --path.rootfs=/host
@@ -354,7 +354,7 @@ services:
   host-network-exporter:
     <<: *hardening
     cgroup_parent: playground-host-network-exporter.slice
-    image: prom/node-exporter:v1.12.1
+    image: prom/node-exporter:v1.13.1
 
     command:
       - --path.procfs=/host/proc/1
