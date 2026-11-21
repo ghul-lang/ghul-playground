@@ -290,7 +290,7 @@ chrome.on('error', e => {
     await ev(`(() => {
         monaco.editor.getModels()[0].setValue(
             'use IO.Std.write_line;\\n\\nentry() is\\n    write_line("before the wait");\\n'
-            + '    System.Threading.Thread.sleep(System.TimeSpan.from_milliseconds(4000L));\\n'
+            + '    Tasks.Thread.sleep(Time.TimeSpan.from_milliseconds(4000L));\\n'
             + '    write_line("after the wait");\\nsi\\n');
         return true;
     })()`);
@@ -414,7 +414,7 @@ chrome.on('error', e => {
 
     const thenBusy = [
         'use IO.Std.write_line;', 'use IO.Std.read_line;', '', 'entry() is',
-        '    let line = read_line();', '', '    System.Threading.Thread.sleep(3000);', '',
+        '    let line = read_line();', '', '    Tasks.Thread.sleep(3000);', '',
         '    write_line("read {line ?? "nothing"}");', 'si', ''
     ].join('\n');
 
@@ -1331,7 +1331,7 @@ chrome.on('error', e => {
                 'let names = LIST[string]()\n',
             'use default\nuse cell1._helper\nuse cell1._HIDDEN\nuse cell1.names\n' +
                 'names.add("second")\nwrite_line("{names.count} name")\n_helper(_HIDDEN(41).value)\n',
-            'use default\nthrow System.InvalidOperationException("from cell 3")\n',
+            'use default\nthrow Ghul.InvalidOperationException("from cell 3")\n',
             'use default\nuse cell1.names\nnames.add("fourth")\nnames.count\n'
         ];
 
@@ -1587,7 +1587,7 @@ chrome.on('error', e => {
             };
 
             await ev(`(() => { monaco.editor.getEditors()[0].setValue(${JSON.stringify(
-                'IO.Std.write_line("first"); System.Threading.Thread.sleep(3000); IO.Std.write_line("second");')}); return true; })()`);
+                'IO.Std.write_line("first"); Tasks.Thread.sleep(3000); IO.Std.write_line("second");')}); return true; })()`);
             await ev(`document.getElementById('run').click(); true`);
 
             let seenMidway = null;
@@ -1645,7 +1645,7 @@ chrome.on('error', e => {
                 floodResult.first === 'line 0' && floodResult.last === 'line 99999' && slowest < 2000,
                 JSON.stringify({ ...floodResult, slowest }));
 
-            const thrown = await submit('IO.Std.write_line("before"); throw System.Exception("boom");');
+            const thrown = await submit('IO.Std.write_line("before"); throw Ghul.Exception("boom");');
 
             check('a cell that throws shows its output and then the error',
                 thrown.startsWith('before\n') && thrown.includes('boom'), JSON.stringify(thrown));
@@ -1724,7 +1724,7 @@ chrome.on('error', e => {
             await submit('let early = 5');
             const middleEntry = await ev(`document.querySelectorAll('.entry').length`);
             const turn = Date.now() + 6000;
-            await submit(`let late mut = 0; while System.DateTimeOffset.utc_now.to_unix_time_milliseconds() > ${turn}L do late = late + 1; od`);
+            await submit(`let late mut = 0; while Time.DateTimeOffset.utc_now.to_unix_time_milliseconds() > ${turn}L do late = late + 1; od`);
             await submit('let after = 7');
 
             while (Date.now() < turn + 500) await sleep(250);
@@ -1866,7 +1866,7 @@ chrome.on('error', e => {
                 'class MARKUP: Ghul.Renderable is',
                 '    init() is si',
                 '    representations() -> Collections.Iterable[(mime: string, content: ARRAY[ubyte])] pure =>',
-                '        [(mime = "text/html", content = System.Text.Encoding.utf8.get_bytes("<img src=x onerror=alert(1)>"))]',
+                '        [(mime = "text/html", content = Text.Encoding.utf8.get_bytes("<img src=x onerror=alert(1)>"))]',
                 '    to_string() -> string => "markup as text"',
                 'si'
             ].join('\n'));
@@ -1902,7 +1902,7 @@ chrome.on('error', e => {
             if (made) log(`making the noise picture said: ${made}`);
 
             await ev(`(() => { monaco.editor.getEditors()[0].setValue(${JSON.stringify(
-                'display(noise); System.Threading.Thread.sleep(3000); IO.Std.write_line("after");')}); return true; })()`);
+                'display(noise); Tasks.Thread.sleep(3000); IO.Std.write_line("after");')}); return true; })()`);
             await ev(`document.getElementById('run').click(); true`);
 
             let pendingPicture = null;
