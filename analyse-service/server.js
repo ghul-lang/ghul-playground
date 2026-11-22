@@ -98,7 +98,7 @@ const log = message => console.log(`${new Date().toISOString().slice(11, 19)} ${
 let references = null;
 // The command the language server is told to run the compiler as. It is the
 // pinned compiler resolved once, at startup, rather than something the server
-// is left to hunt for - see createWorkspace.
+// is left to hunt for - see Analyser.createWorkspace.
 let compiler = null;
 
 // The library sources a wasm analyser reads in place of the reference

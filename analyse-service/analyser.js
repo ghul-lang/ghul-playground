@@ -16,7 +16,7 @@
 // capabilities captured here instead.
 
 const { spawn } = require('child_process');
-const { mkdtemp, writeFile, mkdir, rm, copyFile } = require('fs/promises');
+const { mkdtemp, mkdir, rm, copyFile } = require('fs/promises');
 const { tmpdir } = require('os');
 const path = require('path');
 
@@ -73,38 +73,21 @@ class Analyser {
         this.documentVersion = 1;
     }
 
-    // The workspace deliberately has no .ghulproj and no tool manifest. With a
-    // project file present the language server regenerates .assemblies.json
-    // from the project's reference closure, which would replace the restricted
-    // reference set with the full one.
+    // The workspace holds no source and no configuration: the document's text
+    // arrives over the protocol, and the compiler, its flags and the
+    // restricted reference set go in the initialize request's
+    // initializationOptions (see warmUp). The compiler is named rather than
+    // left for the server to find, which keeps the analyser on exactly the
+    // compiler the compile service uses.
     //
-    // The compiler is named explicitly in ghul.json instead of left for the
-    // server to find. Its discovery order ends on PATH, and this workspace is a
-    // scratch directory with no tool manifest above it, so none of the earlier
-    // steps could resolve here and a compiler that was not on PATH left every
-    // analyser warming until the service gave up on it. Naming it removes the
-    // search, and keeps the analyser on exactly the compiler the compile
-    // service uses.
+    // The src folder the document's path names is created, empty, because the
+    // compiler the playground pins fails to name the namespace of a source
+    // whose folder is not on disk. Cells copied in for a session live here too.
     async createWorkspace() {
         this.workspace = await mkdtemp(path.join(tmpdir(), 'ghul-analyse-'));
         this.realRoot = 'file://' + this.workspace;
 
         await mkdir(path.join(this.workspace, 'src'));
-        await this.writeDocument(WARM_UP_SOURCE);
-        await writeFile(
-            path.join(this.workspace, 'ghul.json'),
-            JSON.stringify({ compiler: this.compiler, other_flags: this.otherFlags }),
-            'utf8');
-        await writeFile(
-            path.join(this.workspace, '.assemblies.json'),
-            JSON.stringify({ assemblies: this.references }),
-            'utf8');
-    }
-
-    // The analyser reads the document from disk as well as taking it over the
-    // protocol; without this it analyses an empty file and reports nothing.
-    writeDocument(text) {
-        return writeFile(path.join(this.workspace, 'src', 'main.ghul'), text, 'utf8');
     }
 
     // Copies a compiled cell into this analyser's own workspace and answers
@@ -248,7 +231,12 @@ class Analyser {
                 processId: null,
                 rootUri: this.realRoot,
                 workspaceFolders: [{ uri: this.realRoot, name: 'playground' }],
-                capabilities: CLIENT_CAPABILITIES
+                capabilities: CLIENT_CAPABILITIES,
+                initializationOptions: {
+                    compiler: this.compiler,
+                    compilerFlags: this.otherFlags,
+                    references: this.references
+                }
             }),
             new Promise(resolve => setTimeout(() => resolve(null), timeoutMs))
         ]);
@@ -282,8 +270,6 @@ class Analyser {
     // Replace the whole document. Used to hand a warm analyser the client's
     // source: it already has one open, so this is a change rather than an open.
     replaceDocument(text) {
-        this.writeDocument(text).catch(e => this.log(`could not write document: ${e.message}`));
-
         this.send('textDocument/didChange', {
             textDocument: { uri: this.documentUri, version: ++this.documentVersion },
             contentChanges: [{ text }]
