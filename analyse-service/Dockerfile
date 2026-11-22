@@ -36,9 +36,9 @@ WORKDIR /home/playground
 # and either service may be the first to mount it.
 RUN mkdir -p /home/playground/cells
 
-ARG GHUL_COMPILER_VERSION=83.5.0
+ARG GHUL_COMPILER_VERSION=84.0.1
 ARG GHUL_RUNTIME_VERSION=53.0.1
-ARG GHUL_RASTER_VERSION=1.1.11
+ARG GHUL_RASTER_VERSION=1.1.12
 
 # Installing as a tool seeds the package cache, which is where the service
 # finds the compiler dll; it does not need to be on PATH, because each
