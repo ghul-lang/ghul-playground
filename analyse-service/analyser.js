@@ -78,16 +78,11 @@ class Analyser {
     // restricted reference set go in the initialize request's
     // initializationOptions (see warmUp). The compiler is named rather than
     // left for the server to find, which keeps the analyser on exactly the
-    // compiler the compile service uses.
-    //
-    // The src folder the document's path names is created, empty, because the
-    // compiler the playground pins fails to name the namespace of a source
-    // whose folder is not on disk. Cells copied in for a session go in cells/.
+    // compiler the compile service uses. Cells copied in for a session go in
+    // cells/.
     async createWorkspace() {
         this.workspace = await mkdtemp(path.join(tmpdir(), 'ghul-analyse-'));
         this.realRoot = 'file://' + this.workspace;
-
-        await mkdir(path.join(this.workspace, 'src'));
     }
 
     // Copies a compiled cell into this analyser's own workspace and answers
