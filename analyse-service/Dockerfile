@@ -16,7 +16,7 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 
-ARG GHUL_LANGUAGE_SERVER_VERSION=1.37.4
+ARG GHUL_LANGUAGE_SERVER_VERSION=1.40.0
 
 # Not published to npm; it ships as an asset on the extension's releases.
 # Downloaded with retries, then installed from the file, since npm fetching
@@ -42,7 +42,7 @@ ARG GHUL_RASTER_VERSION=1.1.10
 
 # Installing as a tool seeds the package cache, which is where the service
 # finds the compiler dll; it does not need to be on PATH, because each
-# analyser workspace names the compiler explicitly in its ghul.json.
+# analyser names the compiler to the language server when it starts it.
 RUN dotnet tool install --tool-path /home/playground/tools \
         ghul.compiler --version "${GHUL_COMPILER_VERSION}" \
  && dotnet new classlib -o /tmp/runtime-probe \
