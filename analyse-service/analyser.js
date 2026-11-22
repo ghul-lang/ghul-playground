@@ -82,7 +82,7 @@ class Analyser {
     //
     // The src folder the document's path names is created, empty, because the
     // compiler the playground pins fails to name the namespace of a source
-    // whose folder is not on disk. Cells copied in for a session live here too.
+    // whose folder is not on disk. Cells copied in for a session go in cells/.
     async createWorkspace() {
         this.workspace = await mkdtemp(path.join(tmpdir(), 'ghul-analyse-'));
         this.realRoot = 'file://' + this.workspace;
