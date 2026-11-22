@@ -89,11 +89,31 @@ RUN mkdir -p /tmp/ghul-llvm \
  && rm -rf /tmp/ghul-llvm \
  && test -x /home/playground/tools/ghul-llvm/ghul-llvm-${GHUL_LLVM_TRIPLE}/bin/ghul-llvm
 
+# The llvm-built compiler a wasm or llvm compile runs, from the ghul release
+# of the .NET compiler above, so the two are the same version. It starts in
+# milliseconds, where the .NET compiler pays for start-up and JIT on every
+# compile. It has no .NET target, so .NET compiles still run the tool above.
+# Verified against the sha256 published beside it.
+ARG GHUL_COMPILER_TRIPLE=x86_64-unknown-linux-musl
+
+RUN mkdir -p /tmp/ghul-compiler \
+ && cd /tmp/ghul-compiler \
+ && curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -O \
+        https://github.com/ghul-lang/ghul/releases/download/v${GHUL_COMPILER_VERSION}/ghul-compiler-llvm-${GHUL_COMPILER_TRIPLE}.tar.gz \
+ && curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -O \
+        https://github.com/ghul-lang/ghul/releases/download/v${GHUL_COMPILER_VERSION}/ghul-compiler-llvm-${GHUL_COMPILER_TRIPLE}.tar.gz.sha256 \
+ && sha256sum --check --quiet ghul-compiler-llvm-${GHUL_COMPILER_TRIPLE}.tar.gz.sha256 \
+ && mkdir -p /home/playground/tools/ghul-compiler-native \
+ && tar -xzf ghul-compiler-llvm-${GHUL_COMPILER_TRIPLE}.tar.gz -C /home/playground/tools/ghul-compiler-native \
+ && rm -rf /tmp/ghul-compiler \
+ && test -x /home/playground/tools/ghul-compiler-native/ghul-compiler/ghul-compiler
+
 # Resolved once here rather than discovered per request, so a missing piece
 # fails the build rather than the first user request.
 ENV ILSPYCMD=/home/playground/tools/ilspycmd \
     GHUL_LLVM=/home/playground/tools/ghul-llvm/ghul-llvm-${GHUL_LLVM_TRIPLE}/bin/ghul-llvm \
-    GHUL_LLVM_VERSION=${GHUL_LLVM_VERSION}
+    GHUL_LLVM_VERSION=${GHUL_LLVM_VERSION} \
+    GHUL_NATIVE_COMPILER=/home/playground/tools/ghul-compiler-native/ghul-compiler/ghul-compiler
 
 ENV GHUL_COMPILER_DLL=/home/playground/tools/.store/ghul.compiler/${GHUL_COMPILER_VERSION}/ghul.compiler/${GHUL_COMPILER_VERSION}/tools/net10.0/any/ghul.dll \
     GHUL_RUNTIME_DLL=/home/playground/.nuget/packages/ghul.runtime/${GHUL_RUNTIME_VERSION}/lib/net10.0/ghul-runtime.dll \
