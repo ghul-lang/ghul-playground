@@ -33,7 +33,27 @@ const CONCURRENCY = Number(process.env.CORPUS_CONCURRENCY ?? 4);
 function expectedToFail(name) {
     if (fs.existsSync(path.join(TESTS, name, 'fail.expected'))) return true;
 
-    const flags = path.join(TESTS, name, 'ghulflags');
+    return isLibrary(path.join(TESTS, name));
+}
+
+// An example built as a library has no entry point, so it is not a program
+// the service can run. A test says so with "library": true in its test.json,
+// or with --library in its flags; one written before test.json says it in its
+// ghulflags.
+function isLibrary(test) {
+    const settings = path.join(test, 'test.json');
+
+    if (fs.existsSync(settings)) {
+        const text = fs.readFileSync(settings, 'utf8')
+            .replace(/^\uFEFF/, '')
+            .replace(/\/\/[^\n]*/g, '')
+            .replace(/,(\s*[}\]])/g, '$1');
+        const parsed = JSON.parse(text);
+
+        return parsed.library === true || (parsed.flags ?? '').split(/\s+/).includes('--library');
+    }
+
+    const flags = path.join(test, 'ghulflags');
 
     return fs.existsSync(flags) && fs.readFileSync(flags, 'utf8').includes('--library');
 }
