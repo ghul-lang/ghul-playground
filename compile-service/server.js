@@ -37,6 +37,7 @@
 
 const http = require('http');
 const { execFile } = require('child_process');
+const { existsSync } = require('fs');
 const { mkdtemp, writeFile, readFile, rm } = require('fs/promises');
 const { tmpdir } = require('os');
 const path = require('path');
@@ -111,9 +112,10 @@ async function getToolchain() {
             resolveCompiler(), resolveReferencePaths(), resolveWasmLibraries()
         ]);
 
-        toolchain = { compiler, references, wasm };
+        toolchain = { compiler, references, wasm, native: resolveNativeCompiler() };
 
         console.log(`compiler:   ${compiler}`);
+        console.log(`native:     ${toolchain.native ?? 'off, wasm and llvm compile with the .NET compiler'}`);
         console.log(`references: ${references.length}`);
         console.log(wasm
             ? `wasm:       ${(wasm.withRaster ?? wasm).libraries.map(l => `${l.name}@${l.version}, ${l.files.length} files`).join('; ')}`
@@ -168,15 +170,46 @@ function parseDiagnostics(text) {
     return diagnostics;
 }
 
+// The llvm-built compiler, which compiles for wasm and llvm but not for .NET.
+// It starts in milliseconds where the .NET compiler pays for start-up and JIT
+// on every compile, and writes the same bytes.
+function resolveNativeCompiler() {
+    const native = process.env.GHUL_NATIVE_COMPILER;
+
+    if (!native) {
+        return null;
+    }
+
+    if (!existsSync(native)) {
+        throw new Error(`native compiler not found: ${native}`);
+    }
+
+    return native;
+}
+
+// The executable that compiles for `target` and the arguments that start it:
+// the native compiler for wasm and llvm where there is one, and otherwise
+// the .NET compiler under dotnet.
+function compilerCommand({ compiler, native }, target) {
+    return target !== 'dotnet' && native
+        ? { command: native, args: [] }
+        : { command: 'dotnet', args: [compiler] };
+}
+
+// The file that compiles for `target`, which its toolchain identity hashes.
+function compilerFile(toolchain, target) {
+    return compilerCommand(toolchain, target).command === 'dotnet' ? toolchain.compiler : toolchain.native;
+}
+
 // The compiler runs as the head of its own process group, and a timeout kills
 // the whole group: an llvm build hands its module to ghul-llvm, which has no
 // timeout of its own and would outlive a compiler killed alone. A timeout is
 // reported as execFile reports its own, with error.killed set.
-function runCompiler(args, cwd, env = null) {
+function runCompiler({ command, args }, cwd, env = null) {
     return new Promise(resolve => {
         let timedOut = false;
 
-        const child = execFile('dotnet', args,
+        const child = execFile(command, args,
             { cwd, detached: true, maxBuffer: 4 << 20, ...(env ? { env: { ...process.env, ...env } } : {}) },
             (error, stdout, stderr) => {
                 clearTimeout(timer);
@@ -296,7 +329,8 @@ let resultState = null;
 // the source, which is the rest of the key, so one identity covers both.
 function getResultState() {
     resultState ??= (async () => {
-        const { compiler, references, wasm } = await getToolchain();
+        const toolchain = await getToolchain();
+        const { compiler, references, wasm } = toolchain;
         const salt = process.env.RESULT_TOOLCHAIN_SALT;
 
         return {
@@ -305,7 +339,7 @@ function getResultState() {
                 dotnet: await cells.toolchainIdentity({ compiler, references, flags: [], salt }),
                 wasm: wasm
                     ? await cells.toolchainIdentity({
-                        compiler,
+                        compiler: compilerFile(toolchain, 'wasm'),
                         references: (wasm.withRaster ?? wasm).libraries.flatMap(l => l.files),
                         flags: ['--target', 'wasm', ...(wasm.withRaster ?? wasm).libraries.map(l => `${l.name}@${l.version}`)],
                         salt
@@ -316,7 +350,7 @@ function getResultState() {
                 // of the identity.
                 llvm: wasm && GHUL_LLVM
                     ? await cells.toolchainIdentity({
-                        compiler,
+                        compiler: compilerFile(toolchain, 'llvm'),
                         references: (wasm.withRaster ?? wasm).libraries.flatMap(l => l.files),
                         flags: ['--target', 'llvm', `ghul-llvm@${GHUL_LLVM_VERSION}`,
                             ...(wasm.withRaster ?? wasm).libraries.map(l => `${l.name}@${l.version}`)],
@@ -340,9 +374,13 @@ async function compile(source, target = 'dotnet') {
         () => compileUncached(source, target));
 }
 
-// The compiler's arguments for `source`, written to main.ghul in `directory`.
-function compilerArguments({ compiler, references, wasm }, directory, target, source) {
-    const args = [compiler];
+// The compile of `source`, written to main.ghul in `directory`, with any
+// `extra` flags ahead of the rest.
+function compilerArguments(toolchain, directory, target, source, extra = []) {
+    const { references, wasm } = toolchain;
+    const { command, args } = compilerCommand(toolchain, target);
+
+    args.push(...extra);
 
     if (target === 'wasm') {
         const libraries = wasm.withRaster && usesRaster(source) ? wasm.withRaster : wasm;
@@ -357,7 +395,7 @@ function compilerArguments({ compiler, references, wasm }, directory, target, so
 
     args.push(path.join(directory, 'main.ghul'));
 
-    return args;
+    return { command, args };
 }
 
 // The built program: the assembly, or the module and the loader the compiler
@@ -388,9 +426,7 @@ async function compileUncached(source, target = 'dotnet') {
     try {
         await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
 
-        const args = compilerArguments(toolchain, directory, target, source);
-
-        const { error, stdout, stderr } = await runCompiler(args, directory);
+        const { error, stdout, stderr } = await runCompiler(compilerArguments(toolchain, directory, target, source), directory);
         const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
 
         if (error) {
@@ -459,10 +495,8 @@ async function compileViewUncached(source, target, scope = 'program', language =
     try {
         await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
 
-        const args = [...compilerArguments(toolchain, directory, target, source)];
-        args.splice(1, 0, '--debug');
-
-        const { error, stdout, stderr } = await runCompiler(args, directory);
+        const { error, stdout, stderr } = await runCompiler(
+            compilerArguments(toolchain, directory, target, source, ['--debug']), directory);
         const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
 
         if (error) {
@@ -489,19 +523,22 @@ async function compileViewUncached(source, target, scope = 'program', language =
 // positions name that rather than a temporary path. The program's own
 // functions only, unless `scope` asks for the whole module.
 async function compileWatView(source, scope) {
-    const { compiler, wasm } = await getToolchain();
+    const toolchain = await getToolchain();
+    const { wasm } = toolchain;
     const directory = await mkdtemp(path.join(tmpdir(), 'ghul-playground-view-'));
 
     try {
         await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
 
         const libraries = wasm.withRaster && usesRaster(source) ? wasm.withRaster : wasm;
-        const args = [compiler, '--target', 'wasm', ...libraries.args,
+        const { command, args } = compilerCommand(toolchain, 'wasm');
+
+        args.push('--target', 'wasm', ...libraries.args,
             '--wat', 'main.wat', '--wat-lines',
             ...(scope === 'all' ? [] : ['--wat-program-only']),
-            '-o', 'main.wasm', 'main.ghul'];
+            '-o', 'main.wasm', 'main.ghul');
 
-        const { error, stdout, stderr } = await runCompiler(args, directory);
+        const { error, stdout, stderr } = await runCompiler({ command, args }, directory);
         const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
 
         if (error) {
@@ -528,17 +565,20 @@ async function compileWatView(source, scope) {
 // functions are those holding its code, read from the IR at the same level,
 // unless `scope` asks for everything.
 async function compileLlvmView(source, scope, language, optimise = 2) {
-    const { compiler, wasm } = await getToolchain();
+    const toolchain = await getToolchain();
+    const { wasm } = toolchain;
     const directory = await mkdtemp(path.join(tmpdir(), 'ghul-playground-view-'));
 
     try {
         await writeFile(path.join(directory, 'main.ghul'), source, 'utf8');
 
         const libraries = wasm.withRaster && usesRaster(source) ? wasm.withRaster : wasm;
-        const args = [compiler, '--target', 'llvm', '--debug', ...libraries.args,
-            '--llvm-output', 'module.ll', '-o', 'main', 'main.ghul'];
+        const { command, args } = compilerCommand(toolchain, 'llvm');
 
-        const { error, stdout, stderr } = await runCompiler(args, directory, { GHUL_LLVM });
+        args.push('--target', 'llvm', '--debug', ...libraries.args,
+            '--llvm-output', 'module.ll', '-o', 'main', 'main.ghul');
+
+        const { error, stdout, stderr } = await runCompiler({ command, args }, directory, { GHUL_LLVM });
         const diagnostics = parseDiagnostics(`${stderr}\n${stdout}`);
 
         if (error) {

@@ -209,6 +209,23 @@ jobs:
 
           export GHUL_RASTER_SOURCE_DIR="$libraries/ghul-raster" GHUL_RASTER_SOURCE_VERSION="$raster"
 
+          # The native compiler the image runs for wasm, from the same release
+          # and checked the same way.
+          compiler=$(arg GHUL_COMPILER_VERSION)
+          triple=$(arg GHUL_COMPILER_TRIPLE)
+          archive="ghul-compiler-llvm-$triple.tar.gz"
+          release="https://github.com/ghul-lang/ghul/releases/download/v$compiler"
+
+          mkdir -p "$RUNNER_TEMP/ghul-compiler-native"
+          (
+            cd "$RUNNER_TEMP"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -O "$release/$archive"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -O "$release/$archive.sha256"
+            sha256sum --check --quiet "$archive.sha256"
+            tar -xzf "$archive" -C ghul-compiler-native
+          )
+          export GHUL_NATIVE_COMPILER="$RUNNER_TEMP/ghul-compiler-native/ghul-compiler/ghul-compiler"
+
           GHUL_RUNTIME_SOURCE_DIR="$libraries/ghul-runtime" GHUL_RUNTIME_SOURCE_VERSION="$runtime" \
             node test/wasm-compile.mjs
 
