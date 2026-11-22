@@ -133,6 +133,17 @@ entry() is
 si
 `;
 
+// A program that writes a file in the temporary directory and reads it back.
+const TEMP_SOURCE = `use IO.Std.write_line
+
+entry() is
+    let file = IO.Path.combine(IO.Path.get_temp_path(), "scratch.txt")
+
+    IO.File.write_all_text(file, "kept")
+    write_line("{IO.Directory.exists(IO.Path.get_temp_path())} {IO.File.read_all_text(file)}")
+si
+`;
+
 const work = mkdtempSync(path.join(tmpdir(), 'wasm-worker-test-'));
 
 const workerScript = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)),
@@ -280,6 +291,12 @@ try {
         check('what it wrote over one replaced it', read.output.endsWith('changed\n'), JSON.stringify(read.output));
         check('and reached the page', Buffer.from(read.files.get('notes.txt')?.bytes ?? []).toString() === 'changed');
         check('it ended normally', read.code === 0, String(read.code));
+
+        // The temporary directory exists from the start, so a program can
+        // write there as it does under Node.
+        const temp = await compileAndRun('temp', TEMP_SOURCE, [], 'input_file_count', {});
+        check('the temporary directory exists and holds what is written there', temp.output === 'true kept\n', JSON.stringify(temp.output));
+        check('it ended normally', temp.code === 0, String(temp.code));
     }
 } finally {
     rmSync(work, { recursive: true, force: true });
